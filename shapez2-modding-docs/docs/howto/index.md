@@ -81,6 +81,8 @@ there and follow the links.
 | Add a dev console command | [Add a console command](console-command.md) |
 | Store my own data in the player's save | [Store data in the save](save-data.md) |
 | Work out why nothing is happening | [Debug a mod](debugging.md) |
+| Find where a mod's frames and memory go | [Profile a mod](profile-a-mod.md) |
+| Walk the managed heap from inside the game | [Profile a mod](profile-a-mod.md#walking-the-managed-heap) |
 | Get my mod to players | [Publish to the Steam Workshop](publish-to-workshop.md) |
 
 ## Working out the rest yourself

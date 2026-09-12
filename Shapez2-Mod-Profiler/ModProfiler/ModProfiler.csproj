@@ -1,0 +1,125 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>netstandard2.1</TargetFramework>
+        <Nullable>disable</Nullable>
+        <RunPostBuildEvent>Always</RunPostBuildEvent>
+        <LangVersion>9</LangVersion>
+        <RootNamespace>ModProfiler</RootNamespace>
+        <!-- MonoMod.Utils ships its own copy of the publicizer attribute -->
+        <NoWarn>$(NoWarn);CS0436</NoWarn>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <OutputPath>$(SPZ2_PERSISTENT)\mods\ModProfiler</OutputPath>
+        <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    </PropertyGroup>
+
+    <!--
+        dotnet build -p:Dev=true stages the build beside the mods folder instead of into it.
+        Repeated here rather than left to Directory.Build.props: that file is imported before
+        the project body, so the unconditional OutputPath above would override it.
+    -->
+    <PropertyGroup Condition="'$(Dev)' == 'true'">
+        <OutputPath>$(SPZ2_PERSISTENT)\mods-dev\ModProfiler\</OutputPath>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Reference Include="ShapezShifter">
+            <HintPath>$(SPZ2_SHIFTER)</HintPath>
+            <Private>False</Private>
+        </Reference>
+
+        <!-- IDebugConsole and DebugConsole.CommandContext, for the probe commands. -->
+        <Reference Include="SPZGameAssembly">
+            <HintPath>$(SPZ2_PATH)\SPZGameAssembly.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+
+        <Reference Include="Core">
+            <HintPath>$(SPZ2_PATH)\Core.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+
+        <!-- IMod, the entry point Shifter loads. -->
+        <Reference Include="Game.Core.Modding">
+            <HintPath>$(SPZ2_PATH)\Game.Core.Modding.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+
+        <!--
+            Everything the probe is actually asking about lives here: UnityEngine.Profiling
+            .Profiler, Unity.Profiling.ProfilerRecorder, and the LowLevel.Unsafe handles that
+            enumerate the counters a release player exposes.
+        -->
+        <Reference Include="UnityEngine.CoreModule">
+            <HintPath>$(SPZ2_PATH)\UnityEngine.CoreModule.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+
+        <!-- GUIUtility.systemCopyBuffer is the only clipboard a Unity player has, and the
+             probe's whole output is meant to be pasted somewhere. IMGUI also draws the debug
+             panel: see DebugPanel for why it is not a HUDPart. -->
+        <Reference Include="UnityEngine.IMGUIModule">
+            <HintPath>$(SPZ2_PATH)\UnityEngine.IMGUIModule.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+
+        <!-- The top bar button is a clone of the game's own, so it needs Image and the
+             RectTransform it is reparented onto. -->
+        <Reference Include="UnityEngine.UI">
+            <HintPath>$(SPZ2_PATH)\UnityEngine.UI.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="UnityEngine.UIModule">
+            <HintPath>$(SPZ2_PATH)\UnityEngine.UIModule.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="Unity.TextMeshPro">
+            <HintPath>$(SPZ2_PATH)\Unity.TextMeshPro.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+
+        <!-- GUIStyle's FontStyle lives here. -->
+        <Reference Include="UnityEngine.TextRenderingModule">
+            <HintPath>$(SPZ2_PATH)\UnityEngine.TextRenderingModule.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+    </ItemGroup>
+
+    <PropertyGroup>
+        <PublicizeAll>true</PublicizeAll>
+        <PublicizerClearCacheOnClean>true</PublicizerClearCacheOnClean>
+        <PublicizerLogFilePath>logs/krafs.log</PublicizerLogFilePath>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!--
+            ILHook rewrites method bodies, which is what makes instrumenting a whole assembly
+            possible - a signature-agnostic edit where a delegate-based Hook would need one
+            delegate type per signature. ILCursor lives in MonoMod.Utils and the opcodes in
+            Mono.Cecil.
+
+            None are shipped: MonoMod and Cecil are already loaded in the process as their own
+            workshop mod, which Shapez Shifter depends on. Two copies of one assembly in an
+            AppDomain is a problem worth avoiding.
+        -->
+        <PackageReference Include="MonoMod.RuntimeDetour" Version="25.3.4">
+            <ExcludeAssets>runtime</ExcludeAssets>
+        </PackageReference>
+        <PackageReference Include="MonoMod.Utils" Version="25.0.12">
+            <ExcludeAssets>runtime</ExcludeAssets>
+        </PackageReference>
+        <PackageReference Include="Mono.Cecil" Version="0.11.6">
+            <ExcludeAssets>runtime</ExcludeAssets>
+        </PackageReference>
+        <PackageReference Include="Krafs.Publicizer" Version="2.3.0">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+        <None Update="manifest.json">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+    </ItemGroup>
+
+</Project>

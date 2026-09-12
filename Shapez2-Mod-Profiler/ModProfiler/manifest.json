@@ -1,0 +1,22 @@
+{
+  "Version": "0.1.0",
+  "Version_comment": "Runtime probe only. Reports which profiling APIs this release player actually implements - GC allocation counters, Unity's Profiler class, and the ProfilerRecorder counters - so the profiler proper can be designed against what exists rather than what the metadata advertises.",
+  "Title": "Mod Profiler",
+  "Description": "A development tool. Reports what profiling the game's Mono runtime exposes to a mod.",
+  "Author": "Quinn Bast",
+  "SavedModVersionCompabilityRangeWithSelf": "*-*",
+  "GameVersionSupportRange": "*-*",
+  "AffectsSaveGames": false,
+  "DisablesAchievements": false,
+  "Conflicts": [],
+  "Assemblies": [
+    "ModProfiler.dll"
+  ],
+  "Dependencies": [
+    {
+      "ModId": "steam:3542611357",
+      "ModTitle": "Shapez Shifter",
+      "Version": "*-*"
+    }
+  ]
+}

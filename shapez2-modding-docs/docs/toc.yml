@@ -83,6 +83,8 @@
       href: howto/save-data.md
     - name: Debug a mod
       href: howto/debugging.md
+    - name: Profile a mod
+      href: howto/profile-a-mod.md
     - name: Publish to the Steam Workshop
       href: howto/publish-to-workshop.md
 

@@ -1,0 +1,27 @@
+<!--
+    Imported automatically by MSBuild because it sits next to the .sln.
+
+    It adds one build mode:
+
+        dotnet build -p:Dev=true
+
+    which writes to <persistent>/mods-dev/ModProfiler/ instead of into the mods folder.
+    The installed copy is memory-mapped by the running game and cannot be overwritten, so an
+    ordinary build produces nothing new to reload while the game is open. Mod discovery only
+    scans immediate subdirectories of "mods", so a staged build is never picked up as a
+    second mod.
+
+    Then, in game:  mrl.reload modprofiler
+
+    A plain `dotnet build` is unaffected and still installs into the mods folder.
+
+    From Mod Reloader: ../Shapez2-Mod-Reloader
+-->
+<Project>
+
+    <PropertyGroup Condition="'$(Dev)' == 'true' And '$(SPZ2_PERSISTENT)' != ''">
+        <OutputPath>$(SPZ2_PERSISTENT)\mods-dev\$(MSBuildProjectName)\</OutputPath>
+        <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    </PropertyGroup>
+
+</Project>
