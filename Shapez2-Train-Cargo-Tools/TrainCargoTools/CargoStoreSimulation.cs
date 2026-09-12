@@ -41,6 +41,12 @@ namespace TrainCargoTools
             return State.CountAt(layer);
         }
 
+        /// For the renderer. See CargoStoreState.PackageAt.
+        public CargoPackage<TItem> PackageAt(int layer, int index)
+        {
+            return State.PackageAt(layer, index);
+        }
+
         public int NumItemReceiverBundles => 1;
 
         public int NumItemProviderBundles => 1;
@@ -94,7 +100,10 @@ namespace TrainCargoTools
             for (short lane = 0; lane < SpacePathConstants.NumLanes; lane++)
             {
                 IItemReceiver next = OutputBundle.GetSender(lane, layer).NextLane;
-                if (next == null)
+
+                // Nothing at all, or something that would take a package and destroy it. See
+                // CargoHandover.
+                if (!CargoHandover.Allows(next, Probe))
                 {
                     continue;
                 }
@@ -126,7 +135,7 @@ namespace TrainCargoTools
         }
 
         /// One per layer, shared by that layer's four lanes.
-        private sealed class Receiver : IItemReceiver
+        private sealed class Receiver : IItemReceiver, ICargoPackageSink
         {
             private readonly TState Store;
             private readonly int Layer;

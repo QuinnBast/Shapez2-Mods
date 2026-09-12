@@ -16,7 +16,9 @@ namespace TrainCargoTools
     /// a package and the output lanes, it pops items onto whichever lane will take one until the
     /// package is empty. What vanilla has no equivalent of is getting a package in off a belt in
     /// the first place - a station gets its packages from a wagon - so CargoPackageReceiver
-    /// supplies that, writing into the very state the filling container drains.
+    /// supplies that, writing into the very state the filling container drains - and, since a
+    /// train unloader can only offer loose items, passes those straight through to the output so
+    /// an unloader can dock against an unpackager with no cargo belt in between.
     public abstract class CargoUnpackagerSimulation<TItem, TState> : Simulation<TState>, IItemBundleSimulation,
         ISimulation, IUpdatableSimulation
         where TItem : unmanaged, IEquatable<TItem>
@@ -41,17 +43,24 @@ namespace TrainCargoTools
 
             for (short layer = 0; layer < SpacePathConstants.NumLayers; layer++)
             {
-                CargoPackageReceiver<TItem> receiver = new(state.Layers[layer], packagePool);
+                // Kept, not scoped: the receiver holds on to these so it can pass a loose item
+                // straight through to the output, which is what lets a train unloader dock
+                // against an unpackager directly. The filling container takes the same senders.
+                IItemProvider[] outputs = new IItemProvider[SpacePathConstants.NumLanes];
+                for (short lane = 0; lane < SpacePathConstants.NumLanes; lane++)
+                {
+                    outputs[lane] = OutputBundle.GetSender(lane, layer);
+                }
+
+                CargoPackageReceiver<TItem> receiver =
+                    new(state.Layers[layer], packagePool, outputs);
                 for (short lane = 0; lane < SpacePathConstants.NumLanes; lane++)
                 {
                     InputBundle.GetSender(lane, layer).NextLane = receiver;
                 }
 
                 using ScopedList<IItemProvider> senders = ScopedList<IItemProvider>.Get();
-                for (short lane = 0; lane < SpacePathConstants.NumLanes; lane++)
-                {
-                    senders.Add(OutputBundle.GetSender(lane, layer));
-                }
+                senders.AddRange(outputs);
 
                 FillingContainers[layer] = new TrainCargoToBeltFillingContainer<TItem>(
                     converter, senders, state.Layers[layer]);

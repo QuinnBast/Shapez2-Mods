@@ -1,48 +1,24 @@
 {
-  "en-US":
-  {
-    "cargo-tools.toolbar.shapes.title": "Shape Cargo",
-    "cargo-tools.toolbar.shapes.description": "Pack shapes into train cargo, move it on cargo belts, buffer it, unpack it.",
-
-    "cargo-tools.toolbar.fluids.title": "Fluid Cargo",
-    "cargo-tools.toolbar.fluids.description": "Pack fluid into train cargo, move it on cargo belts, buffer it, unpack it.",
-
+  "en-US": {
     "cargo-tools.group.cargo-belt.title": "Cargo Belt",
-    "cargo-tools.group.cargo-belt.description": "Carries shape cargo packages. Connects to space belts and to shape train stations. Drag to lay a line.",
-
+    "cargo-tools.group.cargo-belt.description": "Carries train cargo packages, and packs loose shapes or fluid into them as they arrive - so a train unloader or an ordinary belt can feed one directly. Connects to belts, pipes and train stations alike. Drag to lay a line.",
     "cargo-tools.group.cargo-belt-left.title": "Cargo Belt Corner (Left)",
     "cargo-tools.group.cargo-belt-left.description": "Placed automatically when a dragged cargo belt turns.",
-
     "cargo-tools.group.cargo-belt-right.title": "Cargo Belt Corner (Right)",
     "cargo-tools.group.cargo-belt-right.description": "Placed automatically when a dragged cargo belt turns.",
-
-    "cargo-tools.group.fluid-cargo-belt.title": "Fluid Cargo Belt",
-    "cargo-tools.group.fluid-cargo-belt.description": "Carries fluid cargo packages. Connects to pipes and to fluid train stations. Drag to lay a line.",
-
-    "cargo-tools.group.fluid-cargo-belt-left.title": "Fluid Cargo Belt Corner (Left)",
-    "cargo-tools.group.fluid-cargo-belt-left.description": "Placed automatically when a dragged fluid cargo belt turns.",
-
-    "cargo-tools.group.fluid-cargo-belt-right.title": "Fluid Cargo Belt Corner (Right)",
-    "cargo-tools.group.fluid-cargo-belt-right.description": "Placed automatically when a dragged fluid cargo belt turns.",
-
     "cargo-tools.store.layer": "Layer <layer/>",
-
+    "cargo-tools.packager.layer": "Layer <layer/> package",
     "cargo-tools.group.cargo-store.title": "Cargo Store",
-    "cargo-tools.group.cargo-store.description": "Buffers 25 shape cargo packages per layer, 75 in all, so a stalled train does not stall the line feeding it. Each layer has its own queue and packages leave on the layer they arrived on.",
-
-    "cargo-tools.group.fluid-cargo-store.title": "Fluid Cargo Store",
-    "cargo-tools.group.fluid-cargo-store.description": "Buffers 25 fluid cargo packages per layer, 75 in all. Each layer has its own queue and packages leave on the layer they arrived on.",
-
+    "cargo-tools.group.cargo-store.description": "Buffers up to 25 cargo packages on each of three layers, in three independent queues. Takes shape or fluid cargo - each layer keeps whichever kind reaches it first.",
     "cargo-tools.group.cargo-packager.title": "Shape Cargo Packager",
     "cargo-tools.group.cargo-packager.description": "Packs loose shapes into train cargo packages, the same packages a train station makes. Feed one shape type per layer.",
-
     "cargo-tools.group.cargo-unpackager.title": "Shape Cargo Unpackager",
     "cargo-tools.group.cargo-unpackager.description": "Empties shape cargo packages back onto an ordinary space belt, for feeding ordinary machinery. Train stations accept packages directly and do not need one.",
-
     "cargo-tools.group.fluid-cargo-packager.title": "Fluid Cargo Packager",
     "cargo-tools.group.fluid-cargo-packager.description": "Packs fluid from a space pipe into train cargo packages, the same packages a fluid train station makes. Feed one fluid per layer.",
-
     "cargo-tools.group.fluid-cargo-unpackager.title": "Fluid Cargo Unpackager",
-    "cargo-tools.group.fluid-cargo-unpackager.description": "Empties fluid cargo packages back onto a space pipe. Fluid train stations accept packages directly and do not need one."
+    "cargo-tools.group.fluid-cargo-unpackager.description": "Empties fluid cargo packages back onto a space pipe. Fluid train stations accept packages directly and do not need one.",
+    "cargo-tools.toolbar.cargo.title": "Train Cargo",
+    "cargo-tools.toolbar.cargo.description": "Pack shapes or fluid into train cargo packages, carry them on cargo belts and buffer them outside a station. Stations accept packages directly."
   }
 }

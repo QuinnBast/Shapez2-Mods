@@ -43,6 +43,16 @@ namespace TrainCargoTools
             return Counts[layer];
         }
 
+        /// The package in one slot of one layer's queue.
+        ///
+        /// Exposed for the renderer, which draws the real package rather than a stand-in crate -
+        /// so a stored shape shows its shape and a stored fluid its colour. Slots are compacted,
+        /// so 0..CountAt(layer)-1 are the occupied ones and anything above is a default package.
+        public CargoPackage<TItem> PackageAt(int layer, int index)
+        {
+            return Packages[layer][index];
+        }
+
         public bool IsFull(int layer)
         {
             return Counts[layer] >= CapacityPerLayer;

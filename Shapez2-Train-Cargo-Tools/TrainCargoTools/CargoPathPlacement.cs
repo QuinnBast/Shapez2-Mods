@@ -4,6 +4,8 @@ using Core.Localization;
 using Game.Content.Features.SpacePaths.IslandIO;
 using Game.Core.Content.Islands;
 using Game.Core.Coordinates;
+using Game.Interaction.EntitiesPlacement;
+using Game.Placement.Data;
 using ShapezShifter;
 using ShapezShifter.Flow.Toolbar;
 using ShapezShifter.Hijack;
@@ -19,27 +21,29 @@ namespace TrainCargoTools
     /// of a dragged run. Placing cargo belts one chunk at a time was not a missing feature so
     /// much as a missing placer.
     ///
-    /// Nothing here reimplements dragging. PlatformIslandsPlacersCreators already builds exactly
-    /// the placer wanted, generically, and the pieces it needs are all reachable:
+    /// Nothing here reimplements dragging. Every piece of the placer is a game class with a
+    /// public constructor, so BuildInitiator assembles vanilla's own sequence rather than any
+    /// placement logic - MatchingDefinitionFinder takes any list of definitions, so the cargo
+    /// family becomes a path family just by handing it one.
     ///
-    /// - MatchingDefinitionFinder is constructible over any list of definitions, so the cargo
-    ///   family becomes a path family just by handing it one.
-    /// - IslandInitiatorsParams, which is what a placement rewirer is given, happens to carry
-    ///   every single argument PlatformIslandsPlacersCreators' constructor wants. So rather than
-    ///   copying the placer's guts, this builds an instance of the game's own creator purely to
-    ///   call the factory on it. That constructor is field assignment and nothing else, and
-    ///   RegisterPlacers is never called on it, so the throwaway instance has no side effects.
+    /// It used to go one step further and call
+    /// `PlatformIslandsPlacersCreators.CreateSpacePathPlacementInitiator` through a throwaway
+    /// instance of the creator, which was better while nothing needed changing. It stopped being
+    /// enough when the placer's world IO query had to be substituted - see EitherTagIOQuery - and
+    /// that method builds the query internally.
+    ///
     /// Also an IToolbarDataRewirer, because the toolbar entry cannot be built until the placer
     /// is registered: a placement entry holds a PlacementInitiatorId, and that id only exists
     /// once RegisterInitiator has returned it. One object doing both phases is the simplest way
     /// to carry the id from one to the other.
     ///
-    /// Generic over the connector pair because there are two cargo paths, not one: the shape
-    /// line is belt-tagged, the fluid line pipe-tagged. They have to be, because the tag is
-    /// what decides which islands will *join*. A fluid train station takes a
-    /// SpacePipeInputConnector, and ItemInputChunkConnector&lt;FluidPackageItem&gt;.CanConnect
-    /// will not accept a belt-tagged output no matter what the lanes actually carry - which is
-    /// why a belt-tagged cargo belt would not snap to a fluid wagon loader at all.
+    /// Still generic over the connector pair, though there is only one cargo path now. The pair
+    /// decides which of a cargo belt's own two connectors the placer reasons about, and both
+    /// answer the same, so the type parameters are a record of what it is picking rather than a
+    /// choice that has to be made twice.
+    ///
+    /// What the pair must *not* decide is which neighbours a run will snap to - see
+    /// EitherTagIOQuery, and BuildInitiator for where it goes in.
     internal sealed class CargoPathPlacement<TInput, TOutput>
         : IPlatformIslandPlacementRewirers, IToolbarDataRewirer
         where TInput : class, IEntityConnector, new()
@@ -51,7 +55,6 @@ namespace TrainCargoTools
         private readonly string RightTurnId;
         private readonly string TitleId;
         private readonly string DescriptionId;
-        private readonly bool FluidPorts;
 
         private readonly ILogger Logger;
         private readonly Func<Sprite> Icon;
@@ -62,7 +65,7 @@ namespace TrainCargoTools
 
         public CargoPathPlacement(
             ILogger logger, string placerSerialName, string forwardId, string leftTurnId,
-            string rightTurnId, string titleId, string descriptionId, bool fluidPorts,
+            string rightTurnId, string titleId, string descriptionId,
             Func<Sprite> icon, Func<IToolbarEntryInsertLocation> slot)
         {
             Logger = logger;
@@ -72,7 +75,6 @@ namespace TrainCargoTools
             RightTurnId = rightTurnId;
             TitleId = titleId;
             DescriptionId = descriptionId;
-            FluidPorts = fluidPorts;
             Icon = icon;
             Slot = slot;
         }
@@ -89,51 +91,15 @@ namespace TrainCargoTools
                     return;
                 }
 
+                // The family's own connector pair. A cargo belt carries both tags, so either
+                // would do here; the belt one is picked because a cargo line starts from a shape
+                // line more often than not.
                 IMatchingDefinitionFinder<IslandDescriptor, GlobalChunkPivot> finder =
                     new MatchingDefinitionFinder<IslandDescriptor, ChunkVector, ChunkDirection,
                         GlobalChunkCoordinate, LocalChunkPivot, GlobalChunkPivot, GlobalChunkTransform,
                         TInput, TOutput>(family, new IslandPlacementAdapter());
 
-                PlatformIslandsPlacersCreators creators = new(
-                    initiators.Buildings, initiators.Islands, initiators.MaxBuildingLayer,
-                    initiators.ProgressManager, initiators.EntityPlacementRunner,
-                    initiators.IslandsModulesLookup,
-
-                    // A scratch pipette map, deliberately not the real one.
-                    //
-                    // CreateSpacePathPlacementInitiator registers every member of the family
-                    // for pipetting, and DefaultIslandPlacementExtender - which the builder
-                    // chain gives no way to skip - registers each island again. Two Add calls
-                    // for one definition, and Dictionary.Add throws on a duplicate key, so
-                    // whichever ran second took the game's startup down with
-                    // "An item with the same key has already been added. Key: CargoBelt".
-                    //
-                    // Letting the path placer write into a throwaway dictionary settles it
-                    // without depending on which of the two runs first. The cost is that
-                    // pipetting a cargo belt picks the single-chunk placer rather than the
-                    // drag placer, which is a fair trade for not crashing.
-                    new Dictionary<IEntityDefinition, PipettePlacementRequest>(),
-
-                    initiators.TutorialState,
-                    initiators.ChunkLimitManager, initiators.ViewportLayersController,
-                    initiators.RailColorRegistry, Logger);
-
-                IPlacementInitiator initiator = creators
-                   .CreateSpacePathPlacementInitiator<TInput, TOutput>(
-                        finder,
-                        family,
-                        forward,
-                        // The port buildings a lifted path uses to bridge a layer. Vanilla
-                        // pairs its belt placer with the belt ports and its pipe placer with
-                        // the fluid ones, so a pipe-tagged cargo path follows the pipe placer.
-                        FluidPorts ? initiators.Buildings.FluidPortSender : initiators.Buildings.BeltPortSender,
-                        FluidPorts ? initiators.Buildings.FluidPortReceiver : initiators.Buildings.BeltPortReceiver,
-
-                        // Placements of interest drive tutorial prompts. UnknownIsland is the
-                        // enum's own value for "not one of the builtin ones", so a cargo belt
-                        // cannot accidentally satisfy a step about space belts.
-                        BuiltinPlacementOfInterest.UnknownIsland,
-                        initiators.ViewportLayersController);
+                IPlacementInitiator initiator = BuildInitiator(initiators, finder, forward, family);
 
                 Placer = registry.RegisterInitiator(new SerializedPlacerId(PlacerSerialName), initiator);
                 Logger.Info?.Log($"{ForwardId} can be dragged.");
@@ -144,6 +110,80 @@ namespace TrainCargoTools
                 // island placement throws, not just this one.
                 Logger.Exception?.LogException(exception);
             }
+        }
+
+        /// Vanilla's `PlatformIslandsPlacersCreators.CreateSpacePathPlacementInitiator`, rebuilt.
+        ///
+        /// This used to *call* it, through a throwaway instance of the creator - which worked, and
+        /// was the right call while nothing needed changing. One thing does now: the placer's
+        /// world IO query is constructed inside `IslandPlacersCreator.CreatePathPlacer` from the
+        /// same `TInput`/`TOutput` as everything else, and a belt-typed query cannot see a fluid
+        /// packager's pipe output. See EitherTagIOQuery for why that shows up as a cargo belt
+        /// refusing to snap to something it connects to perfectly well.
+        ///
+        /// Every part below is the game's own class with a public constructor, so this is vanilla's
+        /// sequence with one object substituted, not a reimplementation of any placement logic.
+        /// Two differences from vanilla, both deliberate:
+        ///
+        ///   - **No pipette registration.** Vanilla adds every family member to the pipette map,
+        ///     and `DefaultIslandPlacementExtender` - which the builder chain gives no way to skip
+        ///     - has already added each of them. `Dictionary.Add` throws on a duplicate key, which
+        ///     took startup down with "An item with the same key has already been added. Key:
+        ///     CargoBelt". Building the initiator here means simply not making that call, which is
+        ///     cleaner than the scratch dictionary it needed before. Pipetting a cargo belt picks
+        ///     the single-chunk placer instead of the drag placer.
+        ///   - **No port buildings.** Vanilla threads `portSender`/`portReceiver` down to
+        ///     `CreatePathPlacer`, and the island overload ignores both - only the *building*
+        ///     overload uses them, for `PathAtNotchesUpgradeToPortsProcessor`. Passing them was
+        ///     cargo cult.
+        private IPlacementInitiator BuildInitiator(
+            IslandInitiatorsParams initiators,
+            IMatchingDefinitionFinder<IslandDescriptor, GlobalChunkPivot> finder,
+            IIslandDefinition forward, IReadOnlyList<IIslandDefinition> family)
+        {
+            IslandAccessorAdapter islands = new();
+
+            ModularEntityPlacer<OverlappingPlacementData> placer = new(
+                new PathPlacer<IslandPlacement, IslandDescriptor, GlobalChunkPivot,
+                    GlobalChunkTransform, GlobalChunkCoordinate, ChunkVector, ChunkDirection,
+                    LocalChunkPivot, TInput, TOutput, ChunkAxis, IslandInstanceModel,
+                    IslandConnector, IslandConnection>(
+                    new ChunkSpace(), new IslandPlacementAdapter(), finder, islands,
+                    new IslandConnectionFactory(), new EitherTagIOQuery(islands),
+                    initiators.ViewportLayersController, EntityType.Island, ChunkVector.Up),
+                new PlacerDataBasedOnRepresentingIsland(forward, initiators.IslandsModulesLookup));
+
+            placer.AddProcessorAtEnd(new ChunkCostPlacementProcessor(initiators.ChunkLimitManager));
+
+            // Lifting is what lets a dragged run change layer. It needs its own definition finder
+            // because it re-picks a definition after deciding to lift.
+            placer.InsertProcessor(
+                new PathLiftingProcessor<IslandPlacement, IslandDescriptor, GlobalChunkCoordinate,
+                    ChunkVector, ChunkDirection, ChunkAxis, GlobalChunkPivot, LocalChunkPivot,
+                    GlobalChunkTransform, TInput, TOutput, IslandInstanceModel, IslandConnector,
+                    IslandConnection>(
+                    new MatchingDefinitionFinder<IslandDescriptor, ChunkVector, ChunkDirection,
+                        GlobalChunkCoordinate, LocalChunkPivot, GlobalChunkPivot,
+                        GlobalChunkTransform, TInput, TOutput>(family, new IslandPlacementAdapter()),
+                    new IslandPlacementAdapter(), new IslandAccessorAdapter(), new ChunkSpace(),
+                    new LiftVerticalOffsetProvider(initiators.ViewportLayersController)),
+                placer.ProcessorIndex<IPathUpgradeProcessor>() + 1);
+
+            IPlacementInitiator initiator = new TutorialGamePlacementInitiator(
+                // Unlocked with the group, as every island placer is.
+                new AnyIdUnlockedWithResearchRewards<IslandDefinitionGroupId>(
+                    initiators.ProgressManager,
+                    forward.CustomData.Get<IIslandDefinitionGroup>().Id,
+                    new IslandResearchLockStatusSolver(), new IslandRewardIdSolver()),
+                placer, initiators.EntityPlacementRunner, initiators.TutorialState,
+
+                // Placements of interest drive tutorial prompts. UnknownIsland is the enum's own
+                // value for "not one of the builtin ones", so a cargo belt cannot accidentally
+                // satisfy a step about space belts.
+                BuiltinPlacementOfInterest.UnknownIsland);
+
+            placer.AddProcessorAtEnd(new TargetedIslandsPlacementRulesProcessor(family));
+            return initiator;
         }
 
         /// The forward piece plus its turns.

@@ -19,21 +19,41 @@ namespace TrainCargoTools
             SimulationSystemsDependencies dependencies, out SpacePathConfiguration config)
         {
             config = dependencies.Mode.Islands.SpaceBelts.First().ConfigAs<SpacePathConfiguration>();
-            return new Factory(config.SpaceConveyorSpeed);
+
+            // Same source as the packagers': GameMode.TrainCargoExchangeConfiguration, so a belt
+            // packs to exactly the size a station would and wagon-capacity research applies.
+            return new Factory(
+                new CargoBeltSpeed(config.SpaceConveyorSpeed),
+                new ShapeCargoContainerCapacityConfigProvider(
+                    dependencies.Mode.TrainCargoExchangeConfiguration),
+                new FluidCargoContainerCapacityConfigProvider(
+                    dependencies.Mode.TrainCargoExchangeConfiguration),
+                dependencies.FluidRegistry);
         }
 
         private sealed class Factory : IFactory<CargoBeltSimulationState, IslandInstance, CargoBeltSimulation>
         {
-            private readonly BeltSpeed Speed;
+            private readonly IBeltSpeed Speed;
+            private readonly ICargoContainerCapacityConfigProvider ShapeCapacity;
+            private readonly ICargoContainerCapacityConfigProvider FluidCapacity;
+            private readonly Game.Content.Features.Fluids.IFluidRegistry Fluids;
 
-            public Factory(BeltSpeed speed)
+            public Factory(
+                IBeltSpeed speed,
+                ICargoContainerCapacityConfigProvider shapeCapacity,
+                ICargoContainerCapacityConfigProvider fluidCapacity,
+                Game.Content.Features.Fluids.IFluidRegistry fluids)
             {
                 Speed = speed;
+                ShapeCapacity = shapeCapacity;
+                FluidCapacity = fluidCapacity;
+                Fluids = fluids;
             }
 
             public CargoBeltSimulation Produce(CargoBeltSimulationState state, IslandInstance island)
             {
-                return new CargoBeltSimulation(Speed, state);
+                return new CargoBeltSimulation(
+                    Speed, ShapeCapacity, FluidCapacity, Fluids, state);
             }
         }
     }

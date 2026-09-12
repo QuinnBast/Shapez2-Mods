@@ -27,7 +27,7 @@ namespace TrainCargoTools
     /// different shapes into one layer will fight each other through the filling container's
     /// subtractive penalty, exactly as they would at a station. Feed one item type per layer.
     public abstract class CargoPackagerSimulation<TItem, TState> : Simulation<TState>, IItemBundleSimulation,
-        ISimulation, IUpdatableSimulation
+        ISimulation, IUpdatableSimulation, ICargoPackagerView
         where TItem : unmanaged, IEquatable<TItem>
         where TState : CargoLayerState<TItem>, ISimulationState, new()
     {
@@ -49,6 +49,17 @@ namespace TrainCargoTools
         public int NumItemReceiverBundles => 1;
 
         public int NumItemProviderBundles => 1;
+
+        /// How many items make one package. Read from the capacity provider rather than stated,
+        /// because wagon-capacity research changes it mid-game - a gauge showing a fixed maximum
+        /// would start lying the moment that unlocks. See ICargoPackagerView.
+        public int PackageSize => Capacity.PackageSize;
+
+        /// How far through the current package this layer is.
+        public int AmountAt(int layer)
+        {
+            return FillingContainers[layer].Package.Amount;
+        }
 
         protected CargoPackagerSimulation(
             ICargoContainerCapacityConfigProvider capacity,
@@ -121,7 +132,12 @@ namespace TrainCargoTools
             for (short lane = 0; lane < SpacePathConstants.NumLanes; lane++)
             {
                 IItemReceiver next = OutputBundle.GetSender(lane, (short)layer).NextLane;
-                if (next == null || !next.CanAcceptItem(Probe))
+
+                // The guard as well as the lane's own answer: a packager's output connector will
+                // connect to an ordinary belt or pipe, which would take the package and lose it
+                // downstream. Refusing leaves it in the filling container and stalls the
+                // machine, which is visible. See CargoHandover.
+                if (!CargoHandover.Allows(next, Probe) || !next.CanAcceptItem(Probe))
                 {
                     continue;
                 }

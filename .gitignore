@@ -23,3 +23,7 @@ obj/
 
 # macOS
 .DS_Store
+
+# Python bytecode, from the offline art generators in */Tools
+__pycache__/
+*.pyc

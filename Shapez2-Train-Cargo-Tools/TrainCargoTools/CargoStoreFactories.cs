@@ -54,4 +54,54 @@ namespace TrainCargoTools
             }
         }
     }
+
+    /// The combined store: one island for either kind of cargo. See AnyCargoStore.
+    ///
+    /// Reports the space belt's configuration like the rest of the family, which is what tells
+    /// research this island's throughput is belt-speed-affected.
+    ///
+    /// It does need a capacity provider and a fluid registry, unlike the two legacy stores: a
+    /// store now packs loose items itself so a train unloader can dock straight against it, and
+    /// packing needs to know how big a package is. Same source as everything else in the mod -
+    /// GameMode.TrainCargoExchangeConfiguration - so a store packs to exactly the size a station
+    /// would and wagon-capacity research applies.
+    internal sealed class AnyCargoStoreFactory
+        : IIslandSimulationFactoryBuilder<AnyCargoStoreSimulation, AnyCargoStoreState, SpacePathConfiguration>
+    {
+        public IFactory<AnyCargoStoreState, IslandInstance, AnyCargoStoreSimulation> BuildFactory(
+            SimulationSystemsDependencies dependencies, out SpacePathConfiguration config)
+        {
+            config = dependencies.Mode.Islands.SpaceBelts.First().ConfigAs<SpacePathConfiguration>();
+
+            return new Factory(
+                new ShapeCargoContainerCapacityConfigProvider(
+                    dependencies.Mode.TrainCargoExchangeConfiguration),
+                new FluidCargoContainerCapacityConfigProvider(
+                    dependencies.Mode.TrainCargoExchangeConfiguration),
+                dependencies.FluidRegistry);
+        }
+
+        private sealed class Factory
+            : IFactory<AnyCargoStoreState, IslandInstance, AnyCargoStoreSimulation>
+        {
+            private readonly ICargoContainerCapacityConfigProvider ShapeCapacity;
+            private readonly ICargoContainerCapacityConfigProvider FluidCapacity;
+            private readonly Game.Content.Features.Fluids.IFluidRegistry Fluids;
+
+            public Factory(
+                ICargoContainerCapacityConfigProvider shapeCapacity,
+                ICargoContainerCapacityConfigProvider fluidCapacity,
+                Game.Content.Features.Fluids.IFluidRegistry fluids)
+            {
+                ShapeCapacity = shapeCapacity;
+                FluidCapacity = fluidCapacity;
+                Fluids = fluids;
+            }
+
+            public AnyCargoStoreSimulation Produce(AnyCargoStoreState state, IslandInstance island)
+            {
+                return new AnyCargoStoreSimulation(ShapeCapacity, FluidCapacity, Fluids, state);
+            }
+        }
+    }
 }
