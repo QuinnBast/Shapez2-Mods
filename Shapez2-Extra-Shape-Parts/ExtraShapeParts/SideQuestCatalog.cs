@@ -2,7 +2,8 @@ using System.Collections.Generic;
 
 namespace QuinnBast.Shapez2.ExtraShapeParts
 {
-    /// The seven side quest chains, from JOBS-DRAFT.md.
+    /// The ten side quest chains. The first seven are from JOBS-DRAFT.md; the last three came
+    /// later, from reading vanilla's own quests out of `debug.export-game-data`.
     ///
     /// One rule shaped all of them: **every step adds one thing to the factory that made the step
     /// before it.** No step asks for a shape that needs a different production line from scratch.
@@ -91,6 +92,42 @@ namespace QuinnBast.Shapez2.ExtraShapeParts
                 new SideQuestStep("Inlay", 500, "2uDu"),
                 new SideQuestStep("Porthole", 2000, "2uDu", "1w"),
                 new SideQuestStep("Cog plate", 6000, "2uDu", "1w", "Ey")),
+
+            // The three below came out of reading vanilla's own side quests, exported with
+            // `debug.export-game-data`. All three use an idiom the first seven do not: a layer that
+            // *changes* rather than grows, which is most of what vanilla's chains actually do.
+
+            // Two toothed discs interleaved, then swapped round - the swap is one rotator on a
+            // mixed layer, which nothing else here teaches.
+            //
+            // Design risk, recorded rather than argued: Gear and Sawblade are both toothed discs,
+            // and interleaving them is a subtler difference than any other chain trades on. If the
+            // middle two steps read as one shape in game, the fix is to swap Sawblade for Bar and
+            // keep the structure.
+            new SideQuestChain("millstone", "Millstone",
+                new SideQuestStep("Gear", 250, "Eu"),
+                new SideQuestStep("Interleaved", 1000, "EuZu"),
+                new SideQuestStep("Swapped", 4000, "EuZu", "ZuEu"),
+                new SideQuestStep("Whitewashed", 8000, "EuZu", "ZuEu", "EwZw")),
+
+            // Dome and Wedge are the only chiral parts in the set and they turn opposite ways, so a
+            // layer alternating them cannot settle on a direction. Swapping the pair on the layer
+            // above reverses it again.
+            new SideQuestChain("both-hands", "Both Hands",
+                new SideQuestStep("Dome", 250, "Mr"),
+                new SideQuestStep("Opposed", 1000, "MrTb"),
+                new SideQuestStep("Mirrored", 4000, "MrTb", "TbMr"),
+                new SideQuestStep("Snowblind", 8000, "MrTb", "TbMr", "MwTw")),
+
+            // Black, which nothing else in this mod asks for. `k` is a real colour code - vanilla
+            // spends it on `XkXkXkXk` in the quad scenario and never once in the hexagonal one -
+            // and both scenarios share `DefaultColorSchemeRGBFlex`, so it resolves in either. In a
+            // hexagonal save this is the only black shape a player will be asked for.
+            new SideQuestChain("widows-web", "Widow's Web",
+                new SideQuestStep("Black leaf", 250, "Lk"),
+                new SideQuestStep("Beaded", 1000, "LkOw"),
+                new SideQuestStep("Woven", 4000, "LkOw", "OwLk"),
+                new SideQuestStep("Reversed", 8000, "LkOw", "OwLk", "LwOk")),
         };
     }
 }

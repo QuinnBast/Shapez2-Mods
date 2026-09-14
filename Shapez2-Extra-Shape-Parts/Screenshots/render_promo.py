@@ -189,9 +189,9 @@ if __name__ == "__main__":
     parts_sheet(6, 60.0, "promo-parts-hex.png", "Ten new shape parts, hexagonal",
                 "Every part is built again at 60 degrees for hexagonal mode - its own mesh, not "
                 "the quad one stretched.")
-    quests_sheet(4, 90.0, "promo-quests-quad.png", "Seven side quest chains",
-                 "Twenty-six goals in the research screen. Every step adds one thing to the factory "
+    quests_sheet(4, 90.0, "promo-quests-quad.png", "Ten side quest chains",
+                 "Thirty-eight goals in the research screen. Every step adds one thing to the factory "
                  "that built the step before it.")
-    quests_sheet(6, 60.0, "promo-quests-hex.png", "Seven side quest chains, hexagonal",
+    quests_sheet(6, 60.0, "promo-quests-hex.png", "Ten side quest chains, hexagonal",
                  "The same chains, rebuilt for six parts - including the vanilla shapes underneath, "
                  "which differ per configuration.")

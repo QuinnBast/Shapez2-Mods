@@ -773,7 +773,10 @@ Three things the mockup settled that reasoning had not:
 
 *Compiles clean; the shape codes are checked against the reviewed draft. Untested in game.*
 
-Seven chains, twenty-six quests, from [JOBS-DRAFT.md](JOBS-DRAFT.md). They appear in the research
+Ten chains, thirty-eight quests. The first seven are from [JOBS-DRAFT.md](JOBS-DRAFT.md); the
+last three - Millstone, Both Hands and Widow's Web - came from reading vanilla's own side quests
+out of `debug.export-game-data`, and each uses an idiom the original seven do not: a layer that
+changes rather than grows. They appear in the research
 screen's Side Quests tab, below vanilla's.
 
 ### The hook, and why it is not a detour

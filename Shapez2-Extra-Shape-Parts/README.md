@@ -1,7 +1,7 @@
 # Extra Shape Parts
 
 shapez 2 has four shape quadrant types. This adds ten more, puts them on the map so they can
-be mined rather than only built, and gives them twenty-six side quests to be delivered to.
+be mined rather than only built, and gives them thirty-eight side quests to be delivered to.
 
 ![The ten new parts](Screenshots/promo-parts-quad.png)
 
@@ -22,7 +22,7 @@ Flower's petals gain teeth, so that neither collides with the hexagonal configur
 
 ## Side quests
 
-Seven chains in the research screen, twenty-six goals:
+Ten chains in the research screen, thirty-eight goals:
 
 ![The side quest chains](Screenshots/promo-quests-quad.png)
 

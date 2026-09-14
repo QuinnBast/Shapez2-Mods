@@ -26,7 +26,7 @@ shapez 2 has four shape quadrant types: circle, square, windmill and star. This 
 They cut, stack, paint, crystallise and rotate exactly like the vanilla four, because the game's shape operations never look at which part they are holding. Nothing new to learn.
 
 [h2]Side quests[/h2]
-Seven new chains in the research screen's Side Quests tab, twenty-six goals in all. Each chain starts with one production line and every step adds one thing to the factory that built the step before it - a colour, a stacker, a pin pusher, a crystal generator - so no step asks you to start again.
+Ten new chains in the research screen's Side Quests tab, thirty-eight goals in all. Each chain starts with one production line and every step adds one thing to the factory that built the step before it - a colour, a stacker, a pin pusher, a crystal generator - so no step asks you to start again.
 
 [h2]Hexagonal mode[/h2]
 Every shape is built for the mode it is used in: a 90 degree quadrant in the standard game and a 60 degree sector in hexagonal mode, with its own mesh. The side quests adapt too. Both are supported.
