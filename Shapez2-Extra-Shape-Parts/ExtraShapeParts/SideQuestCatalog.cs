@@ -25,6 +25,55 @@ namespace QuinnBast.Shapez2.ExtraShapeParts
 
         public static readonly int[] ChunkLimitPerStep = { 30, 40, 50, 60 };
 
+        /// The gates, and the evidence for each.
+        ///
+        /// A chain must not appear before a player can build it, and what a shape needs is mostly
+        /// its *colours* rather than its machines: the cutter, rotator and stacker all arrive at
+        /// `Milestone_Initial`, so gating on those would be a no-op.
+        ///
+        /// Colour availability was read out of `debug.export-game-data` by asking, for every colour,
+        /// the earliest milestone goal and the earliest side quest in which vanilla itself asks for
+        /// it. Both agree:
+        ///
+        ///     u r b   from the start
+        ///     g       Milestone_ShapeTrains, and CBFluids_Extraction gates a quest using it
+        ///     c y w   Milestone_SpaceFloor3 / CBFluids_Mixer      - the mixer's secondaries
+        ///     m       Milestone_Crystals / CBSpecial_SpaceFloor3
+        ///     k       Milestone_PostFinal_Tier2 / Milestone_PostFinal_Tier1  - post final, both
+        ///
+        /// Black being post-final is the one that changed a design: Widow's Web asks for it in its
+        /// first step, so the whole chain is end game content rather than the mid game chain it
+        /// looks like.
+        ///
+        /// These are ids, not guarantees. Every one is checked against the scenario before use.
+        /// A chain names candidates in order and takes the first the scenario has. A chain whose
+        /// gate is missing entirely is **skipped**, not un-gated: a scenario without the mixer
+        /// cannot build a white shape either, so showing the chain would only ever frustrate. The
+        /// onboarding scenario has none of these, and gets none of these chains.
+        public static readonly string[] Mixer = { "CBFluids_Mixer" };
+
+        public static readonly string[] SpaceFloor3 = { "CBSpecial_SpaceFloor3" };
+
+        public static readonly string[] Crystals = { "CBSpecial_Crystals" };
+
+        /// Where black becomes available, which is a different milestone in every family of
+        /// scenario and is the only gate here that had to be worked out per scenario:
+        ///
+        ///     quad        Milestone_PostFinal_Tier1   - post final, and vanilla waits until Tier2
+        ///     converter   ConverterMilestoneTier1     - early, and the converter goals lean on it
+        ///     hexagonal   Milestone_Final             - never asked for there at all, so the last
+        ///                                               milestone is the honest guess
+        ///
+        /// The hexagonal entry is the weak one: black is in that scenario's colour scheme, because
+        /// every scenario shares `DefaultColorSchemeRGBFlex`, but nothing in hexagonal ever asks a
+        /// player to make one. Gating on the final milestone is a guess that it is late rather than
+        /// impossible. If it turns out to be unobtainable there, the chain should name a different
+        /// colour rather than a different gate.
+        public static readonly string[] BlackAvailable =
+        {
+            "Milestone_PostFinal_Tier1", "ConverterMilestoneTier1", "Milestone_Final",
+        };
+
         private static IReadOnlyList<SideQuestChain> Built;
 
         /// Built on first access, for the same reason <see cref="ExtraShapePartCatalog.All"/> is: a
@@ -33,7 +82,7 @@ namespace QuinnBast.Shapez2.ExtraShapeParts
         {
             // The cleanest progression of the set: one dome line per step, one new colour each
             // time, nothing else changes. First for that reason as much as for how it looks.
-            new SideQuestChain("rainbow-vortex", "Rainbow Vortex",
+            new SideQuestChain("rainbow-vortex", "Rainbow Vortex", Mixer,   // yellow and green
                 new SideQuestStep("Red dome", 250, "Mr"),
                 new SideQuestStep("Sunrise", 1000, "Mr", "My"),
                 new SideQuestStep("Three deep", 4000, "Mr", "My", "Mg"),
@@ -42,13 +91,13 @@ namespace QuinnBast.Shapez2.ExtraShapeParts
             // The pin is last because pinning shifts everything up: ShapeOperationPushPin discards
             // anything at MaxShapeLayers - 1 or above, so it only works on a shape that is within
             // one layer of the cap.
-            new SideQuestChain("turn-the-wheel", "Turn the Wheel",
+            new SideQuestChain("turn-the-wheel", "Turn the Wheel", Mixer,   // yellow; the pin pusher is earlier
                 new SideQuestStep("Gear", 250, "Eu"),
                 new SideQuestStep("Two deep", 1000, "Eu", "Ey"),
                 new SideQuestStep("Gear tower", 4000, "Eu", "Ey", "Er"),
                 new SideQuestStep("Pinned tower", 8000, "P-", "Eu", "Ey", "Er")),
 
-            new SideQuestChain("both-ways", "Both Ways",
+            new SideQuestChain("both-ways", "Both Ways", Mixer,   // white
                 new SideQuestStep("Red wedge", 250, "Tr"),
                 new SideQuestStep("Wedge on dome", 1000, "Tr", "Mw"),
                 new SideQuestStep("Three deep", 4000, "Tr", "Mw", "Tb"),
@@ -57,7 +106,7 @@ namespace QuinnBast.Shapez2.ExtraShapeParts
             // The crystal step is the point of this chain: step 2 deliberately leaves gaps so step 3
             // can fill them. ShapeOperationCrystallize replaces every empty part and every pin, so
             // the gaps have to be built first.
-            new SideQuestChain("in-bloom", "In Bloom",
+            new SideQuestChain("in-bloom", "In Bloom", Crystals,   // the crystal step, later than its magenta
                 new SideQuestStep("Flower", 250, "Bm"),
                 new SideQuestStep("Half a rose", 1000, "Bm", "Br--"),
                 new SideQuestStep("Crystal rose", 4000, "Bm", "Brcr"),
@@ -65,7 +114,7 @@ namespace QuinnBast.Shapez2.ExtraShapeParts
 
             // Three steps, not four - a fourth was a square plate on top, which added a whole
             // vanilla line for a step that did not earn it.
-            new SideQuestChain("sharpen", "Sharpen",
+            new SideQuestChain("sharpen", "Sharpen", Mixer,   // white, at the last step
                 new SideQuestStep("Sawblade", 250, "Zu"),
                 new SideQuestStep("Buzzsaw", 1000, "Zu", "Or"),
                 new SideQuestStep("Twin saw", 4000, "Zu", "Or", "Zw")),
@@ -73,7 +122,7 @@ namespace QuinnBast.Shapez2.ExtraShapeParts
             // The last step is the only one that *changes* a layer rather than adding one: the top
             // goes from dots to dots and bars alternating, which needs a half cutter and a
             // recombine. Everything below it is untouched.
-            new SideQuestChain("fine-detail", "Fine Detail",
+            new SideQuestChain("fine-detail", "Fine Detail", SpaceFloor3,   // magenta, later than its cyan and yellow
                 new SideQuestStep("Bar", 250, "Ic"),
                 new SideQuestStep("Circuitry", 1000, "Ic", "Km"),
                 new SideQuestStep("Three deep", 4000, "Ic", "Km", "Oy"),
@@ -88,7 +137,7 @@ namespace QuinnBast.Shapez2.ExtraShapeParts
             // a quad chain, and it dropped out of hexagonal saves entirely because `R` and `C` do
             // not exist there. Now it is square-and-circle in quad and hexagon in hexagonal, which
             // is what "the vanilla shapes" means in each.
-            new SideQuestChain("foundations", "Foundations",
+            new SideQuestChain("foundations", "Foundations", Mixer,   // white
                 new SideQuestStep("Inlay", 500, "2uDu"),
                 new SideQuestStep("Porthole", 2000, "2uDu", "1w"),
                 new SideQuestStep("Cog plate", 6000, "2uDu", "1w", "Ey")),
@@ -104,7 +153,7 @@ namespace QuinnBast.Shapez2.ExtraShapeParts
             // and interleaving them is a subtler difference than any other chain trades on. If the
             // middle two steps read as one shape in game, the fix is to swap Sawblade for Bar and
             // keep the structure.
-            new SideQuestChain("millstone", "Millstone",
+            new SideQuestChain("millstone", "Millstone", Mixer,   // white, at the last step
                 new SideQuestStep("Gear", 250, "Eu"),
                 new SideQuestStep("Interleaved", 1000, "EuZu"),
                 new SideQuestStep("Swapped", 4000, "EuZu", "ZuEu"),
@@ -113,7 +162,7 @@ namespace QuinnBast.Shapez2.ExtraShapeParts
             // Dome and Wedge are the only chiral parts in the set and they turn opposite ways, so a
             // layer alternating them cannot settle on a direction. Swapping the pair on the layer
             // above reverses it again.
-            new SideQuestChain("both-hands", "Both Hands",
+            new SideQuestChain("both-hands", "Both Hands", Mixer,   // white, at the last step
                 new SideQuestStep("Dome", 250, "Mr"),
                 new SideQuestStep("Opposed", 1000, "MrTb"),
                 new SideQuestStep("Mirrored", 4000, "MrTb", "TbMr"),
@@ -123,7 +172,7 @@ namespace QuinnBast.Shapez2.ExtraShapeParts
             // spends it on `XkXkXkXk` in the quad scenario and never once in the hexagonal one -
             // and both scenarios share `DefaultColorSchemeRGBFlex`, so it resolves in either. In a
             // hexagonal save this is the only black shape a player will be asked for.
-            new SideQuestChain("widows-web", "Widow's Web",
+            new SideQuestChain("widows-web", "Widow's Web", BlackAvailable,   // black, from its first step
                 new SideQuestStep("Black leaf", 250, "Lk"),
                 new SideQuestStep("Beaded", 1000, "LkOw"),
                 new SideQuestStep("Woven", 4000, "LkOw", "OwLk"),

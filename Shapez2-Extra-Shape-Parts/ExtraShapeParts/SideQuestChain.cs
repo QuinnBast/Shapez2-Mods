@@ -27,10 +27,31 @@ namespace QuinnBast.Shapez2.ExtraShapeParts
 
         public readonly SideQuestStep[] Steps;
 
-        public SideQuestChain(string id, string title, params SideQuestStep[] steps)
+        /// The upgrade id that has to be unlocked before the chain appears, or null for none.
+        ///
+        /// One gate for the whole chain, because that is all the game offers:
+        /// `SerializedResearchSideQuest` has no requirements field of its own, and
+        /// `ResearchSideQuestGroup` derives each quest's from the group's plus the quests before it.
+        /// So the gate has to cover what the chain needs *anywhere*, not what its first step needs -
+        /// otherwise a player reaches the last step and finds it unbuildable.
+        ///
+        /// It is resolved against the scenario at injection time and dropped if that scenario does
+        /// not define it; see <see cref="SideQuestInjector"/>. Nothing here can be assumed to exist,
+        /// because `ResearchProgression.Validate` has already run by then and a dangling requirement
+        /// would not throw - it would simply never unlock.
+        /// Candidates, in order; the first the scenario defines wins.
+        ///
+        /// More than one because scenarios do not share a late game. `Milestone_PostFinal_Tier1`
+        /// exists in the quad scenarios and **not** in the hexagonal one, which stops at
+        /// `Milestone_Final` after nine milestones instead of thirteen. A chain gated on the end of
+        /// the game therefore has to name the end of *each* game.
+        public readonly string[] Gates;
+
+        public SideQuestChain(string id, string title, string[] gates, params SideQuestStep[] steps)
         {
             Id = id;
             Title = title;
+            Gates = gates ?? Array.Empty<string>();
             Steps = steps;
         }
     }

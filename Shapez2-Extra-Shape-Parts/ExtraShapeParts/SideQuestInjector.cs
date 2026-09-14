@@ -136,23 +136,61 @@ namespace QuinnBast.Shapez2.ExtraShapeParts
                 return 0;
             }
 
+            if (!TryResolveGate(progression, chain, logger, out ResearchUpgradeId[] gate))
+            {
+                return 0;
+            }
+
             ResearchSideQuestGroup group = new ResearchSideQuestGroup(
-                new RawText(chain.Title),
-                // No gating. Vanilla groups require an authored upgrade id such as
-                // `CBFluids_Extraction`, which is scenario data a mod cannot count on existing -
-                // and a required id that is not defined is exactly what `ResearchProgression.Validate`
-                // refuses to build. Visible from the start is the honest option.
-                Array.Empty<ResearchUpgradeId>(),
-                Array.Empty<ResearchMechanicId>(),
-                serialized);
+                new RawText(chain.Title), gate, Array.Empty<ResearchMechanicId>(), serialized);
 
             Register(progression, group);
 
             logger.Info?.Log(
                 $"Side quest chain '{chain.Title}': {group.SideQuests.Count} quests, " +
-                $"{partCount} parts, first shape '{serialized[0].Costs[0].Shape}'.");
+                $"{partCount} parts, gate '{(gate.Length > 0 ? gate[0].ToString() : "none")}', " +
+                $"first shape '{serialized[0].Costs[0].Shape}'.");
 
             return group.SideQuests.Count;
+        }
+
+        /// The chain's gate, if this scenario has it, and nothing if it does not.
+        ///
+        /// **A requirement that does not exist does not throw.** `ResearchProgression.Validate`
+        /// would have refused it, but that ran in the constructor, long before a rewirer fires. An
+        /// unknown id added afterwards simply never resolves, and the chain is then invisible
+        /// forever with nothing in the log to say why. So the id is looked up first, and a chain
+        /// whose gate is missing is registered ungated rather than registered unreachable.
+        ///
+        /// Not hypothetical: `CBFluids_PainterTop`, `CBSpecial_PinPusher` and `CBSpecial_Crystals`
+        /// are all absent from the onboarding scenario.
+        private static bool TryResolveGate(ResearchProgression progression, SideQuestChain chain,
+            ILogger logger, out ResearchUpgradeId[] gate)
+        {
+            gate = Array.Empty<ResearchUpgradeId>();
+
+            if (chain.Gates.Length == 0)
+            {
+                return true;
+            }
+
+            foreach (string candidate in chain.Gates)
+            {
+                ResearchUpgradeId id = new ResearchUpgradeId(candidate);
+                if (progression.TryGetUpgrade(id, out _))
+                {
+                    gate = new[] { id };
+                    return true;
+                }
+            }
+
+            // Every candidate absent means the scenario does not have the content the chain needs,
+            // not that the chain should be free. Onboarding has no mixer, no pin pusher and no
+            // crystals, so every chain here is unbuildable in it.
+            logger.Info?.Log(
+                $"Side quest chain '{chain.Title}' skipped: this scenario defines none of " +
+                $"{string.Join(", ", chain.Gates)}.");
+            return false;
         }
 
         /// The four collections a quest has to land in.

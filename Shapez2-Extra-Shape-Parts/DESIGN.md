@@ -856,15 +856,45 @@ part gets it for both.
 This mod contributes nothing to `MapGenerationCommonParts` - every part here is Rare or VeryRare -
 so those placeholders resolve to vanilla parts rather than to our own.
 
-### No gating
+### Gating
 
-Vanilla groups require an authored upgrade id - `SG_Fluids_1` needs `CBFluids_Extraction`. Those
-are scenario data a mod cannot count on, and `ResearchProgression.Validate` has already run by
-injection time, so a bad id would throw nothing and simply never resolve. All seven chains are
-visible from the start instead. Several of them want a painter, a stacker or a crystal generator
-the player does not have yet, so the tab is noisier early than vanilla's - that is the known cost
-of the safe choice, and gating on ids verified against `progression.AllUpgrades` is the fix if it
-grates.
+Each chain names its gate, and the gate is checked against the scenario before it is used. That
+check is not defensive tidiness: `ResearchProgression.Validate` runs in the constructor, long before
+a rewirer fires, so a requirement naming an upgrade the scenario does not define **throws nothing**
+and simply never resolves. The chain would be invisible forever with nothing in the log.
+
+**What a chain needs is mostly its colours, not its machines.** The cutter, rotator and stacker all
+arrive at `Milestone_Initial`, so gating on those would be a no-op. Colour availability was derived
+from `debug.export-game-data` by asking, for every colour, the earliest milestone goal and the
+earliest side quest in which *vanilla itself* asks for it. The two sources agree:
+
+| colour | available from |
+| --- | --- |
+| `u` `r` `b` | the start |
+| `g` | `Milestone_ShapeTrains` / `CBFluids_Extraction` |
+| `c` `y` `w` | `CBFluids_Mixer` |
+| `m` | `CBSpecial_SpaceFloor3` |
+| `k` | post final |
+
+So nine of the ten chains gate on the mixer, `CBSpecial_SpaceFloor3` or `CBSpecial_Crystals` - the
+latest thing each needs anywhere, because the game allows one gate per group and a chain gated on
+its *first* step's needs strands the player on its last.
+
+**Black cost a design decision.** Widow's Web asks for it in step one, and black is post-final
+everywhere it appears - so the chain is end game content rather than the mid game chain it looks
+like. It is also the one gate that differs per scenario:
+
+| scenario family | black available from |
+| --- | --- |
+| quad | `Milestone_PostFinal_Tier1` |
+| converter | `ConverterMilestoneTier1` - early, the converter goals lean on black |
+| hexagonal | never asked for, so `Milestone_Final` is a guess that it is late rather than absent |
+
+A chain therefore names gate *candidates* in order and takes the first the scenario defines. If none
+of them exist the chain is **skipped rather than un-gated**: a scenario with no mixer cannot build a
+white shape either, so showing the chain would only frustrate. That is what happens in onboarding,
+which has no painter, no pin pusher, no mixer and no crystals - it gets none of these chains, which
+is correct.
 
 ### Quest ids are save state
 
