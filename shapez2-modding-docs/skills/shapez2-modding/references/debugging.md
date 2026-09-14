@@ -126,6 +126,7 @@ available, and beats per-frame logging — which drowns you in `Player.log`. See
 | Works on a new save, silently stops on a loaded one | `Attach` used where `AttachOrReplace` was needed — the second copy sits beside the first, and `CustomDataHolder` reports a multiple match as found-nothing |
 | Worked before a game update | a detour target changed |
 | Works in one scenario, not another | a hard-coded milestone id |
+| Works for you, does nothing at all for one reporter, no error in their log | they turned the `prediction` setting off; an island chain using `.WithPrediction(...)` never re-arms and is spent on the main menu's background session. Count `Adding`/`Removing rewirer ... IslandPredictionExtender` — adds with zero removals |
 
 ## The publicizer warning is not a reliable signal
 

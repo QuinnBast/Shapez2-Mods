@@ -146,6 +146,70 @@ uses `Dictionary.Add`, not the indexer, so registering the same `IslandDefinitio
 throws rather than replacing. A builder built once at mod construction and then registered
 into more than one bake is the usual way in.
 
+### A mod that works for you and is invisible for one player
+
+The report is "your mod does nothing" from a log with no error in it. The mod loads, its
+own log lines are all present, and on your machine the same build works perfectly.
+
+What happens: `AtomicIslandExtender.Build` registers through `RewirerChain`, and every link
+in that chain **unregisters itself the moment it has applied**. What brings the content back
+on the next scenario load is the re-arm at the end of `Build` — and `WaitAllRewirers` fires
+it only once *every* branch has cleared its link: modules, placement + toolbar, simulation
+and prediction.
+
+The prediction branch is the one that can never fire. It runs from
+`PredictionSystemsInterceptor`, a postfix on
+`BuiltinPredictionSimulationSystems.CreateSimulationSystems`, and that method has exactly
+one caller — `GameSessionOrchestrator.SetupPredictions`, which `StartPredictionUpdate`
+skips outright:
+
+```csharp
+if (!SimulationSettings.Predict)
+{
+    if (PredictionSimulator != null) ShutDownPredictions();
+    return;                                   // SetupPredictions never runs
+}
+```
+
+`SimulationSettings.Predict` is `BoolGameSetting("prediction", …, defaultValue: true)` — an
+ordinary game setting. **A player who turns predictions off never creates a prediction
+system at all**, so the branch never completes and the chain never re-arms.
+
+That matters because **the first scenario of the process is the main menu's background
+game**, not anything the player loaded:
+
+```text
+Initializing Main Menu
+Core:: Stage 4 - Init existing savegame memory with mode RegularGameMode
+```
+
+The one registration is spent there. Every session after it — including the save they
+actually play — gets no definitions, no toolbar entry and no research unlock, and nothing
+throws.
+
+**Diagnosing it from a user's log takes one count.** Every rewirer logs going in and coming
+out, and the *removal* is what proves `AfterHijack` fired:
+
+```bash
+grep -c "Adding rewirer IslandPredictionExtender"               Player.log
+grep -c "Removing rewirer with handle IslandPredictionExtender" Player.log
+```
+
+Adds with **zero** removals, and an add count that never rises across sessions, is the
+signature. Confirm against the island counts and your own toolbar line:
+
+```text
+New islands: 170 + 163      Toolbar: created group '…'     ← menu background session
+New islands: 164 + 163      —                              ← every session after it
+```
+
+Do not go hunting through the reporter's mod list. Their mods, load order and Workshop
+packaging all reproduce clean on a machine with the setting left on; the only thing that
+reproduces it is the setting itself, and it reproduces with no third-party mod installed at
+all. See
+[the extender chain is one-shot](add-an-island.md#the-extender-chain-is-one-shot-and-withprediction-can-strand-it)
+for the fix, which is to keep prediction off the chain and re-arm it by hand.
+
 ## Common symptoms
 
 | Symptom | Likely cause |
@@ -157,6 +221,7 @@ into more than one bake is the usual way in.
 | Machines stop working near your code | you replaced a lane hook instead of chaining it — [read machine state](read-machine-state.md#gotchas) |
 | Framerate collapses | per-frame work over every building — [pacing](run-code-when-game-loads.md#do-not-do-heavy-work-every-tick) |
 | Worked before a game update | your detour target changed — [staying compatible](../hooking.md#staying-compatible) |
+| Works for you, does nothing for one reporter | they turned the `prediction` setting off and your island chain waits on `WithPrediction` — [above](#a-mod-that-works-for-you-and-is-invisible-for-one-player) |
 
 ## The crash screen, and getting back from it
 

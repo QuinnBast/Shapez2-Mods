@@ -155,6 +155,18 @@ concrete type and id.
 **`AffectsSaveGames: true` means the mod cannot be added to or removed from an existing
 save.**
 
+**`.WithPrediction(...)` on an island chain deletes your mod for anyone with predictions
+switched off.** `AtomicIslandExtender.Build` re-arms its chain only once `WaitAllRewirers`
+sees *every* branch clear its link, and the prediction branch runs from a postfix on
+`BuiltinPredictionSimulationSystems.CreateSimulationSystems` — whose sole caller,
+`GameSessionOrchestrator.SetupPredictions`, is skipped when the game setting
+`SimulationSettings.Predict` (`"prediction"`, default on) is false. The chain is then spent
+on the first scenario of the process, which is the **main menu's background game**, and the
+player's own save gets no definitions, no toolbar entry and no unlock — with no error
+anywhere. Register prediction by hand instead, re-armed per scenario load. Signature in a
+user's log: `IslandPredictionExtender` added and never removed.
+→ `docs/howto/add-an-island.md`
+
 ## Profiling and reflection
 
 **Simulation does not run on the main thread.** `Simulator.StartAsynchronousUpdate` returns
