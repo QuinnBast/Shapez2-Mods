@@ -2,7 +2,7 @@
 A tool for mod developers.
 This is for people writing mods, not for playing. It costs nothing while it is closed.
 
-This mod adds a "Mod Profiler" page to the top bar of the game next to the "Statistics" button.
+This mod adds a 'Mod Profiler' page to the top bar of the game next to the 'Statistics' button.
 Click it to open up a debugging panel where you can view a ton of debugging information about your (or other people's) mod!
 
 [h2]Overview[/h2]
@@ -15,19 +15,19 @@ Scan every C# object that is reachable in the game and groups the results by mod
 This can help you, or other mod creators find memory leaks.
 
 [h2]CPU[/h2]
-This panel lets you choose a mod, and press a "Record" button.
+This panel lets you choose a mod, and press a 'Record' button.
 After the selected amount of time has passed, a flame graph is shown for the mod's own methods with a selectable drill-down list beneath it.
  Click a frame to zoom into it, and hover to get more details. This helps show which functions and method calls are taking the most amount of time.
 
-Recording weaves timing hooks into the chosen assembly and takes them out again on stop, so it is never on by default. It also stops itself — thirty seconds, two minutes, five, or never.
+Recording weaves timing hooks into the chosen assembly and takes them out again on stop, so it is never on by default. It also stops itself - thirty seconds, two minutes, five, or never.
 Be aware if you click never. If you start recording and do not stop the recording, you might end up with a massive flame graph in memory, which can infinitely eat your RAM.
 
 While recording, every thread is recorded. The game simulation does not run on the main thread, so a mod's registered simulations happen on the thread pool.
 
 [h2]Export[/h2]
 Once you have analyzed the heap, or recorded a flame graph, you can export the data to send to a mod's creator (or to analyze yourself outside of the game).
-Clicking the "Export" button will generate a file in the mod folder alongside the mod. It will also copy the filepath where the file got created to your clipboard.
-After clicking "Export", simply open File Explorer and paste the copied path to find the created file.
+Clicking the 'Export' button will generate a file in the mod folder alongside the mod. It will also copy the filepath where the file got created to your clipboard.
+After clicking 'Export', simply open File Explorer and paste the copied path to find the created file.
 The file gets created besides the Player.log.
 
 [h2]Using it[/h2]

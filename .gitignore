@@ -27,3 +27,8 @@ obj/
 # Python bytecode, from the offline art generators in */Tools
 __pycache__/
 *.pyc
+
+# SteamPublish.sh writes a transcript beside base.vdf, because the console it runs in is often
+# a window that closes the moment the script ends. Local diagnostics, not source.
+publish.log
+.steamcmd.out

@@ -19,6 +19,76 @@ CONTENT_PATH=${1:-}
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 BASE_VDF="$SCRIPT_DIR/base.vdf"
 TMP_VDF_POSIX="$SCRIPT_DIR/base.tmp.vdf"
+LOG="$SCRIPT_DIR/publish.log"
+
+# Everything from here is written to publish.log as well as to the console. Run from MSBuild or
+# an IDE, the console this gets is often a window that closes the moment the script ends, and
+# the one run that mattered was the one nobody could read.
+exec > >(tee "$LOG") 2>&1
+
+echo "transcript: $LOG"
+
+# --- refuse to hand steamcmd a file it cannot parse -------------------------------------
+#
+# A VDF value is a quoted string and Valve's KeyValues parser has escape sequences OFF, so one
+# double quote inside the description ends the value early. steamcmd then prints an assertion
+# into its own stderr.txt, exits zero, creates nothing, and this script used to say "published
+# file ID:" with an empty id and carry on.
+validate_vdf() {
+  file="$1"
+
+  # Read the value exactly as the parser will: opening quote, then everything up to the very
+  # next quote. If that lands in the middle of the description, the character after it is prose
+  # rather than the start of another key or the closing brace - which is the whole tell.
+  #
+  # Counting quotes in a line range was the first attempt and it was wrong: a vdf may carry keys
+  # after the description (changenote does), and their quotes counted as damage.
+  if ! awk 'BEGIN { RS = "\x00" }
+    {
+      i = index($0, "\"description\"")
+      if (i == 0) { exit 2 }
+
+      rest = substr($0, i + 13)
+      j = index(rest, "\"")
+      if (j == 0) { exit 2 }
+
+      body = substr(rest, j + 1)
+      k = index(body, "\"")
+      if (k == 0) { exit 2 }
+
+      after = substr(body, k + 1)
+      sub(/^[ \t\r\n]+/, "", after)
+      head = substr(after, 1, 1)
+
+      if (head != "\"" && head != "}") { exit 1 }
+    }' "$file"; then
+    echo "error: the description value in base.vdf ends early - it almost certainly has a" >&2
+    echo "       double quote in it." >&2
+    echo "       Valve's KeyValues parser does not honour \\\" escapes, so the first one ends" >&2
+    echo "       the value and steamcmd fails with:" >&2
+    echo "         KeyValues.cpp : Assertion Failed: Error while parsing text KeyValues" >&2
+    echo "       Use apostrophes in description.bbcode, then: python Steam/build-vdf.py" >&2
+    return 1
+  fi
+
+  if LC_ALL=C grep -n '[^[:print:][:space:]]' "$file" >/dev/null 2>&1; then
+    echo "error: base.vdf contains non-ASCII bytes. Every vdf that has published from this" >&2
+    echo "       repo is plain ASCII - use - for a dash and ... for an ellipsis:" >&2
+    LC_ALL=C grep -n '[^[:print:][:space:]]' "$file" | head -5 >&2
+    return 1
+  fi
+
+  return 0
+}
+
+# Checks the vdf and stops, so the thing that broke the last publish can be caught without
+# uploading anything.
+if [ "${1:-}" = "--check" ]; then
+  validate_vdf "$BASE_VDF" || exit 1
+  echo "base.vdf parses as far as this can tell: no quotes in the description, plain ASCII."
+  exit 0
+fi
+
 
 # --- what to upload ---------------------------------------------------------
 
@@ -68,6 +138,8 @@ echo "PREVIEW_IMG: $PREVIEW_IMG"
 
 export CONTENT_PATH
 export PREVIEW_IMG
+
+validate_vdf "$BASE_VDF" || exit 1
 
 # Fill the absolute paths into a copy, leaving base.vdf as the checked-in template.
 envsubst < "$BASE_VDF" > "$TMP_VDF_POSIX"
@@ -167,18 +239,48 @@ if [ ! -f "$(dirname "$STEAMCMD_BIN")/config/config.vdf" ] || ! grep -qi "Connec
   echo
 fi
 
-"$STEAMCMD_BIN" +login "$STEAM_LOGIN" +workshop_build_item "$TMP_VDF" +quit
+BEFORE_ID=$(sed -n 's/.*"publishedfileid"[ 	]*"\([0-9]*\)".*//p' "$BASE_VDF" | head -1)
+STEAM_OUT="$SCRIPT_DIR/.steamcmd.out"
 
-# --- afterwards -------------------------------------------------------------
+"$STEAMCMD_BIN" +login "$STEAM_LOGIN" +workshop_build_item "$TMP_VDF" +quit 2>&1 | tee "$STEAM_OUT"
+STEAM_STATUS=${PIPESTATUS[0]}
+
+# --- did it actually work? --------------------------------------------------
+#
+# steamcmd is cheerful about failure: a vdf it cannot parse gets an assertion in its own
+# stderr.txt, an exit code of zero, and no item. Nothing downstream noticed, so the build went
+# green and the mod was not published. Three things have to agree before this reports success.
+
+FILE_ID=$(sed -n 's/.*"publishedfileid"[ \t]*"\([0-9]*\)".*/\1/p' "$TMP_VDF_POSIX" | head -1)
+
+FAILED=""
+
+if [ "$STEAM_STATUS" != "0" ]; then
+  FAILED="steamcmd exited with status $STEAM_STATUS"
+elif ! grep -qi "success" "$STEAM_OUT"; then
+  FAILED="steamcmd never reported success"
+elif [ "${BEFORE_ID:-0}" = "0" ] && [ "${FILE_ID:-0}" = "0" ]; then
+  FAILED="no workshop item was created - the id is still 0"
+fi
+
+rm -f "$TMP_VDF_POSIX" "$STEAM_OUT"
+
+if [ -n "$FAILED" ]; then
+  echo
+  echo "PUBLISH FAILED: $FAILED" >&2
+  echo >&2
+  echo "  Full output:   $LOG" >&2
+  echo "  steamcmd logs: $(dirname "$STEAMCMD_BIN")/logs/" >&2
+  echo "                 stderr.txt there names a parse error in the vdf." >&2
+  echo >&2
+  echo "  base.vdf was left untouched, so nothing is half-published." >&2
+  exit 1
+fi
 
 # A first publish is given a fresh id, so copy it back into the template. On an update this
 # writes the same id it already had.
-FILE_ID=$(grep '"publishedfileid"' "$TMP_VDF_POSIX" | sed 's/.*"publishedfileid"[ \t]*"\([0-9]\+\)".*/\1/')
-
 echo "published file ID: $FILE_ID"
 sed -i 's/\("publishedfileid"[ \t]*"\)[0-9]\+"/\1'"$FILE_ID"'"/' "$BASE_VDF"
-
-rm -f "$TMP_VDF_POSIX"
 
 echo
 echo "Check $HOME/steamcmd/logs/workshop_log.txt for what was actually uploaded."
