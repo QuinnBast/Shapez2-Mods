@@ -868,13 +868,23 @@ arrive at `Milestone_Initial`, so gating on those would be a no-op. Colour avail
 from `debug.export-game-data` by asking, for every colour, the earliest milestone goal and the
 earliest side quest in which *vanilla itself* asks for it. The two sources agree:
 
-| colour | available from |
-| --- | --- |
-| `u` `r` `b` | the start |
-| `g` | `Milestone_ShapeTrains` / `CBFluids_Extraction` |
-| `c` `y` `w` | `CBFluids_Mixer` |
-| `m` | `CBSpecial_SpaceFloor3` |
-| `k` | post final |
+| colour | available from | why |
+| --- | --- | --- |
+| `u` `r` `b` `g` | the start, then fluid extraction | `PrimaryColors` |
+| `c` `m` `y` | `CBFluids_Mixer` | `SecondaryColors` - one mix of two primaries |
+| `w` | `CBFluids_Mixer` | `TertiaryColors` - all three mixed |
+| `k` | post final | no mechanism found; see below |
+
+**That table is mechanical, and the first version of it was not.** Reading availability off *where
+vanilla happens to ask for a colour* put magenta at `CBSpecial_SpaceFloor3`, because that is the
+first side quest group using it - and a space floor has nothing to do with paint. Magenta is a
+`SecondaryColors` entry exactly like cyan and yellow, made the same way by the same machine, so it
+arrives with the mixer. Fine Detail was gated a whole milestone late on that mistake.
+
+The lesson generalises: **correlation in the content is not the mechanism.** `ShapeColorScheme`
+exposes `PrimaryColors`, `SecondaryColors`, `TertiaryColors` and `PlayerObtainableColors`, and those
+are the answer. `esp.report` now prints all four for every scheme, which is how the remaining
+question about black should be settled rather than argued.
 
 So nine of the ten chains gate on the mixer, `CBSpecial_SpaceFloor3` or `CBSpecial_Crystals` - the
 latest thing each needs anywhere, because the game allows one gate per group and a chain gated on

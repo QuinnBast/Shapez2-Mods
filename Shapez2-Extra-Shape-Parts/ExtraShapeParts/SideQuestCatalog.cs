@@ -37,8 +37,8 @@ namespace QuinnBast.Shapez2.ExtraShapeParts
         ///
         ///     u r b   from the start
         ///     g       Milestone_ShapeTrains, and CBFluids_Extraction gates a quest using it
-        ///     c y w   Milestone_SpaceFloor3 / CBFluids_Mixer      - the mixer's secondaries
-        ///     m       Milestone_Crystals / CBSpecial_SpaceFloor3
+        ///     c m y   the mixer - they are the scheme's SecondaryColors, one tier, one machine
+        ///     w       the mixer as well - TertiaryColors, all three primaries mixed
         ///     k       Milestone_PostFinal_Tier2 / Milestone_PostFinal_Tier1  - post final, both
         ///
         /// Black being post-final is the one that changed a design: Widow's Web asks for it in its
@@ -51,8 +51,6 @@ namespace QuinnBast.Shapez2.ExtraShapeParts
         /// cannot build a white shape either, so showing the chain would only ever frustrate. The
         /// onboarding scenario has none of these, and gets none of these chains.
         public static readonly string[] Mixer = { "CBFluids_Mixer" };
-
-        public static readonly string[] SpaceFloor3 = { "CBSpecial_SpaceFloor3" };
 
         public static readonly string[] Crystals = { "CBSpecial_Crystals" };
 
@@ -122,7 +120,7 @@ namespace QuinnBast.Shapez2.ExtraShapeParts
             // The last step is the only one that *changes* a layer rather than adding one: the top
             // goes from dots to dots and bars alternating, which needs a half cutter and a
             // recombine. Everything below it is untouched.
-            new SideQuestChain("fine-detail", "Fine Detail", SpaceFloor3,   // magenta, later than its cyan and yellow
+            new SideQuestChain("fine-detail", "Fine Detail", Mixer,   // cyan, magenta and yellow are all secondaries
                 new SideQuestStep("Bar", 250, "Ic"),
                 new SideQuestStep("Circuitry", 1000, "Ic", "Km"),
                 new SideQuestStep("Three deep", 4000, "Ic", "Km", "Oy"),

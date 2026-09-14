@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.IO;
 using System.Text;
 using ShapezShifter.Hijack;
@@ -61,7 +62,42 @@ namespace QuinnBast.Shapez2.ExtraShapeParts
                 return;
             }
 
-            output?.Invoke(DescribeRendererData() + "\n" + ShapePartInjector.Describe(GameData));
+            output?.Invoke(DescribeRendererData() + "\n" + DescribeColors(GameData) + "\n" + ShapePartInjector.Describe(GameData));
+        }
+
+        /// Which colours exist, which tier each is in, and - the one that matters - which of them a
+        /// player can actually obtain.
+        ///
+        /// A quest asking for a colour the player cannot make is an impossible goal, and the tiers
+        /// are the only *mechanical* answer to when a colour arrives: `SecondaryColors` are one
+        /// mixer away from the primaries, `TertiaryColors` are all three mixed. Inferring it from
+        /// where vanilla happens to ask for a colour is a different thing and a weaker one - it put
+        /// the magenta in Fine Detail a whole milestone late, gated behind a space floor that has
+        /// nothing to do with paint.
+        ///
+        /// Black is the open question this exists to settle. It is the only colour this mod asks
+        /// for that a hexagonal scenario never mentions, so if `k` is missing from
+        /// `PlayerObtainableColors` there, Widow's Web is unbuildable and wants recolouring rather
+        /// than re-gating.
+        private static string DescribeColors(IGameData gameData)
+        {
+            StringBuilder colours = new StringBuilder();
+
+            foreach (IShapeColorScheme scheme in gameData.ColorSchemes)
+            {
+                colours.AppendLine(
+                    $"colours all={Codes(scheme.Colors)} obtainable={Codes(scheme.PlayerObtainableColors)}");
+                colours.AppendLine(
+                    $"  primary={Codes(scheme.PrimaryColors)} secondary={Codes(scheme.SecondaryColors)} " +
+                    $"tertiary={Codes(scheme.TertiaryColors)} default={scheme.DefaultShapeColor?.Code}");
+            }
+
+            return colours.Length == 0 ? "no colour schemes" : colours.ToString().TrimEnd();
+        }
+
+        private static string Codes(IReadOnlyList<IShapeColor> colours)
+        {
+            return colours == null ? "-" : new string(colours.Select(c => c.Code).ToArray());
         }
 
         /// The renderer's authored numbers, which decide both how big a generated mesh comes out and
