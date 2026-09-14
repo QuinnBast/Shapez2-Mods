@@ -484,6 +484,12 @@ two commons, one rare, one very rare:
 So the windmill is the rarest thing on a quad map, at 7% of parts, and the star at 30%.
 
 > [!NOTE]
+> **There is an easier route than the one below.** `debug.export-game-data` in the console writes
+> every scenario out as fully resolved JSON — every side quest, every cost, every gate — plus the
+> translations and the identifier list, to `<persistent>/basedata-v<version>/`. Rarity buckets are
+> not in it, so the byte reading below is still the way to get *those*, but check the export first:
+> most questions about authored data are answered by a file it already wrote.
+>
 > This is authored ScriptableObject data, so it is not in the assemblies — it was read out of
 > `shapez 2_Data/resources.assets`, where `MetaShapesConfiguration` serializes as `PartCount`,
 > the pin and crystal `PPtr`s, then the `Parts` array as (12-byte `PPtr`, 4-byte rarity enum)

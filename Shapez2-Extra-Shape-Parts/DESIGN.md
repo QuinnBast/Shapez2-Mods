@@ -933,6 +933,23 @@ deliberate starting point for looking at them in game, not a balance judgement. 
 per part in `ExtraShapePartCatalog`, and `NotSpawned` registers a part without putting it on the
 map.
 
+## The easier route, found late
+
+Most of what this file records as "read out of `resources.assets`" did need the byte reading. Some
+of it did not.
+
+`debug.export-game-data` writes `<persistent>/basedata-v<version>/`: every scenario as fully
+resolved JSON with no `#include` left in it, the translations, the identifier list and the JSON
+schemas. That is where the reward scale used by `SideQuestCatalog` should have come from - vanilla's
+own side quests, costs, amounts and gate ids, all in one file - rather than from a regex over a
+567 MB asset blob.
+
+What the export does *not* carry is the shape configurations: part codes, meshes and rarity buckets
+are `MetaShapesConfiguration` data and appear nowhere in it. So the `resources.assets` reading was
+necessary for the namespace and the rarity table, and unnecessary for `SG_Fluids_1`.
+
+Worth knowing before the next question about authored data: **check the export first.**
+
 ## Open questions
 
 - Does the generated geometry read as a shapez shape in motion, or does the flat extrusion look
