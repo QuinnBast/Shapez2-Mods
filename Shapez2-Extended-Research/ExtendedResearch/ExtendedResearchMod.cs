@@ -2,6 +2,8 @@ using JetBrains.Annotations;
 using ShapezShifter.Hijack;
 using ILogger = Core.Logging.ILogger;
 
+namespace QuinnBast.Shapez2.ExtendedResearch;
+
 /// <summary>
 /// Extended Research.
 ///

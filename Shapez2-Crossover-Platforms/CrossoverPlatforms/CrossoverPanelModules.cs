@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using Game.Core.Simulation;
 using ShapezShifter.Hijack;
 
-namespace CrossoverPlatforms
+namespace QuinnBast.Shapez2.CrossoverPlatforms
 {
     /// The throughput readouts in a selected crossing's side panel.
     ///

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using Game.Content.Features.Belts;
 using Game.Content.Features.Fluids;
@@ -5,8 +6,9 @@ using Game.Content.Features.SpacePaths;
 using Game.Core.Belts.BeltPath;
 using Game.Core.Simulation;
 using Game.Core.Trains;
+using ILogger = Core.Logging.ILogger;
 
-namespace TrainCargoTools
+namespace QuinnBast.Shapez2.TrainCargoTools
 {
     /// A cargo belt's lane, which is a `FastBeltPathLane` and nothing else.
     ///
@@ -65,6 +67,12 @@ namespace TrainCargoTools
         ///
         /// Only cargo is restricted. Loose items pass unchanged, which matters for the
         /// unpackager: emitting shapes onto an ordinary belt is its whole job.
+        /// Set by the mod so a refusal can say what it refused. Diagnostics only - the guard
+        /// works without it.
+        public static ILogger Log;
+
+        private static readonly HashSet<string> Reported = new();
+
         public static bool Allows(IItemReceiver next, IBeltItem item)
         {
             if (!CargoBeltSimulation.IsCargoPackage(item))
@@ -80,7 +88,12 @@ namespace TrainCargoTools
                 next = dummy.NextLane;
             }
 
-            return next is CargoBeltLane
+            bool allowed = next is CargoBeltLane
+
+                // A cargo splitter's junction. Its outputs refuse loose items, so admitting the
+                // distributor here does not admit anything a cargo belt would refuse - see
+                // CargoSplitterSimulation.
+                || next is SplittingItemDistributor
 
                 // The store and the unpackager - this mod's own receivers.
                 || next is ICargoPackageSink
@@ -90,6 +103,32 @@ namespace TrainCargoTools
                 // converter they ask; without that detour neither would.
                 || next is TrainBeltToCargoFillingContainer<ShapeId>
                 || next is TrainBeltToCargoFillingContainer<FluidId>;
+
+            if (!allowed)
+            {
+                Refused(next);
+            }
+
+            return allowed;
+        }
+
+        /// Names each kind of receiver that has been refused a package, once each.
+        ///
+        /// A refusal is not an error - it is how a cargo belt backs up against an ordinary one -
+        /// but when cargo will not enter something it *should*, this says what the guard actually
+        /// saw, which is the one fact the symptom does not tell you.
+        private static void Refused(IItemReceiver next)
+        {
+            string name = next?.GetType().Name ?? "null";
+            lock (Reported)
+            {
+                if (!Reported.Add(name))
+                {
+                    return;
+                }
+            }
+
+            Log?.Info?.Log($"Handover: refused a cargo package to {name}.");
         }
 
         /// Wraps a provider bundle so everything it sends is checked.
@@ -101,6 +140,24 @@ namespace TrainCargoTools
         {
             private readonly IItemProviderBundle Inner;
 
+            /// What was assigned, as opposed to the wrapper handed to the lanes.
+            ///
+            /// **The getter must return this and not the wrapper**, because the game identifies
+            /// a connection by reference:
+            ///
+            /// <code>
+            /// // ItemOutputChunkConnector.TryDisconnect
+            /// if (ProviderBundle.NextBundle != other.ReceiverBundle) { return false; }
+            /// </code>
+            ///
+            /// Returning the wrapper made that comparison always fail, so a cargo belt never
+            /// disconnected. `TryConnect` then opens with `if (NextBundle != null) return false`,
+            /// so the *replacement* could never connect either - delete a cargo belt, put
+            /// another in its place, and nothing was ever handed to it again. Junctions are
+            /// placed over existing belt, so they were hit by this every single time, which is
+            /// what made them look as though they refused cargo.
+            private IItemReceiverBundle Assigned;
+
             public GuardedProviderBundle(IItemProviderBundle inner)
             {
                 Inner = inner;
@@ -108,8 +165,12 @@ namespace TrainCargoTools
 
             public IItemReceiverBundle NextBundle
             {
-                get => Inner.NextBundle;
-                set => Inner.NextBundle = value == null ? null : new GuardedReceiverBundle(value);
+                get => Assigned;
+                set
+                {
+                    Assigned = value;
+                    Inner.NextBundle = value == null ? null : new GuardedReceiverBundle(value);
+                }
             }
 
             public IItemProvider GetSender(short laneIndex, short layerIndex)

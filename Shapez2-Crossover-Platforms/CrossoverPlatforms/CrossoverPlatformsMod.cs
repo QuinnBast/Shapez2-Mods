@@ -15,7 +15,7 @@ using ShapezShifter.Kit;
 using ShapezShifter.Textures;
 using ILogger = Core.Logging.ILogger;
 
-namespace CrossoverPlatforms
+namespace QuinnBast.Shapez2.CrossoverPlatforms
 {
     /// Adds three space platform pieces where two paths cross straight through each other.
     ///
@@ -33,9 +33,10 @@ namespace CrossoverPlatforms
         /// The same, for the side panel throughput readouts.
         private readonly RewirerHandle ModulesHandle;
 
-        /// The mirrored variants' simulation and prediction, which re-arm every scenario load and
-        /// so have to be stopped explicitly rather than just unregistered once.
-        private readonly List<IDisposable> MirrorRegistrations = new();
+        /// Everything registered outside the atomic extender's own chain - every variant's
+        /// prediction, and the mirrors' simulation - which re-arms on every scenario load and so
+        /// has to be stopped explicitly rather than just unregistered once.
+        private readonly List<IDisposable> ReArmedRegistrations = new();
 
         /// Resolved once, and not through the assembly location alone - see <see cref="ModResources"/>.
         private readonly ModFolderLocator Resources;
@@ -51,8 +52,8 @@ namespace CrossoverPlatforms
         /// has no location to resolve from. See <see cref="ModResources"/>.
         private static IToolbarEntryInsertLocation ToolbarSlot(ModFolderLocator resources)
         {
-            return Shapez2.ToolbarKit.ToolbarSlot.InNewGroup(
-                Shapez2.ToolbarKit.ToolbarCategory.RegularPlatform,
+            return QuinnBast.Shapez2.ToolbarKit.ToolbarSlot.InNewGroup(
+                QuinnBast.Shapez2.ToolbarKit.ToolbarCategory.RegularPlatform,
                 "crossover.toolbar.title",
                 FileTextureLoader.LoadTextureAsSprite(resources.SubPath("Crossover_BeltBelt.png"), out _),
                 "crossover.toolbar.description");
@@ -60,7 +61,7 @@ namespace CrossoverPlatforms
 
         public CrossoverPlatformsMod(ILogger logger)
         {
-            Shapez2.ToolbarKit.ToolbarKit.Log = logger;
+            QuinnBast.Shapez2.ToolbarKit.ToolbarKit.Log = logger;
 
             Logger = logger;
             Resources = ModResources.Locate(logger);
@@ -88,12 +89,12 @@ namespace CrossoverPlatforms
         /// scenario load forever, which is a leak that survives the mod that made it.
         public void Dispose()
         {
-            foreach (IDisposable registration in MirrorRegistrations)
+            foreach (IDisposable registration in ReArmedRegistrations)
             {
                 registration.Dispose();
             }
 
-            MirrorRegistrations.Clear();
+            ReArmedRegistrations.Clear();
 
             GameRewirers.RemoveRewirer(PlacementHandle);
             GameRewirers.RemoveRewirer(ModulesHandle);
@@ -103,7 +104,7 @@ namespace CrossoverPlatforms
             // but a mod that is merely disposed does not, so it would keep logging through this
             // mod's dead channel.
             CrossoverScenario.Clear();
-            Shapez2.ToolbarKit.ToolbarKit.Log = null;
+            QuinnBast.Shapez2.ToolbarKit.ToolbarKit.Log = null;
         }
 
         private void AddCrossover(CrossoverKind kind, string slug, string iconFile)
@@ -129,12 +130,11 @@ namespace CrossoverPlatforms
                 CrossoverIsland(mirroredId, kind, layout, mirrored: true));
 
             // The fluent interfaces fork here. WithSimulation off the unlockable extender lands
-            // straight on IAtomicIslandExtender, which has no WithPrediction; the prediction
-            // branch is reached only through IDefinedSimulatableIslandExtender, and nothing in
-            // the chain returns that interface, so the cast is the only way in. It is safe
-            // because every one of these interfaces is implemented by the same
-            // AtomicIslandExtender instance, and the two WithDefaultPlacement overloads are the
-            // same no-op.
+            // straight on IAtomicIslandExtender, which has no WithDefaultPlacement; placement is
+            // reached only through IDefinedSimulatableIslandExtender, and nothing in the chain
+            // returns that interface, so the cast is the only way in. It is safe because every
+            // one of these interfaces is implemented by the same AtomicIslandExtender instance,
+            // and the two WithDefaultPlacement overloads are the same no-op.
             IAtomicIslandExtender simulated = AtomicIslands.Extend()
                .AllScenarios()
                .WithIsland(pair, groupBuilder)
@@ -143,22 +143,55 @@ namespace CrossoverPlatforms
                .UnlockedAtMilestone(new ByIndexMilestoneSelector(0))
                .WithSimulation(new CrossoverSimulationFactory(kind));
 
-            ((IDefinedSimulatableIslandExtender)simulated)
+            // The same cast again on the way out, and for the same reason. What InToolbar returns
+            // offers exactly two exits - WithPrediction, which this chain deliberately does not
+            // take, and WithoutPrediction, which throws NotImplementedException
+            // (AtomicIslandExtender:307). So there is no fluent route from here to
+            // WithCustomModules that skips prediction; the cast is it.
+            IDefinedAccessibleSimulatablePlaceableIslandExtender placed =
+                ((IDefinedSimulatableIslandExtender)simulated)
                .WithDefaultPlacement()
-               .InToolbar(ToolbarSlot(Resources))
-               .WithPrediction(new CrossoverPredictionFactory(), Logger)
+               .InToolbar(ToolbarSlot(Resources));
+
+            ((IAtomicIslandExtender)placed)
                // The straight variant's side panel. The mirror gets its own through
                // CrossoverModulesRewirer, because it never travels this chain.
                .WithCustomModules(new CrossoverPanelModules(kind))
                .Build();
 
-            // The mirror never passes through that chain, and both systems are keyed by island
-            // definition id, so without these it would be placeable but inert.
-            MirrorRegistrations.Add(
+            // Prediction stays off that chain on purpose, even for the straight variant.
+            //
+            // AtomicIslandExtender.Build re-arms itself only once every branch it was handed has
+            // fired - WaitAllRewirers clears one link per branch and re-runs BuildExtenders when
+            // the set empties. The prediction branch fires from PredictionSystemsInterceptor, a
+            // postfix on BuiltinPredictionSimulationSystems.CreateSimulationSystems - and that
+            // method has exactly one caller, GameSessionOrchestrator.SetupPredictions, which
+            // StartPredictionUpdate skips entirely when SimulationSettings.Predict is false.
+            //
+            // So a player who turns predictions off in the settings never creates a prediction
+            // system, the branch never completes, the chain never re-arms, and the definitions,
+            // the toolbar entry and the research unlock are spent on the first scenario of the
+            // process - which is the main menu's background game, not their save. The mod then
+            // loads without a single error and has nothing in it. Reported by a player whose log
+            // showed IslandPredictionExtender added six times (three chain, three mirror) and
+            // removed none across four sessions, with the crossings present only in the menu one.
+            //
+            // Registering it here instead leaves the chain waiting only on branches that do
+            // fire. Prediction then attaches whenever CreateSimulationSystems runs, and simply
+            // stays armed and idle for a player who has it switched off - which is correct,
+            // since nothing is predicting for them anyway.
+            ReArmedRegistrations.Add(
+                new ReArmingRewirer(() =>
+                    new IslandPredictionExtender<CrossoverPredictionSimulation>(
+                        definitionId, new CrossoverPredictionFactory(), Logger)));
+
+            // The mirror never passes through the chain at all, and both systems are keyed by
+            // island definition id, so without these it would be placeable but inert.
+            ReArmedRegistrations.Add(
                 new ReArmingRewirer<SpacePathConfiguration>(() =>
                     new IslandSimulationExtender<CrossoverSimulation, CrossoverSimulationState,
                         SpacePathConfiguration>(mirroredId, new CrossoverSimulationFactory(kind))));
-            MirrorRegistrations.Add(
+            ReArmedRegistrations.Add(
                 new ReArmingRewirer(() =>
                     new IslandPredictionExtender<CrossoverPredictionSimulation>(
                         mirroredId, new CrossoverPredictionFactory(), Logger)));

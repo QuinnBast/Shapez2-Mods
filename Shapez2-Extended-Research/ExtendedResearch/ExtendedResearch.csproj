@@ -4,8 +4,8 @@
         <TargetFramework>netstandard2.1</TargetFramework>
         <Nullable>disable</Nullable>
         <RunPostBuildEvent>Always</RunPostBuildEvent>
-        <LangVersion>9</LangVersion>
-        <RootNamespace>ExtendedResearch</RootNamespace>
+        <LangVersion>10</LangVersion>
+        <RootNamespace>QuinnBast.Shapez2.ExtendedResearch</RootNamespace>
         <!-- The publicizer and ShapezShifter each ship a copy of IgnoresAccessChecksTo -->
         <NoWarn>$(NoWarn);CS0436</NoWarn>
     </PropertyGroup>

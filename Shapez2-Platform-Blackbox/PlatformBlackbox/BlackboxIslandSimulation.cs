@@ -7,6 +7,8 @@ using Game.Core.Simulation;
 using ShapezShifter.Flow.Atomic;
 using ShapezShifter.Hijack;
 
+namespace QuinnBast.Shapez2.PlatformBlackbox;
+
 /// <summary>
 /// The simulation behind a blackbox platform, of whatever size.
 ///

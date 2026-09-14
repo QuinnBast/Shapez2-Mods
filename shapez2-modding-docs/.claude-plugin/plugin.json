@@ -1,0 +1,9 @@
+{
+  "name": "shapez2-modding",
+  "description": "Skills for writing shapez 2 mods with ShapezShifter: adding content, hooking game behaviour, and diagnosing mods that do not work.",
+  "version": "0.1.0",
+  "author": {
+    "name": "QuinnBast"
+  },
+  "homepage": "https://quinnbast.github.io/Shapez2-Mods/"
+}

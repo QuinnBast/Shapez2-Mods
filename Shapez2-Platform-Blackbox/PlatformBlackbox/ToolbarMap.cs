@@ -4,6 +4,8 @@ using System.Text;
 using ShapezShifter.Hijack;
 using ILogger = Core.Logging.ILogger;
 
+namespace QuinnBast.Shapez2.PlatformBlackbox;
+
 /// <summary>
 /// Prints the toolbar tree, with the index path of every element.
 ///

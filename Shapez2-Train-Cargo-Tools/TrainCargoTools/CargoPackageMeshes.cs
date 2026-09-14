@@ -2,7 +2,7 @@ using Game.Core.Trains;
 using Unity.Mathematics;
 using UnityEngine;
 
-namespace TrainCargoTools
+namespace QuinnBast.Shapez2.TrainCargoTools
 {
     /// How much to shrink a cargo package, and where its underside sits once shrunk.
     ///
@@ -15,7 +15,7 @@ namespace TrainCargoTools
     /// The scale comes from the mesh's own bounds rather than a constant, so it survives the art
     /// changing, and `Bottom` is read the same way because the package is not authored centred
     /// on its base - without it a package on a shelf sits half through the shelf.
-    internal readonly struct CargoPackageMeshes
+    public readonly struct CargoPackageMeshes
     {
         /// Uniform scale to apply to the package.
         public readonly float Scale;
@@ -31,15 +31,21 @@ namespace TrainCargoTools
         /// lying the wrong way the day the art changes.
         public readonly bool LongAxisIsX;
 
-        /// `maxHeight` of zero means unconstrained, which is what a belt wants - nothing is
-        /// above the track. A store's shelves are about two units apart, so there it matters.
+        /// Three constraints, any of which may be the binding one; zero means "not constrained".
         ///
-        /// Both constraints are needed and neither is guessable: the mesh's proportions are
-        /// authored art, so fitting it between lanes says nothing about whether it then fits
-        /// under the shelf above. Taking the smaller of the two means a change to that art
-        /// cannot start poking containers through shelves.
+        /// `fitWithin` sizes the mesh's *long* horizontal axis - the slot it gets along a belt,
+        /// or the room it gets on a shelf. `maxHeight` matters to a store, whose shelves are
+        /// about two units apart. `maxAcross` limits the *short* horizontal axis, and is what a
+        /// belt needs now that three files ride abreast: three containers have to fit across one
+        /// deck.
+        ///
+        /// None of the three is guessable from the others, because the mesh's proportions are
+        /// authored art: fitting a crate to its slot says nothing about how wide it then is, nor
+        /// whether it clears the shelf above. Taking the smallest means a change to that art
+        /// cannot start poking containers through shelves or through each other.
         public CargoPackageMeshes(
-            CargoExchangeVisualResources cargo, float fitWithin, float maxHeight = 0f)
+            CargoExchangeVisualResources cargo, float fitWithin,
+            float maxHeight = 0f, float maxAcross = 0f)
         {
             Scale = 1f;
             Bottom = 0f;
@@ -64,11 +70,17 @@ namespace TrainCargoTools
             // handle failing.
             Bounds bounds = mesh.bounds;
             float widest = math.max(bounds.size.x, bounds.size.z);
+            float narrowest = math.min(bounds.size.x, bounds.size.z);
             float scale = widest > 0.001f ? fitWithin / widest : 1f;
 
             if (maxHeight > 0f && bounds.size.y > 0.001f)
             {
                 scale = math.min(scale, maxHeight / bounds.size.y);
+            }
+
+            if (maxAcross > 0f && narrowest > 0.001f)
+            {
+                scale = math.min(scale, maxAcross / narrowest);
             }
 
             Scale = scale;

@@ -1,7 +1,7 @@
 using ShapezShifter.Flow.Toolbar;
 using UnityEngine;
 
-namespace Shapez2.ToolbarKit
+namespace QuinnBast.Shapez2.ToolbarKit
 {
     /// Toolbar placements that say where they mean.
     ///

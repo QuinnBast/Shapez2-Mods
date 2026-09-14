@@ -6,7 +6,7 @@ using Game.Core.Simulation;
 using ShapezShifter.Flow.Atomic;
 using ShapezShifter.Hijack;
 
-namespace TrainCargoTools
+namespace QuinnBast.Shapez2.TrainCargoTools
 {
     /// Builds shape unpackagers.
     ///

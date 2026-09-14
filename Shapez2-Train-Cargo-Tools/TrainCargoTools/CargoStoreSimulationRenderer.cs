@@ -11,7 +11,7 @@ using UnityEngine;
 // into the renderer container, so reading it off the frame is the only way in.
 #pragma warning disable CS0618
 
-namespace TrainCargoTools
+namespace QuinnBast.Shapez2.TrainCargoTools
 {
     /// Draws everything a cargo store is holding, on the open shelves of its rack.
     ///

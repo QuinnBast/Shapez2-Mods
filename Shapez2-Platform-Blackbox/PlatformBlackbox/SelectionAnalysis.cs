@@ -4,6 +4,8 @@ using Game.Core.Coordinates;
 using Game.Core.Map.Simulation;
 using Game.Core.Simulation;
 
+namespace QuinnBast.Shapez2.PlatformBlackbox;
+
 /// <summary>
 /// Works out what a selection of platforms looks like from the outside: how big it is, and
 /// which of its ports cross the boundary.

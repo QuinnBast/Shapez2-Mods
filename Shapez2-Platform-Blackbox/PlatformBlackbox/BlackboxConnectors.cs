@@ -1,6 +1,8 @@
 using System;
 using Game.Content.Features.SpacePaths.IslandIO;
 
+namespace QuinnBast.Shapez2.PlatformBlackbox;
+
 /// <summary>
 /// The blackbox's notch connectors: the vanilla ones, made to say yes to anything.
 ///

@@ -9,7 +9,7 @@ using ILogger = Core.Logging.ILogger;
 
 #pragma warning disable CS0618 // IIslandPlatformDrawer is obsolete, but it is how space paths draw.
 
-namespace TrainCargoTools
+namespace QuinnBast.Shapez2.TrainCargoTools
 {
     /// Gives the cargo islands something to look like.
     ///
@@ -55,7 +55,16 @@ namespace TrainCargoTools
 
             // The legacy fluid ids, kept registered so old saves load - see
             // TrainCargoToolsMod. They are the same island, so they draw the same.
-            "FluidCargoBelt", "FluidCargoBelt_LeftTurn", "FluidCargoBelt_RightTurn"
+            "FluidCargoBelt", "FluidCargoBelt_LeftTurn", "FluidCargoBelt_RightTurn",
+
+            // The junctions. Easy to miss when adding a path piece: registering the island and
+            // generating its mesh is not enough, because a path-track island has no platform
+            // frame to fall back on - left out of this list it places, connects and simulates
+            // while drawing nothing at all.
+            "CargoBelt_LeftFwdSplitter", "CargoBelt_RightFwdSplitter",
+            "CargoBelt_YSplitter", "CargoBelt_TripleSplitter",
+            "CargoBelt_LeftFwdMerger", "CargoBelt_RightFwdMerger",
+            "CargoBelt_YMerger", "CargoBelt_TripleMerger",
         };
 
         /// Island id -> mesh file, because the two are no longer the same string.
@@ -84,6 +93,21 @@ namespace TrainCargoTools
             (PathNodeClassification.Forward, "CargoTrack"),
             (PathNodeClassification.LeftTurn, "CargoTrackLeft"),
             (PathNodeClassification.RightTurn, "CargoTrackRight"),
+
+            // Junctions. PathNodeClassification already names all four, and
+            // PlatformPathDrawingClassifier works them out from the connectors, so a splitter
+            // needs no classification of its own - only a mesh to hang on the one it gets.
+            // Eight meshes, not five. While the arms were straight a splitter and the merger on
+            // the same spokes were the same shape and shared; now that they curve, one bends
+            // about the near chunk corner and the other about the far one - see merger_arm.
+            (PathNodeClassification.LeftForwardSplitter, "CargoTrackSplitLeftFwd"),
+            (PathNodeClassification.RightForwardSplitter, "CargoTrackSplitRightFwd"),
+            (PathNodeClassification.LeftRightSplitter, "CargoTrackSplitY"),
+            (PathNodeClassification.TripleSplitter, "CargoTrackSplitTriple"),
+            (PathNodeClassification.LeftForwardMerger, "CargoTrackMergeLeftFwd"),
+            (PathNodeClassification.RightForwardMerger, "CargoTrackMergeRightFwd"),
+            (PathNodeClassification.LeftRightMerger, "CargoTrackMergeY"),
+            (PathNodeClassification.TripleMerger, "CargoTrackMergeTriple"),
         };
 
         internal static string[] MeshIds

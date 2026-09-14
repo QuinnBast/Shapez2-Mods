@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using Game.Core.Serialization;
 using ILogger = Core.Logging.ILogger;
 
+namespace QuinnBast.Shapez2.ModReloader;
+
 /// <summary>
 /// Rebuilds the game session without restarting the game.
 ///

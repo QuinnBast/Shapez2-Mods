@@ -18,7 +18,7 @@ using ShapezShifter.Textures;
 using UnityEngine;
 using ILogger = Core.Logging.ILogger;
 
-namespace TrainCargoTools
+namespace QuinnBast.Shapez2.TrainCargoTools
 {
     /// Train cargo outside a train station.
     ///
@@ -37,6 +37,19 @@ namespace TrainCargoTools
     {
         private readonly PackagedCargoStations Stations;
 
+        /// Wagon unloaders, taught to hand a whole package to a cargo belt.
+        private readonly PackagedCargoUnloaders Unloaders;
+
+        /// The two research nodes every island hangs off. Built before the islands because each
+        /// one is handed to AddIsland as it is registered.
+        private readonly CargoResearch Research;
+
+        /// The knowledge panel entries, and the detour that serves them.
+        private readonly CargoWiki Wiki;
+
+        /// The mod's own pictures, under ids GetImage will resolve.
+        private readonly CargoImages Images;
+
         /// Meshes for the machines, and the hook that puts them and the belt track on screen.
         private readonly CargoAppearance Appearance;
 
@@ -45,6 +58,11 @@ namespace TrainCargoTools
 
         /// Registration for the drag placer, so Dispose can take it back out again.
         private readonly RewirerHandle PathPlacement;
+
+        /// Every island's prediction, registered outside the atomic extender's chain and re-armed
+        /// on each scenario load - see AddIsland for why it is not on the chain. Stopped
+        /// explicitly, because a re-arming registration left alone outlives the mod that made it.
+        private readonly List<IDisposable> ReArmedRegistrations = new();
 
         /// cargotools.* - recolouring and art dumps. See CargoArtCommands.
         private readonly RewirerHandle AtlasDump;
@@ -60,8 +78,8 @@ namespace TrainCargoTools
         /// name-based API gets to "next to the wagon loaders" without an index path.
         private IToolbarEntryInsertLocation ToolbarSlot()
         {
-            return Shapez2.ToolbarKit.ToolbarSlot.InNewGroup(
-                Shapez2.ToolbarKit.ToolbarCategory.Rail,
+            return QuinnBast.Shapez2.ToolbarKit.ToolbarSlot.InNewGroup(
+                QuinnBast.Shapez2.ToolbarKit.ToolbarCategory.Rail,
                 "cargo-tools.toolbar.cargo.title",
                 LoadIcon("CargoBelt.png"),
                 "cargo-tools.toolbar.cargo.description");
@@ -81,7 +99,18 @@ namespace TrainCargoTools
         public TrainCargoToolsMod(ILogger logger)
         {
             Log = logger;
-            Shapez2.ToolbarKit.ToolbarKit.Log = logger;
+            QuinnBast.Shapez2.ToolbarKit.ToolbarKit.Log = logger;
+
+            // Pictures and wiki first: the research nodes name an image id and carry the
+            // callback that registers the wiki references into each scenario, so both have to
+            // exist - and have reported whether they installed - before the nodes are built.
+            Images = new CargoImages(LoadIcon, logger);
+            Wiki = new CargoWiki(LoadIcon, Images.IconsInstalled, logger);
+            Research = new CargoResearch(logger, Wiki.Register, Images.Installed);
+
+            // Diagnostics only: what a junction did, and what the handover guard refused.
+            CargoHandover.Log = logger;
+            CargoJunctionDiagnostics.Log = logger;
 
             // One belt family for both lines, hidden behind a single drag entry.
             //
@@ -92,18 +121,18 @@ namespace TrainCargoTools
             // connectors by pivot in a MultiValueDictionary and only rejects two of the same
             // type at one pivot.
             AddIsland("CargoBelt", "cargo-belt", "CargoBelt.png",
-                new CargoBeltSimulationFactory(), hidden: true, pathTrack: true,
+                new CargoBeltSimulationFactory(), Research.Machines, hidden: true, pathTrack: true,
                 dualConnectors: true);
 
             // Dragging picks a corner when the run turns, so a player never reaches for one by
             // hand. They still have to exist as definitions for the placer's definition finder
             // to choose from.
             AddIsland("CargoBelt_LeftTurn", "cargo-belt-left", "CargoBeltLeft.png",
-                new CargoBeltSimulationFactory(), outputDirection: ChunkDirection.North,
+                new CargoBeltSimulationFactory(), Research.Machines, outputDirection: ChunkDirection.North,
                 hidden: true, pathTrack: true, dualConnectors: true);
 
             AddIsland("CargoBelt_RightTurn", "cargo-belt-right", "CargoBeltRight.png",
-                new CargoBeltSimulationFactory(), outputDirection: ChunkDirection.South,
+                new CargoBeltSimulationFactory(), Research.Machines, outputDirection: ChunkDirection.South,
                 hidden: true, pathTrack: true, dualConnectors: true);
 
             // Legacy ids, kept only so saves made before the two belt families merged still
@@ -122,39 +151,104 @@ namespace TrainCargoTools
             // so an old fluid cargo belt keeps working and simply cannot be built any more. They
             // borrow the unified slugs too, so they need no translation keys of their own.
             AddIsland("FluidCargoBelt", "cargo-belt", "CargoBelt.png",
-                new CargoBeltSimulationFactory(), hidden: true, pathTrack: true,
+                new CargoBeltSimulationFactory(), Research.Machines, hidden: true, pathTrack: true,
                 dualConnectors: true);
 
             AddIsland("FluidCargoBelt_LeftTurn", "cargo-belt-left", "CargoBeltLeft.png",
-                new CargoBeltSimulationFactory(), outputDirection: ChunkDirection.North,
+                new CargoBeltSimulationFactory(), Research.Machines, outputDirection: ChunkDirection.North,
                 hidden: true, pathTrack: true, dualConnectors: true);
 
             AddIsland("FluidCargoBelt_RightTurn", "cargo-belt-right", "CargoBeltRight.png",
-                new CargoBeltSimulationFactory(), outputDirection: ChunkDirection.South,
+                new CargoBeltSimulationFactory(), Research.Machines, outputDirection: ChunkDirection.South,
                 hidden: true, pathTrack: true, dualConnectors: true);
+
+            // Junctions. One input West, and two or three outputs, round-robin between them -
+            // vanilla's own splitter family and vanilla's own distribution behaviour, re-hosted
+            // for cargo. See CargoSplitterSimulation.
+            //
+            // Belt-tagged only, unlike the belts themselves. A splitter never meets anything but
+            // a cargo belt or a cargo machine, and every one of those carries a belt connector,
+            // so the second tag would buy nothing and would cost the two-receiver-bundle trick
+            // the belt needs.
+            //
+            // Left is North and right is South, matching the corner pieces.
+            //
+            // All four share one slug, and so one title and description: they are placed for you
+            // when a dragged run branches, exactly as the corners are, so a player never picks
+            // one by name. They borrow the belt icons for the same reason.
+            AddIsland("CargoBelt_LeftFwdSplitter", "cargo-splitter", "CargoBeltLeft.png",
+                new CargoSplitterSimulationFactory(2), Research.Machines,
+                outputDirections: new[] { ChunkDirection.North, ChunkDirection.East },
+                hidden: true, pathTrack: true);
+
+            AddIsland("CargoBelt_RightFwdSplitter", "cargo-splitter", "CargoBeltRight.png",
+                new CargoSplitterSimulationFactory(2), Research.Machines,
+                outputDirections: new[] { ChunkDirection.South, ChunkDirection.East },
+                hidden: true, pathTrack: true);
+
+            AddIsland("CargoBelt_YSplitter", "cargo-splitter", "CargoBelt.png",
+                new CargoSplitterSimulationFactory(2), Research.Machines,
+                outputDirections: new[] { ChunkDirection.North, ChunkDirection.South },
+                hidden: true, pathTrack: true);
+
+            AddIsland("CargoBelt_TripleSplitter", "cargo-splitter", "CargoBelt.png",
+                new CargoSplitterSimulationFactory(3), Research.Machines,
+                outputDirections: new[]
+                {
+                    ChunkDirection.North, ChunkDirection.East, ChunkDirection.South,
+                },
+                hidden: true, pathTrack: true);
+
+            // Mergers: the other half of a junction. Dragging a run *into* an existing one is a
+            // merge, not a split, so without these a branching drag finds no family member that
+            // fits and the line dead-ends at the node it just made.
+            //
+            // Output East, inputs from the sides that feed it - the mirror of the splitters.
+            AddIsland("CargoBelt_LeftFwdMerger", "cargo-splitter", "CargoBeltLeft.png",
+                new CargoMergerSimulationFactory(2), Research.Machines,
+                inputDirections: new[] { ChunkDirection.West, ChunkDirection.North },
+                hidden: true, pathTrack: true);
+
+            AddIsland("CargoBelt_RightFwdMerger", "cargo-splitter", "CargoBeltRight.png",
+                new CargoMergerSimulationFactory(2), Research.Machines,
+                inputDirections: new[] { ChunkDirection.West, ChunkDirection.South },
+                hidden: true, pathTrack: true);
+
+            AddIsland("CargoBelt_YMerger", "cargo-splitter", "CargoBelt.png",
+                new CargoMergerSimulationFactory(2), Research.Machines,
+                inputDirections: new[] { ChunkDirection.North, ChunkDirection.South },
+                hidden: true, pathTrack: true);
+
+            AddIsland("CargoBelt_TripleMerger", "cargo-splitter", "CargoBelt.png",
+                new CargoMergerSimulationFactory(3), Research.Machines,
+                inputDirections: new[]
+                {
+                    ChunkDirection.West, ChunkDirection.North, ChunkDirection.South,
+                },
+                hidden: true, pathTrack: true);
 
             // The packager is the one machine whose work is invisible from outside, so it gets
             // a fill gauge per layer. See CargoPackagerModules.
             AddIsland("CargoPackager", "cargo-packager", "CargoPackager.png",
-                new ShapeCargoPackagerFactory(),
+                new ShapeCargoPackagerFactory(), Research.Machines,
                 modules: new CargoPackagerModules(LoadIcon("CargoPackager.png")));
 
             AddIsland("CargoUnpackager", "cargo-unpackager", "CargoUnpackager.png",
-                new ShapeCargoUnpackagerFactory());
+                new ShapeCargoUnpackagerFactory(), Research.Machines);
 
             // Both fluid ends sit on the pipe-tagged line, so both sides are pipes.
             AddIsland("FluidCargoPackager", "fluid-cargo-packager", "FluidCargoPackager.png",
-                new FluidCargoPackagerFactory(), inputIsPipe: true, outputIsPipe: true,
+                new FluidCargoPackagerFactory(), Research.Machines, inputIsPipe: true, outputIsPipe: true,
                 fluidLine: true,
                 modules: new CargoPackagerModules(LoadIcon("FluidCargoPackager.png")));
 
             AddIsland("FluidCargoUnpackager", "fluid-cargo-unpackager", "FluidCargoUnpackager.png",
-                new FluidCargoUnpackagerFactory(), inputIsPipe: true, outputIsPipe: true, fluidLine: true);
+                new FluidCargoUnpackagerFactory(), Research.Machines, inputIsPipe: true, outputIsPipe: true, fluidLine: true);
 
             // One buffer for either kind of cargo. Placed singly rather than dragged - a store
             // is a thing you put somewhere, not a run you lay out.
             AddIsland("CargoStoreAny", "cargo-store", "CargoStore.png",
-                new AnyCargoStoreFactory(), dualConnectors: true,
+                new AnyCargoStoreFactory(), Research.Stores, dualConnectors: true,
                 modules: new CargoStoreModules(LoadIcon("CargoStore.png")));
 
             // The two per-kind stores it replaced, kept registered and hidden so saves holding
@@ -162,11 +256,11 @@ namespace TrainCargoTools
             // their own simulations and states untouched, so an existing store carries on
             // working and simply cannot be built any more.
             AddIsland("CargoStore", "cargo-store", "CargoStore.png",
-                new ShapeCargoStoreFactory(), hidden: true,
+                new ShapeCargoStoreFactory(), Research.Stores, hidden: true,
                 modules: new CargoStoreModules(LoadIcon("CargoStore.png")));
 
             AddIsland("FluidCargoStore", "cargo-store", "FluidCargoStore.png",
-                new FluidCargoStoreFactory(), inputIsPipe: true, outputIsPipe: true,
+                new FluidCargoStoreFactory(), Research.Stores, inputIsPipe: true, outputIsPipe: true,
                 hidden: true, modules: new CargoStoreModules(LoadIcon("FluidCargoStore.png")));
 
             // After the definitions, because it addresses them by id, and once only - the
@@ -176,6 +270,7 @@ namespace TrainCargoTools
             AtlasDump = GameRewirers.AddRewirer(new CargoArtCommands(Appearance, logger));
 
             Stations = new PackagedCargoStations(logger);
+            Unloaders = new PackagedCargoUnloaders(logger);
 
             // Drag placement. One placer now, over the one belt family.
             //
@@ -186,6 +281,13 @@ namespace TrainCargoTools
                 new CargoPathPlacement<SpaceBeltInputConnector, SpaceBeltOutputConnector>(
                     logger, "CargoBeltPlacementInitiator",
                     "CargoBelt", "CargoBelt_LeftTurn", "CargoBelt_RightTurn",
+                    new[]
+                    {
+                        "CargoBelt_LeftFwdSplitter", "CargoBelt_RightFwdSplitter",
+                        "CargoBelt_YSplitter", "CargoBelt_TripleSplitter",
+                        "CargoBelt_LeftFwdMerger", "CargoBelt_RightFwdMerger",
+                        "CargoBelt_YMerger", "CargoBelt_TripleMerger",
+                    },
                     "cargo-tools.group.cargo-belt.title", "cargo-tools.group.cargo-belt.description",
                     () => LoadIcon("CargoBelt.png"),
                     () => ToolbarSlot()));
@@ -193,10 +295,20 @@ namespace TrainCargoTools
 
         public void Dispose()
         {
+            foreach (IDisposable registration in ReArmedRegistrations)
+            {
+                registration.Dispose();
+            }
+
+            ReArmedRegistrations.Clear();
+
             GameRewirers.RemoveRewirer(PathPlacement);
             GameRewirers.RemoveRewirer(AtlasDump);
             Appearance.Dispose();
             Stations.Dispose();
+            Unloaders.Dispose();
+            Wiki.Dispose();
+            Images.Dispose();
         }
 
         /// Everything the pieces have in common: one chunk of unbuildable space path, an input
@@ -207,7 +319,10 @@ namespace TrainCargoTools
         private void AddIsland<TSimulation, TState, TConfig>(
             string id, string slug, string iconFile,
             IIslandSimulationFactoryBuilder<TSimulation, TState, TConfig> simulation,
+            CargoUnlock unlock,
             ChunkDirection? outputDirection = null,
+            ChunkDirection[] outputDirections = null,
+            ChunkDirection[] inputDirections = null,
             bool inputIsPipe = false, bool outputIsPipe = false, bool hidden = false,
             bool fluidLine = false, bool pathTrack = false, bool dualConnectors = false,
             IIslandModuleDataProvider modules = null)
@@ -238,7 +353,9 @@ namespace TrainCargoTools
                // islands too: the z extent is always 0 and x/y come out one chunk short.
                .WithPerChunkColliders()
                .WithConnectorData(Connectors(
-                    layout, outputDirection ?? ChunkDirection.East,
+                    layout,
+                    inputDirections ?? new[] { ChunkDirection.West },
+                    outputDirections ?? new[] { outputDirection ?? ChunkDirection.East },
                     inputIsPipe, outputIsPipe, dualConnectors))
                .WithInteraction(flippable: false, canHoldBuildings: false)
                .WithDefaultChunkCost()
@@ -265,10 +382,13 @@ namespace TrainCargoTools
                .WithIsland(
                     dualConnectors ? new SkipConflictMarkers(islandBuilder) : islandBuilder,
                     groupBuilder)
-               .UnlockedAtMilestone(new ByIndexMilestoneSelector(0))
+               // Every island in a node shares one selector, and the selector is get-or-create -
+               // see CargoUnlock for why UnlockedWithNewSideUpgrade would register the node once
+               // per island instead of once.
+               .UnlockedWithExistingSideUpgrade(unlock)
                .WithDefaultPlacement()
                .InToolbar(hidden
-                    ? Shapez2.ToolbarKit.ToolbarSlot.Hidden()
+                    ? QuinnBast.Shapez2.ToolbarKit.ToolbarSlot.Hidden()
                     : ToolbarSlot())
                .WithSimulation(simulation);
 
@@ -278,13 +398,28 @@ namespace TrainCargoTools
             // `IslandPredictionRenderer` keeps drawing that belt's end-of-line bubble on top of
             // the island's entrance. See CargoPrediction.
             //
-            // The cast is the only way in: `WithPrediction` lives on
-            // IDefinedAccessibleSimulatablePlaceableIslandExtender, which nothing in this chain
-            // returns. It is safe because every one of these interfaces is implemented by the
-            // same AtomicIslandExtender instance, and the extender only records the builder - the
-            // order the two branches are declared in does not matter to Build().
-            ((IDefinedAccessibleSimulatablePlaceableIslandExtender)extender)
-               .WithPrediction(new CargoPredictionFactory(dualConnectors ? 2 : 1), Log);
+            // Registered by hand rather than through the extender's own `WithPrediction`, which
+            // would otherwise be the obvious call.
+            //
+            // AtomicIslandExtender.Build re-arms itself only once every branch it was handed has
+            // fired - WaitAllRewirers clears one link per branch and re-runs BuildExtenders when
+            // the set empties. The prediction branch fires from PredictionSystemsInterceptor, a
+            // postfix on BuiltinPredictionSimulationSystems.CreateSimulationSystems - and that
+            // method has exactly one caller, GameSessionOrchestrator.SetupPredictions, which
+            // StartPredictionUpdate skips entirely when SimulationSettings.Predict is false.
+            //
+            // So a player who turns predictions off in the settings never completes that branch,
+            // the chain never re-arms, and the definitions, the toolbar entries and the research
+            // unlocks are spent on the first scenario of the process - the main menu's background
+            // game, not their save. The mod then loads without a single error and has nothing in
+            // it. Caught from a Crossover Platforms player's log; see that mod's DESIGN.md.
+            //
+            // Registering it here leaves the chain waiting only on branches that do fire, and
+            // prediction still attaches whenever CreateSimulationSystems runs.
+            ReArmedRegistrations.Add(
+                new ReArmingRewirer(() =>
+                    new IslandPredictionExtender<CargoPredictionSimulation>(
+                        definitionId, new CargoPredictionFactory(dualConnectors ? 2 : 1), Log)));
 
             // Two separate builder methods rather than one taking null, because
             // that is the shape Shifter offers.
@@ -340,11 +475,18 @@ namespace TrainCargoTools
         /// The pipe connectors are the exception and behave properly, because a pipe genuinely
         /// does carry FluidPackageItems: a fluid packager's input will only join a pipe, and a
         /// fluid unpackager's output will only join a pipe.
+        /// One input West, and one connector per entry in `outputDirections`.
+        ///
+        /// Order matters for more than one output: `ConnectableIslandSimulation` pairs output
+        /// connectors with provider bundles in the order they are added, so the nth connector
+        /// here is the nth lane a splitter round-robins into.
         private IIslandConnectorData Connectors(
-            ChunkLayoutLookup<ChunkVector, IslandChunkData> layout, ChunkDirection outputDirection,
+            ChunkLayoutLookup<ChunkVector, IslandChunkData> layout,
+            ChunkDirection[] inputDirections, ChunkDirection[] outputDirections,
             bool inputIsPipe, bool outputIsPipe, bool dualConnectors)
         {
             List<EntityIO<LocalChunkPivot, IIslandConnector>> connectors = new();
+            ChunkDirection outputDirection = outputDirections[0];
 
             if (dualConnectors)
             {
@@ -360,16 +502,19 @@ namespace TrainCargoTools
             }
             else
             {
-                IIslandConnector input = inputIsPipe
-                    ? new SpacePipeInputConnector()
-                    : (IIslandConnector)new SpaceBeltInputConnector();
+                foreach (ChunkDirection direction in inputDirections)
+                {
+                    connectors.Add(Connector(direction, inputIsPipe
+                        ? new SpacePipeInputConnector()
+                        : (IIslandConnector)new SpaceBeltInputConnector()));
+                }
 
-                IIslandConnector output = outputIsPipe
-                    ? new SpacePipeOutputConnector()
-                    : (IIslandConnector)new SpaceBeltOutputConnector();
-
-                connectors.Add(Connector(ChunkDirection.West, input));
-                connectors.Add(Connector(outputDirection, output));
+                foreach (ChunkDirection direction in outputDirections)
+                {
+                    connectors.Add(Connector(direction, outputIsPipe
+                        ? new SpacePipeOutputConnector()
+                        : (IIslandConnector)new SpaceBeltOutputConnector()));
+                }
             }
 
             return new IslandConnectorData(connectors, layout.ChunkPositions);

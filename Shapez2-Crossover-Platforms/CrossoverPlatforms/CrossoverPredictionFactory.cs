@@ -2,7 +2,7 @@ using Core.Factory;
 using ShapezShifter.Flow.Atomic;
 using ShapezShifter.Hijack.Predictions;
 
-namespace CrossoverPlatforms
+namespace QuinnBast.Shapez2.CrossoverPlatforms
 {
     /// Supplies a crossing's prediction simulation.
     ///

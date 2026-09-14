@@ -4,6 +4,8 @@ using ShapezShifter.Hijack;
 using ShapezShifter.Kit;
 using ILogger = Core.Logging.ILogger;
 
+namespace QuinnBast.Shapez2.PlatformEfficiencyOverlay;
+
 /// <summary>
 /// Exposes the look-and-feel numbers on the debug console (F1), because a new mod DLL
 /// cannot be loaded without restarting the game - anything that has to be judged by eye

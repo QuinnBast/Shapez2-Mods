@@ -4,7 +4,7 @@ using Game.Core.Belts.BeltPath;
 using Game.Core.Simulation;
 using Game.Core.Trains;
 
-namespace TrainCargoTools
+namespace QuinnBast.Shapez2.TrainCargoTools
 {
     /// A straight space path that carries train cargo packages instead of loose shapes.
     ///
@@ -26,6 +26,13 @@ namespace TrainCargoTools
 
         /// One per layer, on the lane that carries cargo. What lets a train unloader - or an
         /// ordinary belt - feed a cargo belt at all. See CargoIntake.
+        ///
+        /// **Nothing fills these any more.** The belt takes packages only, and a wagon unloader
+        /// hands over a whole one - see CargoUnloadConverter. They are still built, still drained
+        /// by Update and still part of the state, for two reasons: their states are fields of the
+        /// saved blob, and changing that blob's shape has already broken saves once; and a save
+        /// written by an older version can hold a part-filled intake, which the drain still
+        /// finishes and empties onto the belt.
         private readonly CargoIntake[] Intakes;
 
         /// The output side, wrapped so a package is never handed somewhere that would destroy
@@ -83,13 +90,15 @@ namespace TrainCargoTools
                         return idle;
                     }
 
-                    // The carrying lane also takes loose items, which the intake packs into
-                    // whole packages - see CargoIntake for why that is where an unloader gets
-                    // to work at all.
-                    CargoIntake intake = Intakes[layer];
+                    // Cargo only. An ordinary space belt or pipe pointed at a cargo belt now
+                    // backs up at the junction instead of feeding it, which is the same answer
+                    // the belt already gave in the other direction - see CargoHandover.
+                    //
+                    // The belt used to accept loose items and pack them itself, purely so a
+                    // wagon unloader could feed one. It no longer has to: the unloader hands
+                    // over a whole package instead. See CargoUnloadConverter.
                     CargoBeltLane lane = new(speed, laneState);
-                    lane.PreAcceptHook = intake.CanEnter;
-                    lane.AcceptHook = intake.OnAccept;
+                    lane.PreAcceptHook = IsCargoPackage;
                     return lane;
                 });
 

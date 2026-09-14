@@ -13,8 +13,10 @@ references.
 | `Shapez2-Crossover-Platforms/` | Belt/pipe crossings. |
 | `Shapez2-Platform-Blackbox/` | Collapsing platform selections into blueprints. |
 | `Shapez2-Space-Platform-Efficiencies/` | Throughput HUD overlay (shipped). |
+| `Shapez2-Extra-Shape-Parts/` | New shape quadrant types; procedural quadrant meshes. |
 | `Shapez2-Extended-Research/` | Extra research tiers. |
 | `Shapez2-Mod-Reloader/` | Hot reload during development. |
+| `Shapez2-Mod-Profiler/` | Flame graph, managed heap census, live counters. Dev tool. |
 | `Shapez2-Infinite-Train-Jumps/` | DESIGN.md only, no code. |
 
 ## Use the docs, and add to them
@@ -94,6 +96,12 @@ Log: `$SPZ2_PERSISTENT/Player.log`. Read it before theorising about a crash.
 
 ## Conventions in these repos
 
+- **Every type lives under `QuinnBast.Shapez2.<ModName>`.** The game has ~2,800 types in the
+  global namespace, so a mod type left there is a collision waiting to happen - `Data`,
+  `Entry` and `Configuration` all did collide before this was applied. Files added since use
+  a file-scoped `namespace QuinnBast.Shapez2.<Mod>;` (hence `LangVersion 10`); older files
+  keep their block form. The namespace is **not** the assembly name: `AssemblyName` is unset
+  everywhere, so dll filenames follow the project name and `manifest.json` is unaffected.
 - **XML doc comments explain *why*, not what.** Match the surrounding density. Comments
   that record a constraint you discovered ("this is the only option because X throws")
   are the valuable ones.
@@ -135,6 +143,20 @@ Each is written up properly in the docs; this is the index.
 | `SyncableIdentifier` is read with `inherit: false`, so every saved state needs its own concrete type and id. | — |
 | `translations.json` is keyed by **language code first**; placeholders are self-closing `<name/>`. Either mistake aborts mod load. | `howto/add-translations.md` |
 | `AffectsSaveGames: true` means the mod cannot be added to or removed from an existing save. | — |
+| Shape sub-part meshes carry their **material assignment in vertex colours**, and ShapezShifter's model importer drops that channel - so a shape part mesh cannot be loaded from a file. | `howto/add-a-shape-part.md` |
+| An IMGUI overlay does **not** block the game — the wheel still zooms behind it. Consume the input context in a `HUD.OnGameUpdate` postfix; uGUI clicks need a raycast blocker as well. | `howto/notifications-and-hud-screens.md` |
+| The runtime's managed heap walk **cannot be called from a mod**: `mono_unity_liveness_*` reports through a callback, a callback into a mod is managed code, and a stopped GC world forbids entering managed code. The game hangs with no log line. (`mono_gc_walk_heap` is separately a Boehm stub returning 1.) Walk the graph with reflection instead. | `howto/profile-a-mod.md` |
+| **Simulation does not run on the main thread.** `Simulator.StartAsynchronousUpdate` returns a `Task`, so a mod's registered simulations run on pool threads - anything that measures or hooks per-thread state and assumes the main thread sees nothing. | `howto/profile-a-mod.md` |
+| Reflecting over an unknown heap: `GetValue` on a **pointer field** boxes a new `System.Reflection.Pointer` whose own field is a pointer, so a walk that follows them never ends; and reading a **thread-static or pointer static** crashes natively inside `GetValueInternal` - a crash window, not an exception. Exclude before the call, never after. | `howto/profile-a-mod.md` |
+| `ShapesConfiguration.Parts` is a `List<MetaShapeSubPart>` wearing `IReadOnlyList<IShapeSubPart>` - covariance makes that legal, so `is List<IShapeSubPart>` is **false**. Cast to non-generic `IList`. | `howto/add-a-shape-part.md` |
+| A shape part mesh is authored for exactly `360 / PartCount` degrees and nothing rescales it angularly, so a quadrant mesh injected into the 6-part **hexagonal** configuration overlaps its neighbours. Vanilla ships a separate part asset per configuration, and codes `G` `H` `F` are taken there. | `howto/add-a-shape-part.md` |
+| Namespaces are free to move *except* for `ModSaveData`: `ModSaveDataExtensions.ResolveId<T>()` is `AssemblyName + "-" + typeof(T).FullName`, so renaming a namespace silently orphans a shipped mod's saved settings. `[SyncableIdentifier]` is an explicit string and is unaffected. | `howto/save-data.md` |
+| A wiki page is **two halves in two objects** - the reference in `ResearchProgression.WikiConfiguration`, the entry in `GameData`. A reference whose entry is missing throws out of `WikiDatabase`'s constructor and takes the session. A `MetaWikiEntry`'s id is its `name`, and its title key is fixed at `wiki.<id>.title`. | `howto/add-a-wiki-entry.md` |
+| A research cost is **hundreds of displayed points**: `Format(this ResearchPointCurrency)` renders `Amount * 100`, so `48` is the "4.8k" on screen. Getting it backwards prices a node a hundredfold too high and still looks plausible. | `howto/add-research-unlock.md` |
+| `UnlockedWithNewSideUpgrade` registers its node **once per island/building group**, and `CustomSideUpgradeSelector.Select` is itself a call to `Build` - so one node shared by ten islands becomes ten shop entries. Use a get-or-create `ISideUpgradeSelector`. A side upgrade's **preview image is not optional** either: `GetImage` throws on the empty id and takes the research screen with it. | `howto/add-research-unlock.md` |
+| A wrapper on a bundle or lane the game reads back must return **the object that was assigned**, not itself. `ItemOutputChunkConnector.TryDisconnect` compares `ProviderBundle.NextBundle` to the other side's bundle by reference, so a self-reporting wrapper makes disconnect silently fail - and `TryConnect` then refuses because the old connection is still set. Symptom: one island never works again after being replaced. | — |
+| `AtomicIslandExtender.Build` re-arms its chain only when **every** branch has fired, and the prediction branch never fires for a player with the **`prediction` setting off** (`StartPredictionUpdate` skips `SetupPredictions`, the sole caller of `CreateSimulationSystems`). The islands, toolbar entry and unlock are then spent on the **main menu's background game** and their save gets nothing, with no error. Keep prediction off the chain, re-armed by hand. | `howto/add-an-island.md` |
+| A throw in a mod constructor is **not** contained by `ModLoader` - it comes out through `ModLoadingStep.LoadMods` and kills the game's whole mod loading step. Static field initialisers running in declaration order are an easy way to cause one. | — |
 
 ## Working style the user expects
 

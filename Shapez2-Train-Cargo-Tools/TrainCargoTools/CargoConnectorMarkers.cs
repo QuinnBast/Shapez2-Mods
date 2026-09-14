@@ -1,7 +1,7 @@
 using Game.Core.Content.Islands;
 using ShapezShifter.Flow;
 
-namespace TrainCargoTools
+namespace QuinnBast.Shapez2.TrainCargoTools
 {
     /// Stops a dual-connector island drawing a red conflict cross while it is being placed.
     ///

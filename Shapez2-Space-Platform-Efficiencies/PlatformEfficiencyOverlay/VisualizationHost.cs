@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using ILogger = Core.Logging.ILogger;
 
+namespace QuinnBast.Shapez2.PlatformEfficiencyOverlay;
+
 /// <summary>
 /// Adds and removes this mod's entry in the HUD's visualization bar.
 ///

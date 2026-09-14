@@ -1,7 +1,7 @@
 using System;
 using ShapezShifter.Hijack;
 
-namespace Shapez2.ToolbarKit
+namespace QuinnBast.Shapez2.ToolbarKit
 {
     /// Logs the toolbar tree, with every translation id in it.
     ///

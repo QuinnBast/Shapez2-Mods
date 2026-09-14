@@ -5,6 +5,8 @@ using ShapezShifter.Hijack;
 using ShapezShifter.SharpDetour;
 using ILogger = Core.Logging.ILogger;
 
+namespace QuinnBast.Shapez2.PlatformBlackbox;
+
 /// <summary>
 /// Platform Blackbox.
 ///
@@ -31,7 +33,7 @@ public class PlatformBlackboxMod : IMod
     public PlatformBlackboxMod(ILogger logger)
     {
         Logger = logger;
-        Shapez2.ToolbarKit.ToolbarKit.Log = logger;
+        QuinnBast.Shapez2.ToolbarKit.ToolbarKit.Log = logger;
         Session = new SessionServices(logger);
 
         ToolbarMap toolbar = new ToolbarMap(logger);

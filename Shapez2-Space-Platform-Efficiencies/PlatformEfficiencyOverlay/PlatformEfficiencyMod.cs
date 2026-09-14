@@ -8,6 +8,8 @@ using UnityEngine;
 using Game.Core.Simulation;
 using ILogger = Core.Logging.ILogger;
 
+namespace QuinnBast.Shapez2.PlatformEfficiencyOverlay;
+
 /// <summary>
 /// Platform Efficiency Viewer.
 ///

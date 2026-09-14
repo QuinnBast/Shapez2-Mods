@@ -1,6 +1,6 @@
 using Game.Core.Coordinates;
 
-namespace TrainCargoTools
+namespace QuinnBast.Shapez2.TrainCargoTools
 {
     /// Where a stored container sits on a store's rack.
     ///

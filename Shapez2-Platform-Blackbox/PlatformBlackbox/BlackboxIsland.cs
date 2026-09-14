@@ -14,6 +14,8 @@ using ShapezShifter.Kit;
 using ShapezShifter.Textures;
 using ILogger = Core.Logging.ILogger;
 
+namespace QuinnBast.Shapez2.PlatformBlackbox;
+
 /// <summary>
 /// Registers the blackbox platforms: one square definition per size, so a box can be as big
 /// as the blueprint it stands in for needs.
@@ -162,8 +164,8 @@ public static class BlackboxIsland
             // Same place as before - a sibling of the platform groups - but named rather than
             // counted, so a game update that reorders the toolbar no longer silently moves
             // these somewhere else. pbx.toolbar is still how the id was found.
-            .InToolbar(Shapez2.ToolbarKit.ToolbarSlot.InGroup(
-                Shapez2.ToolbarKit.ToolbarCategory.RegularPlatform))
+            .InToolbar(QuinnBast.Shapez2.ToolbarKit.ToolbarSlot.InGroup(
+                QuinnBast.Shapez2.ToolbarKit.ToolbarCategory.RegularPlatform))
             // The stateful overload, so a placed box is saved and comes back knowing what
             // it stands in for and what it was measured to do.
             .WithSimulation<BlackboxIslandSimulation, BlackboxIslandState,

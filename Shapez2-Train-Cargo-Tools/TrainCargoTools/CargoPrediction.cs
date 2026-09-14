@@ -6,7 +6,7 @@ using Game.Core.Simulation;
 using ShapezShifter.Flow.Atomic;
 using ShapezShifter.Hijack.Predictions;
 
-namespace TrainCargoTools
+namespace QuinnBast.Shapez2.TrainCargoTools
 {
     /// What a cargo island contributes to the item prediction graph.
     ///

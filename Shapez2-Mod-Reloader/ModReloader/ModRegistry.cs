@@ -3,7 +3,10 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using Game.Core.Modding;
+using Game.Orchestration;
 using ILogger = Core.Logging.ILogger;
+
+namespace QuinnBast.Shapez2.ModReloader;
 
 /// <summary>
 /// Reaches the game's mod loader and describes what it has loaded.
@@ -33,6 +36,17 @@ public class ModRegistry
         }
     }
 
+    /// <summary>
+    /// The mod loader - from the session when there is one, and from the game-level
+    /// container when there is not.
+    ///
+    /// That second route is not a fallback for tidiness. A mod that throws while the
+    /// session is loading never reaches <c>OnSessionReady</c>, so the session route has
+    /// captured nothing at precisely the moment a reload is worth most - which is the case
+    /// <see cref="CrashScreenReload"/> exists for. <c>ModLoadingBlindStep</c> binds the
+    /// framework into <c>GameOrchestrator.InitializationDependencyContainer</c>, which
+    /// lives for the process rather than the session, and holds the same loader.
+    /// </summary>
     public bool TryGetLoader(out ModLoader loader)
     {
         if (Loader == null && Orchestrator != null)
@@ -42,6 +56,25 @@ public class ModRegistry
                 Loader = Orchestrator.DependencyContainer
                     .Resolve<GameModdingFramework>()
                     .ModLoader;
+            }
+            catch (Exception exception)
+            {
+                Logger.Exception?.LogException(exception);
+            }
+        }
+
+        if (Loader == null)
+        {
+            try
+            {
+                GameOrchestrator game = GameBootstrapper.GameOrchestrator;
+
+                if (game != null)
+                {
+                    Loader = game.InitializationDependencyContainer
+                        .Resolve<GameModdingFramework>()
+                        .ModLoader;
+                }
             }
             catch (Exception exception)
             {

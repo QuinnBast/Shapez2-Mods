@@ -95,6 +95,63 @@ than the method you wanted, so order your type tests so the common case falls th
 cheaply; and it is broader, so the hook must check it is looking at the case it cares
 about rather than assuming.
 
+### `CreatePrefixHook` only works on methods that return void
+
+Every `DetourHelper.CreatePrefixHook` overload builds an `Action` internally:
+
+```csharp
+return new Hook(GetRuntimeMethod<TObject>(original),
+                new Action<Action<TObject, TArg0>, TObject, TArg0>(Patch));
+```
+
+So the method it hooks must return `void`. Point one at a method with a return value and it
+fails at hook construction:
+
+```
+ArgumentException: Target method is not compatible with source method
+```
+
+**It compiles perfectly**, which is the trap. The `original` parameter is an
+`Expression<Action<...>>`, and C# will convert a lambda whose body *calls* a non-void method
+into an `Action` without a word — the return value is simply discarded:
+
+```csharp
+// Compiles. Throws at construction: BakeMetadataIntoRuntime returns GameIslands.
+DetourHelper.CreatePrefixHook<IslandDefinitionFactory, IIslandCatalogPair, AuthoringIslands>(
+    (factory, pair, meta) => factory.BakeMetadataIntoRuntime(pair, meta), ...);
+```
+
+Worse, the throw is easy to swallow. A mod that wraps each hook installation in a `try`/`catch`
+so one failure cannot cost the others — which is the [right thing to do](#unwind-a-partial-set-of-hooks)
+— turns this into a line in `Player.log` and a feature that silently never runs. Look for the
+message above near mod load before assuming a hook is working.
+
+**The way round it is a raw `Hook` with hand-written delegate types**, which is also how you
+reach a return value or an `out` parameter:
+
+```csharp
+private delegate GameIslands BakeOrig(
+    IslandDefinitionFactory factory, IIslandCatalogPair pair, AuthoringIslands meta);
+
+new Hook(
+    typeof(IslandDefinitionFactory).GetMethod(nameof(IslandDefinitionFactory.BakeMetadataIntoRuntime)),
+    new Func<BakeOrig, IslandDefinitionFactory, IIslandCatalogPair, AuthoringIslands, GameIslands>(
+        (orig, factory, pair, meta) =>
+        {
+            // ... before ...
+            return orig(factory, pair, meta);
+        }));
+```
+
+The first parameter is a delegate matching the original, with `this` as its first argument;
+calling it is what runs the method you hooked, and skipping the call is what replaces it.
+
+Since a failed hook is invisible, count them and say so:
+
+```csharp
+Logger.Info?.Log($"sweep installed on {Hooks.Count} of 3 hook points.");
+```
+
 ### Unwind a partial set of hooks
 
 Applying several related hooks is not atomic. If the third throws, the first two are live

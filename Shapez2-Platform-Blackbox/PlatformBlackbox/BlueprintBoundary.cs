@@ -6,6 +6,8 @@ using Game.Core.Coordinates;
 using Game.Core.Map.Simulation;
 using ILogger = Core.Logging.ILogger;
 
+namespace QuinnBast.Shapez2.PlatformBlackbox;
+
 /// <summary>
 /// What a blueprint looks like from the outside: which notches it uses, which way each faces,
 /// and therefore how big a platform has to be to stand in for it.

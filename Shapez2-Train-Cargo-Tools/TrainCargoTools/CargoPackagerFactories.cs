@@ -5,7 +5,7 @@ using Game.Core.Simulation;
 using ShapezShifter.Flow.Atomic;
 using ShapezShifter.Hijack;
 
-namespace TrainCargoTools
+namespace QuinnBast.Shapez2.TrainCargoTools
 {
     /// Builds packagers using the game's own train cargo numbers.
     ///

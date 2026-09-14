@@ -5,7 +5,7 @@ using Game.Content.Features.Signals.Conductor;
 using Game.Core.Coordinates;
 using Game.Core.Simulation;
 
-namespace PredictableBeltFilters
+namespace QuinnBast.Shapez2.PredictableBeltFilters
 {
     /// What a belt filter contributes to the item prediction graph.
     ///

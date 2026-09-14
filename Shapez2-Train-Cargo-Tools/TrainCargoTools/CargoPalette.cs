@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using ILogger = Core.Logging.ILogger;
 
-namespace TrainCargoTools
+namespace QuinnBast.Shapez2.TrainCargoTools
 {
     /// Works out what UV a generated mesh should carry, by reading one off a vanilla mesh.
     ///

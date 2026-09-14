@@ -78,6 +78,31 @@ steamcmd does not surface it, so there is nothing to put in the manifest.
 Plan for that: the first publish creates an item with one image, and the rest of the
 store page is filled in on the website.
 
+### Nor the category
+
+The category checkboxes on an item's page — `UI, QoL & Utility`, `Buildings`, and the
+rest — are Workshop *tags*, and `workshop_build_item` has no key for them. The
+manifest keys it reads are fixed, and they are these:
+
+```text
+appid  publishedfileid  filetype  title  description
+visibility  previewfile  contentfolder  kvtags  changenote
+```
+
+That list is not guesswork: those literals sit together in `steamconsole64.dll`,
+bracketed by the command's own `ERROR! Failed to parse build config file` and
+`workshop_build_item <build config filename>` strings. A `"tags"` block, which is
+what most copied-around sample manifests contain, is simply an unknown key — Valve's
+KeyValues parser drops it without complaint, so it looks like it worked.
+
+`kvtags` is a near-miss, not the answer. It is `ISteamUGC::AddItemKeyValueTag` —
+arbitrary key/value metadata for API queries, invisible on the store page. The
+categories come from `SetItemTags`, which steamcmd never calls.
+
+So set the category once on the item's web page. It is a property of the item rather
+than of an upload, and because `workshop_build_item` never touches tags, later
+publishes leave it alone — you will not have to set it again.
+
 ## How the script works
 
 ```bash
@@ -146,6 +171,43 @@ folder before your first upload — whatever is there is what the world gets.
 - Tested from a **subscribed copy**, not your build output. Subscribing installs to the
   Workshop content folder, which is a different path from `SPZ2_PERSISTENT\mods` and
   catches "works on my machine" path bugs
+
+## After publishing, unsubscribe before you keep developing
+
+Once you subscribe to your own item, **your local build stops being what runs** — and the
+game gives you no hint of it.
+
+The game enumerates both `mods/<Mod>` and the subscribed
+`steamapps/workshop/content/2162800/<id>/`, and loads both. It does not notice they are the
+same mod. In the log that reads:
+
+```text
+Loading M:\SteamLibrary\steamapps\workshop\content\2162800\<id>\MyMod.dll
+...
+Loading C:\…\mods\MyMod\MyMod.dll
+```
+
+Two things then go wrong at once.
+
+**Your local DLL never actually runs.** Both files carry the same assembly identity — same
+name, same version — and `Assembly.LoadFrom` binds by identity, so the second call hands
+back the assembly already loaded from the Workshop folder. The tell is in the resource
+paths: the *local* mod's `ModDirectoryLocator` resolves
+`typeof(TMod).Assembly.Location` to the **Workshop** directory, so it loads Workshop icons
+while claiming to be the local copy. (This is the same `LoadFrom` behaviour that forces a
+hot reloader onto `Assembly.Load(byte[])`.)
+
+**And the mod initialises twice.** The game constructs an instance per discovered folder,
+so every constructor side effect happens twice — two sets of rewirers, two island
+registrations. The second `IslandBuilder.BuildAndRegister` then throws
+`An item with the same key has already been added`, which cascades into a completely
+unrelated-looking `An island group with id HUB already exists`. See
+[Debugging](debugging.md).
+
+So while developing: **unsubscribe from your own Workshop item**, or delete `mods/<Mod>`
+and test the subscribed copy deliberately. Keeping both is the worst of the two, because
+you will be reading results from code you did not build. Counting rewirer handles in the
+log is the quick check — a doubled mod registers the same sequence twice.
 
 ## Gotchas
 

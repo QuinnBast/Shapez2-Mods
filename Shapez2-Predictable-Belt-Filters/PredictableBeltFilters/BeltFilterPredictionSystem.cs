@@ -1,7 +1,7 @@
 using Game.Content.Features.Predictions;
 using ILogger = Core.Logging.ILogger;
 
-namespace PredictableBeltFilters
+namespace QuinnBast.Shapez2.PredictableBeltFilters
 {
     /// Creates one <see cref="BeltFilterPredictionSimulation"/> per placed belt filter.
     ///

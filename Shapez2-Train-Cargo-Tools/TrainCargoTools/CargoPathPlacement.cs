@@ -12,7 +12,7 @@ using ShapezShifter.Hijack;
 using UnityEngine;
 using ILogger = Core.Logging.ILogger;
 
-namespace TrainCargoTools
+namespace QuinnBast.Shapez2.TrainCargoTools
 {
     /// Makes cargo belts drag out like space belts, corners and all.
     ///
@@ -53,6 +53,12 @@ namespace TrainCargoTools
         private readonly string ForwardId;
         private readonly string LeftTurnId;
         private readonly string RightTurnId;
+
+        /// The junction pieces, in no particular order. Handed to the same definition finder as
+        /// the corners: vanilla's placer picks whichever family member matches the connections a
+        /// node ends up with, so a branching drag chooses a splitter for exactly the reason a
+        /// turning drag chooses a corner. Nothing here has to know what a branch is.
+        private readonly string[] SplitterIds;
         private readonly string TitleId;
         private readonly string DescriptionId;
 
@@ -65,7 +71,7 @@ namespace TrainCargoTools
 
         public CargoPathPlacement(
             ILogger logger, string placerSerialName, string forwardId, string leftTurnId,
-            string rightTurnId, string titleId, string descriptionId,
+            string rightTurnId, string[] splitterIds, string titleId, string descriptionId,
             Func<Sprite> icon, Func<IToolbarEntryInsertLocation> slot)
         {
             Logger = logger;
@@ -73,6 +79,7 @@ namespace TrainCargoTools
             ForwardId = forwardId;
             LeftTurnId = leftTurnId;
             RightTurnId = rightTurnId;
+            SplitterIds = splitterIds ?? Array.Empty<string>();
             TitleId = titleId;
             DescriptionId = descriptionId;
             Icon = icon;
@@ -210,7 +217,23 @@ namespace TrainCargoTools
 
             // Forward first: CreateSpacePathPlacementInitiator uses the first entry as the
             // representing node when it builds the placer.
-            family = new[] { forward, left, right };
+            List<IIslandDefinition> members = new() { forward, left, right };
+
+            // Missing junctions are not fatal - a run still lays and turns, it just will not
+            // branch - so they are skipped with a warning rather than failing the whole family.
+            foreach (string id in SplitterIds)
+            {
+                if (islands.TryGetDefinition(new IslandDefinitionId(id), out IIslandDefinition splitter))
+                {
+                    members.Add(splitter);
+                }
+                else
+                {
+                    Logger.Warning?.Log($"Junction definition '{id}' is missing; cargo belts will not branch there.");
+                }
+            }
+
+            family = members;
             return true;
         }
 

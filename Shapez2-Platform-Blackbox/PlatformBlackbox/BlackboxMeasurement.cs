@@ -6,6 +6,8 @@ using Game.Content.Features.Fluids;
 using Game.Core.Blueprint;
 using ILogger = Core.Logging.ILogger;
 
+namespace QuinnBast.Shapez2.PlatformBlackbox;
+
 /// <summary>
 /// One measurement, run a few milliseconds at a time.
 ///

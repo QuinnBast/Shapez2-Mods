@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using ShapezShifter.Hijack.Predictions;
 using ILogger = Core.Logging.ILogger;
 
-namespace PredictableBeltFilters
+namespace QuinnBast.Shapez2.PredictableBeltFilters
 {
     /// Swaps vanilla's belt filter prediction system for one that knows what a filter does.
     ///

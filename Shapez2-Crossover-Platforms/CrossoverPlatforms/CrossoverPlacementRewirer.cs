@@ -7,7 +7,7 @@ using ShapezShifter;
 using ShapezShifter.Hijack;
 using ILogger = Core.Logging.ILogger;
 
-namespace CrossoverPlatforms
+namespace QuinnBast.Shapez2.CrossoverPlatforms
 {
     /// Puts <see cref="CrossoverPathProcessor"/> into the space belt and space pipe placers.
     ///

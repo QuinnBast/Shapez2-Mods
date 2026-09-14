@@ -114,6 +114,38 @@ warning : Assembly is marked for publicization, but no members were publicized
 That means references are not resolving — usually `SPZ2_PATH` is unset or wrong. See
 [The Publicizer](../publicizer.md).
 
+### An island registration failure, reported as something else entirely
+
+Worth knowing before you spend an evening on the wrong mod. If a mod throws while
+registering islands, the error the game shows you is **not** that error.
+
+What happens: `GameMode.From` bakes island metadata, and ShapezShifter's
+`IslandsInterceptor` postfix runs every mod's `IslandsExtender` inside that bake. A throw
+there — say `IslandBuilder.BuildAndRegister` doing `DefinitionsById.Add` on an id that is
+already present — propagates out of `SavegameSerializationUtils.Load`. The game catches it,
+logs `Failed to load 'memory': …`, and **falls back to starting a new savegame**. That
+fallback calls `GameMode.From` again with the *same* `IslandGroupDefinitionRegistry`, which
+is already populated, so vanilla's own `ResolveGroups` now throws on the very first group it
+tries to create:
+
+```text
+System.InvalidOperationException: An island group with id HUB already exists
+  at IslandGroupDefinitionRegistry.Create (MetaIslandDefinitionGroup, System.String)
+  at IslandDefinitionFactory.ResolveGroups (AuthoringIslands, …)
+```
+
+That is the error you get shown, and it names `HUB` — a vanilla group, no mod anywhere in
+the stack. It is a cascade, and chasing it leads nowhere.
+
+**So search the log for the *first* failure, not the one in the crash dialog.** Grep for
+`Failed to load` and read upward from there; the real stack names the mod and the duplicate
+id. And note the two are far apart in the log, with a whole second init pass between them.
+
+The underlying hazard is worth avoiding in your own mod: `IslandBuilder.BuildAndRegister`
+uses `Dictionary.Add`, not the indexer, so registering the same `IslandDefinitionId` twice
+throws rather than replacing. A builder built once at mod construction and then registered
+into more than one bake is the usual way in.
+
 ## Common symptoms
 
 | Symptom | Likely cause |
@@ -125,6 +157,60 @@ That means references are not resolving — usually `SPZ2_PATH` is unset or wron
 | Machines stop working near your code | you replaced a lane hook instead of chaining it — [read machine state](read-machine-state.md#gotchas) |
 | Framerate collapses | per-frame work over every building — [pacing](run-code-when-game-loads.md#do-not-do-heavy-work-every-tick) |
 | Worked before a game update | your detour target changed — [staying compatible](../hooking.md#staying-compatible) |
+
+## The crash screen, and getting back from it
+
+When anything in a session load or a tick throws past the game's own handlers,
+`GameOrchestrator.HandleFatalException` shows `HUDCrashOverlay` and then awaits
+`TryDisposing()` -> `UnloadCurrentState()`. Two consequences worth knowing before you reach
+for that screen:
+
+- **The session is gone by the time you read the message.** The overlay is shown *before*
+  the teardown, but the teardown does not wait for you. Anything unsaved is already lost, so
+  there is nothing to recover and no point hunting for a save button.
+- **The game never comes back from it.** `GameView` hides the overlay exactly once, in its
+  constructor, which runs at `GameOrchestrator` construction - so once per process.
+
+`HUDCrashOverlay` itself is a plain `MonoBehaviour` with public `Button` fields and a
+non-generic `public void Setup(string, string)`, so it hooks like anything else. Two details
+matter if you extend it:
+
+- `Setup` guards its whole body with `if (CurrentError == null)` and **never clears
+  `CurrentError`**. Vanilla has no reason to - it never returns from a crash - but it means
+  a second crash in the same process silently shows nothing at all unless you null it.
+- `Setup` wires both buttons with `onClick.AddListener` every time it runs a fresh error. If
+  you do clear `CurrentError`, clear those listeners too, or the second crash copies to the
+  clipboard twice and opens two Discord tabs.
+
+**By the time you can read it, the screen is usually dead to input.** Every sub-orchestrator
+owns its own EventSystem - `GameSessionOrchestrator.MainEventSystem`,
+`MainMenuOrchestrator.MainEventSystem`, `IntroOrchestrator.EventSystem` - and releases it when
+disposed. `HandleFatalException` shows the screen and *then* awaits `TryDisposing()`, so the
+EventSystem goes with the session and no button works, Copy to Clipboard and Report on Discord
+included. It is intermittent only because `TryDisposing` swallows what the teardown throws: a
+dispose that fails partway leaves input alive. If you add anything clickable to this screen,
+add an EventSystem with a `StandaloneInputModule` when `EventSystem.current` is null - and keep
+checking, because at the moment the screen goes up the doomed one is still there.
+
+Its buttons are also positioned absolutely, with no layout group. A cloned `RectTransform`
+keeps its template's `anchoredPosition`, so a new button lands exactly on top of the one it was
+copied from and looks like it replaced it. Measure the step between the two existing buttons
+and continue it.
+
+**The way back is `IGameFlowNavigator`.** `GameOrchestrator` implements it directly, so
+`LoadMainMenu()` and `LoadSession(options)` are both available after a crash, and
+`UnloadCurrentState` opens with a null check - calling it again on an already-unloaded state
+is a no-op, not a double teardown. Reaching the orchestrator without a session is the part
+that looks impossible and is not: `GameBootstrapper` is a static class holding a private
+static `GameOrchestrator`, which [the publicizer](../publicizer.md) makes readable.
+
+That same static is the only reliable route to the mod loader when a session never finished
+loading. `GameModdingFramework` is bound in two places - the session container
+(`GameSessionOrchestrator.cs:381`) and the game-level `InitializationDependencyContainer`
+(`ModLoadingBlindStep.cs:30`). Only the second survives a failed session load, and it holds
+the same `ModLoader`.
+
+Mod Reloader puts a **Reload Mods** button on this screen using all of the above.
 
 ## Iterating faster
 

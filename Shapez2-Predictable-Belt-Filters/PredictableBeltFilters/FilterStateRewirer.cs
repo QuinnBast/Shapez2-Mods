@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using ShapezShifter.Hijack;
 using ILogger = Core.Logging.ILogger;
 
-namespace PredictableBeltFilters
+namespace QuinnBast.Shapez2.PredictableBeltFilters
 {
     /// Adds the real-side observer that tells the prediction side where a filter's state lives.
     ///

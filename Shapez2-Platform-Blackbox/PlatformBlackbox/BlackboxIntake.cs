@@ -1,5 +1,7 @@
 using Game.Core.Simulation;
 
+namespace QuinnBast.Shapez2.PlatformBlackbox;
+
 /// <summary>
 /// One lane into a blackbox: an item arrives and becomes stock.
 ///

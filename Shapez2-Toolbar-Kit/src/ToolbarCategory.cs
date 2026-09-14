@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Shapez2.ToolbarKit
+namespace QuinnBast.Shapez2.ToolbarKit
 {
     /// The game's own top-level toolbar categories.
     ///

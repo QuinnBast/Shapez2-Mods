@@ -1,7 +1,7 @@
 using Game.Content.Features.SpacePaths.IslandIO;
 using Game.Core.Coordinates;
 
-namespace TrainCargoTools
+namespace QuinnBast.Shapez2.TrainCargoTools
 {
     /// Lets a dragged cargo belt snap to a belt-tagged *or* a pipe-tagged neighbour.
     ///

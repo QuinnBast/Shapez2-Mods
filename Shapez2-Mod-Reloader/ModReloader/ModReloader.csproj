@@ -4,8 +4,8 @@
         <TargetFramework>netstandard2.1</TargetFramework>
         <Nullable>disable</Nullable>
         <RunPostBuildEvent>Always</RunPostBuildEvent>
-        <LangVersion>9</LangVersion>
-        <RootNamespace>ModReloader</RootNamespace>
+        <LangVersion>10</LangVersion>
+        <RootNamespace>QuinnBast.Shapez2.ModReloader</RootNamespace>
         <!-- MonoMod.Utils ships its own copy of the publicizer attribute -->
         <NoWarn>$(NoWarn);CS0436</NoWarn>
     </PropertyGroup>
@@ -63,6 +63,12 @@
             <HintPath>$(SPZ2_PATH)\Game.Core.Modding.dll</HintPath>
             <Private>False</Private>
         </Reference>
+
+        <!-- IIslandCatalogPair, on the bake method the island dedupe prefixes. -->
+        <Reference Include="Game.Core.Content">
+            <HintPath>$(SPZ2_PATH)\Game.Core.Content.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
         <Reference Include="Core.Localization">
             <HintPath>$(SPZ2_PATH)\Core.Localization.dll</HintPath>
             <Private>False</Private>
@@ -118,6 +124,31 @@
         <!-- GUIUtility.systemCopyBuffer is the only clipboard a Unity player has. -->
         <Reference Include="UnityEngine.IMGUIModule">
             <HintPath>$(SPZ2_PATH)\UnityEngine.IMGUIModule.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+
+        <!--
+            The crash screen's Reload button is a clone of one of the game's own, so it
+            needs Button (UnityEngine.UI) and the TMP_Text on its label. UIModule carries
+            the RectTransform the clone is reparented onto.
+        -->
+        <Reference Include="UnityEngine.UI">
+            <HintPath>$(SPZ2_PATH)\UnityEngine.UI.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="UnityEngine.UIModule">
+            <HintPath>$(SPZ2_PATH)\UnityEngine.UIModule.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="Unity.TextMeshPro">
+            <HintPath>$(SPZ2_PATH)\Unity.TextMeshPro.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+
+        <!-- The pause menu button's hover animation is a DOTween tween, and the clone's has
+             to be killed by hand - nothing disposes a runtime clone. -->
+        <Reference Include="DOTween">
+            <HintPath>$(SPZ2_PATH)\DOTween.dll</HintPath>
             <Private>False</Private>
         </Reference>
 

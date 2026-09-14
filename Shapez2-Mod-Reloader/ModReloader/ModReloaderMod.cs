@@ -6,6 +6,8 @@ using ShapezShifter.Hijack;
 using ShapezShifter.SharpDetour;
 using ILogger = Core.Logging.ILogger;
 
+namespace QuinnBast.Shapez2.ModReloader;
+
 /// <summary>
 /// Mod Reloader — a development tool.
 ///
@@ -28,6 +30,9 @@ public class ModReloaderMod : IMod
     private readonly Seeder Seed;
     private readonly ConsoleTap Tap;
     private readonly StagedBuildWatcher Watcher;
+    private readonly CrashScreenReload CrashScreen;
+    private readonly RegistrationDeduplication Duplicates;
+    private readonly PauseMenuReload PauseMenu;
     private readonly RewirerHandle WatchHandle;
 
     private bool Seeded;
@@ -55,8 +60,22 @@ public class ModReloaderMod : IMod
         // once per session, and the tap has to be in place before the first command runs.
         Tap = new ConsoleTap(logger);
 
+        // Installed whether or not anything is ever reloaded: the stale registrations a
+        // reload leaves behind outlive it, so the session build that trips over them may be
+        // an ordinary load from the main menu much later.
+        Duplicates = new RegistrationDeduplication(logger);
+
         Reloader reloader = new Reloader(logger, Registry, Rewiring, new SessionRecycler(logger, Registry));
         Watcher = new StagedBuildWatcher(logger, reloader, Tap);
+
+        // The crash screen is the one place a reload is worth more than the console, and
+        // the one place the console cannot be opened: by the time it is up the session that
+        // owns the console has already been unloaded.
+        CrashScreen = new CrashScreenReload(logger, reloader, Tap);
+
+        // The same reload as mrl.reload, on the screen you are already looking at when you
+        // tab back in from a rebuild - and the only one that pauses the simulation first.
+        PauseMenu = new PauseMenuReload(logger, reloader, Tap);
 
         // The watcher's file events arrive on a thread pool thread, where nothing may
         // touch Unity. This is the main thread it hands the work over to; it ticks only
@@ -114,6 +133,9 @@ public class ModReloaderMod : IMod
     {
         GameRewirers.RemoveRewirer(CommandsHandle);
         GameRewirers.RemoveRewirer(WatchHandle);
+        Duplicates?.Dispose();
+        PauseMenu?.Dispose();
+        CrashScreen?.Dispose();
         Watcher?.Dispose();
         Tap?.Dispose();
         BuildingModulesHook?.Dispose();

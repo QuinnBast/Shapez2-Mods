@@ -1,5 +1,7 @@
 using System.Text;
 
+namespace QuinnBast.Shapez2.PlatformBlackbox;
+
 /// <summary>
 /// How long a measurement is allowed to take, and how hard it is allowed to work.
 ///

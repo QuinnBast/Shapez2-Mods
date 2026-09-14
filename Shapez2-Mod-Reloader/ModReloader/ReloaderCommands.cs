@@ -4,6 +4,8 @@ using ShapezShifter.Hijack;
 using UnityEngine;
 using ILogger = Core.Logging.ILogger;
 
+namespace QuinnBast.Shapez2.ModReloader;
+
 /// <summary>
 /// Console commands, registered directly as an <see cref="IConsoleRewirer"/> so they keep a
 /// short prefix rather than being named after the assembly.

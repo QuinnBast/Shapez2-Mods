@@ -380,3 +380,42 @@ harder to read.
 > [!TIP]
 > The `prediction-graph` and simulation-LOD debug views (`F1` → debug modes) draw the
 > cluster grid and how many ticks each cluster is behind. Faster than reasoning about it.
+
+## A custom item type can be handed to a vanilla lane, and destroyed
+
+If your island carries an `IBeltItem` the base game does not know about, the connector tags give
+you no protection. `ConnectableIslandSimulation` maps a connector class to an item type with a
+hard `is` test — `SpaceBeltOutputConnector` becomes `ItemOutputChunkConnector<ShapeItem>`, and
+nothing else is reachable — so your output connects to an ordinary space belt exactly as it
+connects to whatever you meant it for. Worse, `FastBeltPathLane.CanAcceptItem` returns `true` for
+anything unless a `PreAcceptHook` is set, and vanilla space paths set none. Your item boards the
+belt, rides away, and is destroyed by the first thing that casts it.
+
+Subclassing the connector does not help: the `is` test still lands on `ShapeItem`, and
+`IsCompatibleConnector` on both sides is `other is SpaceBeltInputConnector`. If a vanilla building
+you *do* want to reach presents that same connector class — a train station, say — then no
+type-level rule can separate the two.
+
+Refuse the hand-over instead. A lane asks `NextLane.CanAcceptItem` before passing anything on, so
+a receiver that answers no leaves the item where it is and the line backs up, which is the game's
+own "this does not work" signal.
+
+Two things make that practical:
+
+- **Subclass the lane, overriding nothing.** Your lanes and vanilla's are the same class, so there
+  is no question a sender can ask about the receiver. An empty subclass cannot change dispatch and
+  gives you a type test.
+- **Wrap `IItemProviderBundle.NextBundle`.** `ItemOutputChunkConnector.TryConnect` only ever
+  assigns that one property, so returning a wrapper from `GetItemProviderBundle` catches every
+  downstream the island can acquire. Have the wrapper's `GetReceiver` hand back a small
+  `IItemReceiver` that answers `false` for your item when the real receiver cannot hold it.
+
+> [!WARNING]
+> **Do not stop at a `DummyLane`.** It is tempting to treat one as "a machine, therefore fine" —
+> stations and most custom machines put one in front of their real receiver. But
+> `NotchInputAdapterSimulation`, which is the platform belt port, is also twelve `DummyLane`s. A
+> DummyLane holds nothing and forwards, so follow `NextLane` until you reach something that is not
+> one, and decide there. Bound the walk; a cycle would hang the simulation rather than fail.
+
+Cache the per-lane wrapper. `ItemLaneBundle.NextBundle`'s setter calls `GetReceiver` once for each
+of the twelve lanes, and the receiver is then held for the life of the connection.

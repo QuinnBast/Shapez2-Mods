@@ -4,7 +4,7 @@ using Game.Core.Trains;
 using ShapezShifter.Kit;
 using UnityEngine;
 
-namespace TrainCargoTools
+namespace QuinnBast.Shapez2.TrainCargoTools
 {
     /// Draws a cargo package using the game's own package drawers.
     ///

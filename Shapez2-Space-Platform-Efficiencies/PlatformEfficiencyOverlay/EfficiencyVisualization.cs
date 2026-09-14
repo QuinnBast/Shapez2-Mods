@@ -1,6 +1,8 @@
 using Core.Localization;
 using UnityEngine;
 
+namespace QuinnBast.Shapez2.PlatformEfficiencyOverlay;
+
 /// <summary>
 /// Puts the overlay in the bottom-right visualization bar next to the island grid and
 /// super chunk coordinates, instead of on a hotkey nobody can discover.

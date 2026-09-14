@@ -3,6 +3,8 @@ using Game.Content.Features.Fluids;
 using Game.Core.Coordinates;
 using Game.Core.Map.Simulation;
 
+namespace QuinnBast.Shapez2.PlatformBlackbox;
+
 /// <summary>
 /// What to feed each of a sandbox's inputs, keyed by the tile the port building sits on.
 ///

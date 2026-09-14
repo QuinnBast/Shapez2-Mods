@@ -7,8 +7,8 @@
         <TargetFramework>netstandard2.1</TargetFramework>
         <Nullable>disable</Nullable>
         <RunPostBuildEvent>Always</RunPostBuildEvent>
-        <LangVersion>9</LangVersion>
-        <RootNamespace>PlatformBlackbox</RootNamespace>
+        <LangVersion>10</LangVersion>
+        <RootNamespace>QuinnBast.Shapez2.PlatformBlackbox</RootNamespace>
         <!-- MonoMod.Utils ships its own copy of the publicizer attribute -->
         <NoWarn>$(NoWarn);CS0436</NoWarn>
     </PropertyGroup>

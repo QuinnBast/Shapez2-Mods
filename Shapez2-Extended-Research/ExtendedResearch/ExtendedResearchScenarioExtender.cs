@@ -5,6 +5,8 @@ using Game.Core.Research;
 using ShapezShifter.Hijack;
 using ILogger = Core.Logging.ILogger;
 
+namespace QuinnBast.Shapez2.ExtendedResearch;
+
 /// <summary>
 /// The one hook the mod needs.
 ///

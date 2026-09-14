@@ -14,6 +14,7 @@ from `shapez2-modding-docs/` in this repository.
 | [Shapez2-Crossover-Platforms](Shapez2-Crossover-Platforms/) | **Crossover Platforms** — space paths that cross without mixing, placed automatically instead of lift detours |
 | [Shapez2-Platform-Blackbox](Shapez2-Platform-Blackbox/) | **Platform Blackbox** — collapse a selection of platforms into one stand-in that does the same job |
 | [Shapez2-Extended-Research](Shapez2-Extended-Research/) | **Extended Research** — extra research tiers and layer unlocks |
+| [Shapez2-Extra-Shape-Parts](Shapez2-Extra-Shape-Parts/) | **Extra Shape Parts** — new shape quadrant types beyond circle, square, windmill and star, generated onto the map |
 | [Shapez2-Train-Cargo-Tools](Shapez2-Train-Cargo-Tools/) | **Train Cargo Tools** — cargo belts for moving train containers between platforms |
 | [Shapez2-Mod-Reloader](Shapez2-Mod-Reloader/) | **Mod Reloader** — development tool. Rebuild a mod and reload it without restarting the game |
 | [Shapez2-Toolbar-Kit](Shapez2-Toolbar-Kit/) | Shared source for name-based toolbar placement, imported by the mods rather than shipped as its own assembly |

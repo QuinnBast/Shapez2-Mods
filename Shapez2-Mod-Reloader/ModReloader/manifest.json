@@ -1,5 +1,5 @@
 {
-  "Version": "0.1.0",
+  "Version": "0.2.0",
   "Title": "Mod Reloader (dev tool)",
   "Description": "Reloads another mod's assembly in place, so iterating does not need a game restart",
   "Author": "Quinn Bast",

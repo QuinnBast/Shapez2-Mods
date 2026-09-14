@@ -4,6 +4,8 @@ using System.Text;
 using Game.Content.Features.Fluids;
 using Game.Core.Serialization;
 
+namespace QuinnBast.Shapez2.PlatformBlackbox;
+
 /// <summary>
 /// What a blackbox is currently holding, and everything it has ever been handed.
 ///

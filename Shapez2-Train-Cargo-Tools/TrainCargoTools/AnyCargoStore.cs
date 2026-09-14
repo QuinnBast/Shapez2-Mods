@@ -6,7 +6,7 @@ using Game.Core.Serialization;
 using Game.Core.Simulation;
 using Game.Core.Trains;
 
-namespace TrainCargoTools
+namespace QuinnBast.Shapez2.TrainCargoTools
 {
     /// One cargo store for either kind of cargo.
     ///

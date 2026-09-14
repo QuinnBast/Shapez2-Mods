@@ -5,7 +5,7 @@ using Game.Core.Serialization;
 using Game.Core.Simulation;
 using Game.Core.Trains;
 
-namespace TrainCargoTools
+namespace QuinnBast.Shapez2.TrainCargoTools
 {
     /// One 12-lane bundle, saved.
     ///

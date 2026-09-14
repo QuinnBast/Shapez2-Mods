@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace Shapez2.ToolbarKit
+namespace QuinnBast.Shapez2.ToolbarKit
 {
     /// What a toolbar element is, without needing to know the element classes.
     public enum ToolbarNodeKind

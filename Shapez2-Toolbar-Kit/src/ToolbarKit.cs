@@ -1,6 +1,6 @@
 using ILogger = Core.Logging.ILogger;
 
-namespace Shapez2.ToolbarKit
+namespace QuinnBast.Shapez2.ToolbarKit
 {
     /// Shared settings for the toolbar kit.
     ///

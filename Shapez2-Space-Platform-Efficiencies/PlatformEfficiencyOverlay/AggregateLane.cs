@@ -1,6 +1,8 @@
 ﻿using Game.Core.Map.Simulation;
 using Game.Core.Simulation;
 
+namespace QuinnBast.Shapez2.PlatformEfficiencyOverlay;
+
 /// <summary>
 /// A stand-in lane that drives the game's efficiency gauge from a rate we measured.
 ///

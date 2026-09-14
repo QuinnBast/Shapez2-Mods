@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using Game.Core.Coordinates;
 
-namespace PredictableBeltFilters
+namespace QuinnBast.Shapez2.PredictableBeltFilters
 {
     /// Maps a belt filter's tile to the state container the *real* simulation uses.
     ///

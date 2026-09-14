@@ -2,7 +2,7 @@ using JetBrains.Annotations;
 using ShapezShifter.Hijack;
 using ILogger = Core.Logging.ILogger;
 
-namespace PredictableBeltFilters
+namespace QuinnBast.Shapez2.PredictableBeltFilters
 {
     /// <summary>
     /// Predictable Belt Filters.

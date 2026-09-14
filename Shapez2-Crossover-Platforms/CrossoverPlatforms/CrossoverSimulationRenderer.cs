@@ -10,7 +10,7 @@ using Game.Core.Simulation;
 using JetBrains.Annotations;
 using Unity.Mathematics;
 
-namespace CrossoverPlatforms
+namespace QuinnBast.Shapez2.CrossoverPlatforms
 {
     /// Draws the shapes and fluid packages travelling across a crossing.
     ///

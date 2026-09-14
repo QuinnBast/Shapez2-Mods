@@ -1,6 +1,8 @@
 ﻿using System.Collections.Generic;
 using Core.Localization;
 
+namespace QuinnBast.Shapez2.PlatformEfficiencyOverlay;
+
 /// <summary>
 /// The two side panel modules that make up the history view - a range selector and the
 /// chart - built the same way whether the subject is one machine or a whole platform.

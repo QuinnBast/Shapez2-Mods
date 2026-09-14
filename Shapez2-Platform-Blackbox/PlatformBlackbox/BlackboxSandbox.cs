@@ -12,6 +12,8 @@ using Game.Core.Simulation;
 using Game.Orchestration;
 using ILogger = Core.Logging.ILogger;
 
+namespace QuinnBast.Shapez2.PlatformBlackbox;
+
 /// <summary>
 /// A private world holding a copy of a selection, simulated on its own.
 ///

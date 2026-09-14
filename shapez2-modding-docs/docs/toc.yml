@@ -11,10 +11,14 @@
       href: howto/add-a-building.md
     - name: Add an island or platform
       href: howto/add-an-island.md
+    - name: Add a shape part
+      href: howto/add-a-shape-part.md
     - name: Add to the toolbar
       href: howto/add-to-toolbar.md
     - name: Add a research unlock
       href: howto/add-research-unlock.md
+    - name: Add a wiki entry
+      href: howto/add-a-wiki-entry.md
     - name: Add translations
       href: howto/add-translations.md
     - name: Load models and icons

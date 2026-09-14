@@ -57,6 +57,109 @@ unavailable.
 The name matches loosely against the mod's title and folder, and refuses ambiguous matches
 so a typo cannot reload the wrong thing. The loop becomes:
 
+## From the pause menu
+
+`mrl.reload` also has a button. **Reload Mods** sits under Save in the pause menu and does
+exactly what the command does - save, swap every staged build, re-enter the save - without
+opening the console or typing a mod name.
+
+It reloads everything in `mods-dev` rather than asking which mod, the same as `mrl.watch`
+does, because a solution-wide build stages them all at the same moment and a batch costs one
+save and one session rebuild however many mods it covers. Anything staged that is not a
+running mod costs a line in the report.
+
+The report goes to `Player.log` and stays on `mrl.copy`. A notification confirms the reload
+started, though it will not usually outlive the session rebuild that follows it - the case
+where you *do* see it is the one worth seeing, a reload that declined to rebuild because a
+mod was refused or the save failed.
+
+## After a crash
+
+When a mod throws hard enough to reach the game's crash screen, there is no console to type
+into - the session that owned it has already been unloaded by the time the screen appears.
+So the reload goes on the screen itself, as a third button beside Copy to Clipboard and
+Report on Discord:
+
+**Reload Mods** swaps every staged build in `mods-dev` and returns to the main menu. Re-enter
+your save from there and the session is built by the new code.
+
+It cannot save anything. `GameOrchestrator.HandleFatalException` shows the screen and then
+unloads the session without waiting, so everything since your last save is gone before you
+read the message - this is a faster way back to a working game, not a rescue. The main menu
+rather than your save is deliberate too: a mod that throws while a session is *loading* would
+otherwise be re-entered straight back into the same crash.
+
+The button reloads everything staged rather than asking for a name, because there is nowhere
+to type one. Anything in `mods-dev` that is not a running mod costs a line in the report;
+Mod Reloader refuses to reload itself, so a staged build of *this* mod still needs a restart.
+The report goes to `Player.log` and stays on `mrl.copy`.
+
+## Islands, and why they used to break a reload
+
+Islands are registered from a mod's constructor as `GameScenarioIslandExtender`s. A session
+build consumes each one - removing it from Shifter's rewirer list and replacing it with an
+`IslandsExtender`, which is what actually calls `IslandBuilder.BuildAndRegister`.
+
+The scenario extenders balance exactly. The islands extenders do not: over one session of
+reloading, 94 added against 61 removed. The residue builds up a generation at a time, and the
+moment two of them carry the same island id the next session build calls
+`gameIslands.DefinitionsById.Add` twice and the savegame load dies:
+
+```
+An item with the same key has already been added. Key: CargoStore
+  at ShapezShifter.Flow.IslandBuilder.BuildAndRegister (...)
+  at ShapezShifter.Flow.Atomic.IslandsExtender.ModifyGameIslands (...)
+```
+
+`IslandDeduplication` prefixes `IslandDefinitionFactory.BakeMetadataIntoRuntime` - the method
+Shifter's own islands interceptor postfixes - so it runs immediately before the extenders do,
+and drops every registration but the newest for each island id. Newest wins because it belongs
+to the most recently loaded assembly, which is what reloading a mod asks for.
+
+It is installed whether or not anything is ever reloaded, and that is the point: **the residue
+outlives the reload that created it.** Once the list is poisoned, an ordinary load from the
+main menu is enough to hit it, with no reload anywhere near. Cleaning up only at reload time
+would have left that case broken.
+
+Your save is never at risk either way - the reload writes it before anything is swapped.
+
+## MonoBehaviours cannot be rebuilt by a reload
+
+A rebuilt assembly is loaded from bytes, because a reload has to bind by assembly identity
+rather than by path. One consequence is already known - `ModDirectoryLocator` throws on a
+reloaded mod, since a byte-loaded assembly has an empty `Location`. Here is another:
+
+**`AddComponent<T>()` returns null for a MonoBehaviour whose type comes from a byte-loaded
+assembly.** Not an exception - null. So this works on the first launch and fails on every
+reload after it:
+
+```csharp
+DebugPanel panel = host.AddComponent<DebugPanel>();
+panel.Feed = feed;   // NullReferenceException, second generation onwards
+```
+
+Thrown from a mod constructor, that is fatal to the whole mod: the reloader disposes the old
+entry point before constructing the new one, so a throw here leaves nothing running and takes
+every console command with it.
+
+```
+the new entry point threw while constructing - see the log. That mod is now not running.
+```
+
+Two rules follow, and Mod Profiler learned both the hard way:
+
+- **Check the result of `AddComponent`** and carry on without whatever it was for.
+- **Register console commands before anything that can fail.** They are what you need in order
+  to diagnose the failure, and they cost nothing to set up.
+
+The component itself needs a game restart to come back, which puts MonoBehaviours in the same
+category as islands and toolbar entries: reloadable code, but not reloadable *content*.
+
+Anything the old instance created and the new one cannot recreate is also worth re-pointing
+rather than leaving alone. A cloned button left over from a previous generation still has its
+`onClick` wired to that generation's objects, which were destroyed with it - so it sits in the
+UI looking perfectly normal and does nothing at all.
+
 ## Setting up a mod for reloading
 
 The installed copy of a mod is memory-mapped the moment the game loads it, so a normal

@@ -87,9 +87,54 @@ key follows whatever id you registered.
 
 ## Markup
 
-Descriptions accept the game's inline tags — `<gl>…</gl>` in the sample highlights a
-term. Copy the tags vanilla uses for the same kind of emphasis rather than inventing
-formatting.
+Translation text is parsed as extended XML by `TranslationExtendedXMLParser`, and the
+tag table is `TagMatch` in `Core.Localization`. These are the tags it accepts:
+
+| Tag | Renders as | Wraps text? |
+| --- | --- | --- |
+| `<gl>…</gl>` | a **glossary term** — bold, orange `#ff9e16`, on a dark chip; not clickable | yes |
+| `<gll:EntryId>…</gll>` | a **glossary link** — the same orange, underlined, navigating to that wiki entry | yes |
+| `<b>…</b>` | bold | yes |
+| `<info>…</info>` | secondary text — italic, `#ffffff55` | yes |
+| `<unit>…</unit>` | unit styling — 65% size, dimmed, letter-spaced | yes |
+| `<link:Id>…</link>` | a blue underlined link, resolved against a `MetaWikiEntryContentTextWithLinksData`'s `Links`, else treated as a glossary link | yes |
+| `<hotkey:Action/>` | a key chip | no |
+| `<icon:IconId/>` | an inline icon | no |
+| `<copy-from:other.key/>` | the text of another translation entry, inlined | no |
+| `<wip-warning/>` | the work-in-progress warning | no |
+
+**The separator is a colon, not an equals sign.**
+`TranslationExtendedXMLParser.ParseTagData` is `inTag.Split(':')`, so it is
+`<gll:MyMod_Cutter>`, never `<gll="MyMod_Cutter">`. This is the single easiest thing to
+get wrong, because every other markup dialect uses `=`.
+
+```json
+"my-mod.wiki.cutter.what":
+  "Cuts a shape in half. Feed the halves to a <gll:MyMod_Stacker>Stacker</gll> to make a <gl>compound shape</gl>."
+```
+
+A `<gll:…>` target is a **wiki entry id**. `HUDWikiContentRenderer.OnLinkClicked` prefixes
+it with `glossary.` and navigates there; an id that does not exist plays an error sound
+rather than doing nothing visible. Plain `MetaWikiEntryContentTextData` blocks handle
+these links too, so you only need the with-links variant for external URLs.
+
+`<copy-from:…/>` is worth knowing before you duplicate a string: it inlines another
+entry's text, so a shared phrase lives in one place. The game leans on it heavily — 336
+uses, against 1,700 for `<gl>` and 882 for `<b>`. It resolves against the raw entries and
+throws `Copy-from tag key not found` on a key that does not exist.
+
+Anything the table does not list is treated as a **placeholder** and must self-close —
+that is what makes `<layer/>` work, and why a mistyped `<layer>` is an unclosed tag
+rather than an unknown one.
+
+### Check the markup before shipping
+
+A malformed tag is not cosmetic. `TranslationExtendedXMLParser` throws
+`XML Tag not properly closed`, the file fails to load, and the mod is aborted. Nothing in
+the build catches it, and the game will not tell you which string was at fault.
+`Shapez2-Train-Cargo-Tools/Tools/check_translations.py` is a standalone checker that
+walks the file with the same rules — tag names, whether each expects `:data`, whether it
+wraps children, and whether a `<gll:…>` target is an entry the mod actually defines.
 
 ## Placeholders: bind values with `RawText`, never `.T()`
 

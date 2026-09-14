@@ -8,6 +8,8 @@ using Game.Core.Modding;
 using ILogger = Core.Logging.ILogger;
 using PrefixedLogger = Core.Logging.PrefixedLogger;
 
+namespace QuinnBast.Shapez2.ModReloader;
+
 /// <summary>
 /// Swaps a mod's running code for a freshly built assembly and rebuilds the game session
 /// around it, without restarting the game.

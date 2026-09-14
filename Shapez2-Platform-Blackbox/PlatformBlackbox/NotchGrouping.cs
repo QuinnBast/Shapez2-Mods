@@ -2,6 +2,8 @@ using System.Collections.Generic;
 using System.Text;
 using Game.Core.Coordinates;
 
+namespace QuinnBast.Shapez2.PlatformBlackbox;
+
 /// <summary>
 /// Groups a selection's boundary ports into the notches they sit in.
 ///

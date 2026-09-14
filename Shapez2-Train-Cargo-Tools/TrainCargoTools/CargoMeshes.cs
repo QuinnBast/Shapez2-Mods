@@ -4,7 +4,7 @@ using ShapezShifter.Kit;
 using UnityEngine;
 using ILogger = Core.Logging.ILogger;
 
-namespace TrainCargoTools
+namespace QuinnBast.Shapez2.TrainCargoTools
 {
     /// The six machine meshes, loaded from Resources/*.obj once and kept for the process.
     ///

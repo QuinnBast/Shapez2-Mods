@@ -4,7 +4,7 @@ using Core.Localization;
 using Game.Core.Coordinates;
 using UnityEngine;
 
-namespace TrainCargoTools
+namespace QuinnBast.Shapez2.TrainCargoTools
 {
     /// What the side panel needs to know about a store, without knowing which store it is.
     ///

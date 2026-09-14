@@ -141,8 +141,36 @@ Two details that bite if you try to re-stage those meshes through the modular dr
 anyway: `SpacePathPlatformDrawer` drops its mesh **2.07314 world units** and submits to
 `Renderers.SpacePaths`, while `ModularIslandMeshDrawer` does neither — and
 `LocalChunkTransform.Position` is an integer `ChunkVector`, so that sub-chunk drop cannot
-be expressed there at all. For a modded space-path-like island, write an
+be expressed there at all. For a modded space-path-like island, use an
 `IIslandPlatformDrawer` instead.
+
+**Usually without writing one.** `SpacePathPlatformDrawer` is public and constructible, so
+an island that is a straight belt or a single turn just takes vanilla's drawer over
+vanilla's track and comes out identical to the segment beside it. You only need your own
+drawer for a shape the enum has no entry for — a crossing, say. And you do not have to
+hardcode which entry: `PlatformPathDrawingClassifier.TryClassifySpacePathNode` derives the
+`PathNodeClassification` from the island's own `IIslandConnectorData`, so West-in-East-out
+classifies as `Forward` and the turns follow, and it keeps up if a connector ever moves.
+
+```csharp
+definition.CustomData.TryGet(out IIslandConnectorData connectors);
+PlatformPathDrawingClassifier.TryClassifySpacePathNode(connectors, out var classification);
+drawers[id] = new SpacePathPlatformDrawer(
+    orchestrator.Theme.BaseResources.SpaceBelts, classification);
+```
+
+The connectors have to be `ISpacePathInputConnector` / `ISpacePathOutputConnector` for the
+classifier to see them, which all four of `SpaceBeltInput/OutputConnector` and
+`SpacePipeInput/OutputConnector` are.
+
+> [!WARNING]
+> **Turn the platform frame off as well, or you get both.** `CustomPlatformsDrawer` is
+> *additive* — it does not replace the standard deck, it draws alongside it. An island
+> built with `WithRenderingOptions(new HomogeneousChunkDrawing(
+> ChunkPlatformDrawingContext.DrawAll()), drawPlayingField: true)` and then given a path
+> drawer renders a full platform deck floating above its own track, which no vanilla space
+> belt has. Path-like islands want `ChunkPlatformDrawingContext.DrawNothing()` and
+> `drawPlayingField: false`.
 
 ### Registering a platform drawer
 
@@ -168,6 +196,88 @@ Use the indexer, not `Add` — the vanilla loops use `Add`, and a duplicate key 
 the whole session's drawer setup down. Implement `DrawOverview` too, or your island
 disappears on the zoomed-out map while everything around it stays.
 
+This hook is also, in practice, the earliest point a mod holds both a `GameIslands` and a
+`Theme`. If you need either later — to read a material, or to dump one for inspection —
+keep the reference as it goes past. `IGameSessionManagers`, what `GameHelper.Core` returns,
+exposes the player, mode, registries and viewport but neither the session nor the theme,
+so there is no second way to ask.
+
+### Putting your own mesh on an ordinary island
+
+`ModularIslandMeshDrawer` is registered unconditionally in `CreateMapSubDrawers` and draws
+whatever definitions carry its `Data`, so for a normal island there is no hook at all —
+attach and you are done. Two things are not obvious:
+
+- **`Data` must be attached to the concrete `IslandDefinition`.** `IEntityDefinition`
+  exposes `CustomData` only as `ICustomDataReader`, so `GameIslands.TryGetDefinition` hands
+  back something you cannot attach to; cast. Use `AttachOrReplace` rather than `Attach` —
+  definitions and this hook both run per session, and `Attach` on an already-attached type
+  is how re-entering a session becomes a crash.
+- **`ILODMeshMaterial` has no runtime-constructible implementation.** `Module` wants one,
+  and the only one the game ships is `LODMeshMaterialAsset`, a `ScriptableObject` authored
+  in the editor. The interface is public and has three members, so implement it yourself,
+  pairing your `LOD6Mesh` with `Theme.BaseResources.IslandMaterial` — taking the material
+  from the theme rather than shipping one means your island follows whatever theme the
+  player is using.
+
+`LocalChunkTransform.Identity` is the right transform for a single-chunk island whose mesh
+is authored centred on its chunk: `Module.Transform` is multiplied by the island transform,
+so identity means one mesh serves all four rotations.
+
+> [!WARNING]
+> **`ModularIslandMeshDrawer.Data` cannot vary per instance.** It is CustomData on the
+> *definition*, so every island of that type on the map shares one copy. If you want a
+> machine to show what it is holding — a buffer's fill level, a hopper's contents — that
+> has to come from a simulation renderer instead, which is handed the entity, and so the
+> state, every frame.
+
+> [!WARNING]
+> **Per-instance data on a material that does not declare it makes the mesh disappear.**
+> It is not ignored. `AddWithPerInstanceData` builds a separate
+> `InstancedMeshRendererWithPerInstanceData<T>` batch, and a shader with no matching buffer
+> draws nothing at all — so a speculative tint does not degrade to "no visible change", it
+> deletes the geometry.
+>
+> Materials differ *within one object*. Feeding `TextureIndexPerInstanceData` to a space
+> path's meshes recolours the trim and the direction arrows, which sample the accent
+> palette, and erases the deck plane, which does not — leaving a belt as a pair of floating
+> edges. `ISpacePathResources.StandardPlaneMaterial` is the discriminator, and it is the
+> same one vanilla uses to swap in the blueprint material, which is a hint that the plane is
+> a different shader.
+>
+> So: test per-instance data one material at a time, and keep the ones that fail on the
+> plain `Add` path.
+
+### Getting a valid colour onto a mod's own mesh
+
+Colour is an atlas lookup through UV0 (see
+[Load models and icons](howto/load-models-and-icons.md)), and the atlas cannot be read
+statically — so a hand-picked UV is a guess, and a wrong guess is usually a lurid one.
+
+There is a way to stop guessing: **take the coordinate off a vanilla mesh the game draws
+with the same material.** `CargoExchangerDrawer` draws
+`Theme.BaseResources.Trains.Cargo.ShapeCargoPackage` with
+`Theme.BaseResources.IslandMaterial`, so whatever UV that mesh carries is by construction a
+coordinate that lands on a sensible island colour.
+
+```csharp
+asset.TryGet(0, out IMeshReference reference);
+Mesh mesh = reference.GetMeshInternal();
+if (mesh != null && mesh.isReadable)
+{
+    Vector2[] uvs = mesh.uv;   // rank by how many vertices share a value
+}
+```
+
+Author your own mesh with a per-role sentinel UV, then rewrite the sentinels to sampled
+values at load. Rank candidates by how many vertices share a coordinate — a decent proxy for
+"the main colour of this object" — and take a mesh's *second* most common coordinate when a
+part needs to differ from its neighbour, so the two shades still belong together.
+
+`mesh.isReadable` is the catch: a mesh shipped in a build usually has no CPU-side copy, so
+`mesh.uv` is unavailable and this returns nothing. `mesh.bounds` is metadata and works
+regardless, which is enough to scale a borrowed mesh to fit.
+
 ## Simulation renderers register themselves
 
 Anything travelling *through* a machine — items on a belt, fluid in a pipe — is drawn by
@@ -179,6 +289,40 @@ Type[] second = (from type in GetAllLoadableTypes()
           && !type.IsAbstract && !type.IsInterface
     select type).ToArray();
 ```
+
+### Drawing train cargo: use the game's drawers, not its meshes
+
+If you draw a cargo package, do **not** draw `Trains.Cargo.ShapeCargoPackage` or
+`FluidCargoPackage` as a mesh. A fluid package is three meshes, and that one is the empty
+shell — no colour, no lid, see-through. `FluidCargoContainerDrawer` also draws
+`FluidInsideCargoCrate` through `Renderers.FluidsContainer` (which is what applies the
+fluid's own colour, from `IFluidRegistry.GetFluidReference`) and
+`FluidCargoContainerGlassLid` with `BuildingsGlassMaterial`. `ShapeCargoContainerDrawer`
+likewise draws the contained shape above the crate.
+
+Both are constructible, and `ICargoContainerDrawer<TItem>.Draw` takes a `Matrix4x4` — so a
+mod can place a complete, correctly-coloured package anywhere:
+
+```csharp
+ICargoContainerDrawer<ShapeId> drawer = new ShapeCargoContainerDrawer(shapeRegistry);
+drawer.Draw(options, in package, Matrix4x4.TRS(pos, rot, Vector3.one * scale), flipped: false);
+```
+
+Scale it down from `mesh.bounds` if it is not going on a train — the packages are authored
+wagon-sized, roughly a chunk wide.
+
+> [!WARNING]
+> `CreateSimulationRenderers` binds `IShapeRegistry` into its container but **not**
+> `IFluidRegistry`. Asking for the fluid registry in a renderer's constructor fails to
+> construct it — and because every renderer is built in one pass, that takes out every
+> other mod's renderers too. Resolve it lazily from `GameHelper.Core` instead.
+
+Two consequences worth knowing before you write one. Renderers are keyed by **simulation
+type**, so one renderer covers every island sharing that simulation — and an `abstract` or
+open generic renderer is skipped, so a generic base needs a concrete subclass per closed
+type. And the publicizer turns `ShouldDraw` and `OnDrawDynamic` public, so they must be
+overridden as `public override`, not `protected override`, despite what the decompiled
+source shows.
 
 `GetAllLoadableTypes()` is `AppDomain.CurrentDomain.GetAssemblies()`, so it reaches a mod
 assembly as readily as the game's own, and each type is built through a dependency

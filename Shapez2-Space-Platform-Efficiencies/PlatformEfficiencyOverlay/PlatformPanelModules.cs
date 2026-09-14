@@ -3,6 +3,8 @@ using System.Linq;
 using Game.Core.Research;
 using ShapezShifter.Hijack;
 
+namespace QuinnBast.Shapez2.PlatformEfficiencyOverlay;
+
 /// <summary>
 /// Puts the platform's measured numbers into its side panel, so selecting a platform
 /// answers "how much is this actually shipping" without hunting for a belt reader.

@@ -6,6 +6,8 @@ using Game.Core.Rendering.Culling;
 using Unity.Mathematics;
 using UnityEngine;
 
+namespace QuinnBast.Shapez2.PlatformEfficiencyOverlay;
+
 /// <summary>
 /// Paints the measured throughput into the world: a colour wash over every machine and
 /// belt telling you whether it is flowing, starved or jammed, and the actual items per

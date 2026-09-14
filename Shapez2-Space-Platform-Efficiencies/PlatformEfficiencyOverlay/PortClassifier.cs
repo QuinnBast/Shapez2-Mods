@@ -2,6 +2,8 @@ using Game.Core.Coordinates;
 using Game.Core.Map.Simulation;
 using Game.Core.Simulation;
 
+namespace QuinnBast.Shapez2.PlatformEfficiencyOverlay;
+
 /// <summary>How a boundary port relates to the platform it is on.</summary>
 public enum PortKind
 {

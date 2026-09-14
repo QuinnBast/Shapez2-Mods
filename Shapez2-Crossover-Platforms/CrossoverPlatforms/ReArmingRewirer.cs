@@ -1,7 +1,7 @@
 using System;
 using ShapezShifter.Hijack;
 
-namespace CrossoverPlatforms
+namespace QuinnBast.Shapez2.CrossoverPlatforms
 {
     /// Keeps a hand-registered rewirer armed for every scenario load, and can be switched off.
     ///

@@ -10,6 +10,8 @@ using Game.Core.Map.Simulation;
 using Game.Core.Simulation;
 using Unity.Mathematics;
 
+namespace QuinnBast.Shapez2.PlatformEfficiencyOverlay;
+
 /// <summary>
 /// Watches every item-moving simulation on the map and measures what actually flows
 /// through it, so the overlay can show real rates instead of guesses.

@@ -6,7 +6,7 @@ using Game.Content.Features.SpacePaths;
 using Game.Core.Simulation;
 using Game.Core.Trains;
 
-namespace TrainCargoTools
+namespace QuinnBast.Shapez2.TrainCargoTools
 {
     /// Holds cargo packages so a line does not stall when the thing at the end of it does.
     ///

@@ -4,7 +4,7 @@
     "publishedfileid" "3799444346"
     "contentfolder" "${CONTENT_PATH}"
     "previewfile" "${PREVIEW_IMG}"
-    "visibility" "2"
+    "visibility" "0"
     "title" "Crossover Platforms"
     "description" "[h1]Crossover Platforms[/h1]
 Because I was annoyed with making elevators to go around platforms.
@@ -33,4 +33,5 @@ These platforms use the game's default platform and pipe transfer speeds.
 
 Bugs and requests: https://github.com/QuinnBast/Shapez2-Mods/issues
 Licensed under Apache 2.0."
+    "changenote" "Fixes the mod not appearing at all for players who have the prediction setting turned off."
 }

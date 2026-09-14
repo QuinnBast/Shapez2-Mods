@@ -14,7 +14,7 @@ using UnityEngine;
 // into the renderer container, so reading it off the frame is the only way in.
 #pragma warning disable CS0618
 
-namespace TrainCargoTools
+namespace QuinnBast.Shapez2.TrainCargoTools
 {
     /// Draws the packages travelling along a cargo belt.
     ///
@@ -108,12 +108,13 @@ namespace TrainCargoTools
                 // slot, so neighbours meet rather than intersect.
                 float along = CargoLanes.SlotSpacing_W * 0.97f;
 
-                // Height capped to what one tier of track has room for, so a container always
-                // reads longer than it is tall and never reaches the deck above it. The fit is
-                // otherwise driven by the mesh's *horizontal* extent, and a package that happens
-                // to be authored roughly cubic would come out as a tower.
+                // Width capped so three files fit abreast on one deck. Nothing caps the height
+                // any more - there is no tier above to reach - and nothing needs to: the across
+                // limit binds first for any crate squarer than its slot, which is the only way a
+                // package could have come out as a tower.
                 Packages = new CargoPackageMeshes(
-                    options.Theme.BaseResources.Trains?.Cargo, along, CargoLanes.MaxHeight_W);
+                    options.Theme.BaseResources.Trains?.Cargo, along,
+                    maxHeight: 0f, maxAcross: CargoLanes.MaxAcross_W);
                 PackagesResolved = true;
             }
 
@@ -189,20 +190,17 @@ namespace TrainCargoTools
                         continue;
                     }
 
-                    // Dead centre. Vanilla fans four lanes out by TrackItemsSpacing and offsets
-                    // layers sideways as well; a cargo belt has one file per layer and stacks
-                    // the layers vertically instead, each riding its own tier of track, so there
-                    // is nothing left to spread across.
-                    float across = 0f;
+                    // One file per layer, the three of them abreast across the deck. This is
+                    // vanilla's own arrangement with the lane term dropped - see
+                    // CargoLanes.Across_W - and it replaces three stacked tiers, which put the
+                    // top deck in front of the other two from the game's camera angle.
+                    float across = CargoLanes.Across_W(layer);
 
-                    // The tier's deck, plus half a container so it sits *on* the deck rather
-                    // than half through it - the package mesh is authored centred, as the store
-                    // found too.
-                    //
-                    // `CargoLanes.LayerSpacing_W`, not the theme's LayerOffset: see the note
-                    // there. Freight this size at shape spacing overlaps into a single smear.
+                    // The deck, plus half a container so it sits *on* it rather than half
+                    // through - the package mesh is authored centred, as the store found too.
+                    // All three layers share the one height now.
                     WorldVector up = new(0f, 0f,
-                        CargoLanes.LayerHeight_W(config, layer) - Packages.Bottom);
+                        CargoLanes.DeckHeight_W(config) - Packages.Bottom);
 
                     WorldCoordinate from = entry + across * inLateral + up;
                     WorldCoordinate to = exit + across * outLateral + up;

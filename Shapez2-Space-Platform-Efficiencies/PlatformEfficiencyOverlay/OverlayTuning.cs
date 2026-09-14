@@ -1,3 +1,5 @@
+
+namespace QuinnBast.Shapez2.PlatformEfficiencyOverlay;
 ﻿/// <summary>
 /// The handful of numbers that can only really be judged with the game in front of you.
 /// They live here rather than as constants so the debug console can change them at runtime -

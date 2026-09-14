@@ -5,6 +5,8 @@ using Game.Content.Features.Fluids;
 using Game.Core.Serialization;
 using Game.Core.Simulation;
 
+namespace QuinnBast.Shapez2.PlatformBlackbox;
+
 /// <summary>
 /// What a blackbox needs in order to stand in for a factory: what one cycle consumes, what it
 /// produces, and how many cycles a minute holds.

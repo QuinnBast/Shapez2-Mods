@@ -8,6 +8,8 @@ using Game.Content.SpacePorts.Prediction;
 using Game.Core.Coordinates;
 using Game.Core.Map.Simulation;
 
+namespace QuinnBast.Shapez2.PlatformBlackbox;
+
 /// <summary>
 /// Reads the game's own shape predictions at the ports of a selection.
 ///

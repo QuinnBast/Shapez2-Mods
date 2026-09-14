@@ -10,6 +10,8 @@ using ShapezShifter.Kit;
 using UnityEngine;
 using ILogger = Core.Logging.ILogger;
 
+namespace QuinnBast.Shapez2.PlatformBlackbox;
+
 /// <summary>
 /// Links a blueprint being pasted to the blackbox that stands in for it, and measures the
 /// factory only once a placed box knows what it is being fed.

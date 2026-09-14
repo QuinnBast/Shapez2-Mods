@@ -148,3 +148,7 @@ constantly.
   do not hard-code colour hexes for shape rendering.
 - Shape hashes appear in save files and blueprints. Treat them as a stable format for
   comparison, not something to reformat.
+- The four quadrant types are not a closed set — see
+  [Add a shape part](add-a-shape-part.md) for adding a fifth. The parts a session accepts
+  come from `IShapesConfiguration`, whose lists are `IReadOnlyList` views over mutable
+  lists.

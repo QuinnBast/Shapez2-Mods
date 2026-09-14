@@ -1,6 +1,8 @@
 /// <summary>
 /// What a single machine is doing right now, as far as the overlay can tell.
 /// </summary>
+
+namespace QuinnBast.Shapez2.PlatformEfficiencyOverlay;
 public enum EfficiencyStatus
 {
     /// Not an item-moving simulation, or it does not expose usable lanes.

@@ -1,6 +1,8 @@
 ﻿using System;
 using Game.Core.Simulation;
 
+namespace QuinnBast.Shapez2.PlatformEfficiencyOverlay;
+
 /// <summary>
 /// Counts the items a lane accepts and reports the rate over a window of simulation time
 /// (so it stays correct when the game is paused or sped up).

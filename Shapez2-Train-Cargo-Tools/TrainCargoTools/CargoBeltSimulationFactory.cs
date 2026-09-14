@@ -4,7 +4,7 @@ using Game.Core.Simulation;
 using ShapezShifter.Flow.Atomic;
 using ShapezShifter.Hijack;
 
-namespace TrainCargoTools
+namespace QuinnBast.Shapez2.TrainCargoTools
 {
     /// Gives a cargo belt the same speed as a vanilla space belt.
     ///

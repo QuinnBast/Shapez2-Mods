@@ -3,7 +3,7 @@ using Core.Localization;
 using ShapezShifter.Flow.Toolbar;
 using UnityEngine;
 
-namespace Shapez2.ToolbarKit
+namespace QuinnBast.Shapez2.ToolbarKit
 {
     /// Reading and editing the toolbar tree by name instead of by index.
     ///

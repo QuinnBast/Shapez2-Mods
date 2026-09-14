@@ -3,6 +3,8 @@ using UnityEngine;
 using UnityEngine.UI;
 using ILogger = Core.Logging.ILogger;
 
+namespace QuinnBast.Shapez2.PlatformEfficiencyOverlay;
+
 /// <summary>
 /// Keeps a side panel on screen when it has more in it than the screen is tall.
 ///

@@ -7,7 +7,7 @@ using ILogger = Core.Logging.ILogger;
 
 #pragma warning disable CS0618 // IIslandPlatformDrawer is obsolete, but it is how space paths draw.
 
-namespace CrossoverPlatforms
+namespace QuinnBast.Shapez2.CrossoverPlatforms
 {
     /// Gives every crossing a <see cref="CrossoverPlatformDrawer"/>.
     ///

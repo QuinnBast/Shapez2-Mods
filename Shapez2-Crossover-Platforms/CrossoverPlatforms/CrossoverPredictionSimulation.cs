@@ -3,7 +3,7 @@ using Game.Content.Features.Predictions;
 using Game.Content.Features.SpacePaths.Prediction;
 using Game.Core.Simulation;
 
-namespace CrossoverPlatforms
+namespace QuinnBast.Shapez2.CrossoverPlatforms
 {
     /// What a crossing contributes to the item prediction graph.
     ///

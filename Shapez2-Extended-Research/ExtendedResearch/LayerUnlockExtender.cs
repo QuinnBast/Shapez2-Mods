@@ -6,6 +6,8 @@ using ShapezShifter.Flow.Atomic;
 using ShapezShifter.Flow.Research;
 using ILogger = Core.Logging.ILogger;
 
+namespace QuinnBast.Shapez2.ExtendedResearch;
+
 /// <summary>
 /// Adds building layers ("machine levels") and island layers ("space levels").
 ///

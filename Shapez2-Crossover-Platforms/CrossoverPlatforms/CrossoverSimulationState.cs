@@ -3,7 +3,7 @@ using Game.Core.Belts.BeltPath;
 using Game.Core.Serialization;
 using Game.Core.Simulation;
 
-namespace CrossoverPlatforms
+namespace QuinnBast.Shapez2.CrossoverPlatforms
 {
     /// Two independent 12-lane bundles, saved side by side.
     ///

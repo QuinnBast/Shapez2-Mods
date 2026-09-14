@@ -1,6 +1,8 @@
 using System;
 using UnityEngine;
 
+namespace QuinnBast.Shapez2.PlatformEfficiencyOverlay;
+
 /// <summary>
 /// Quads UV-mapped onto the character atlas the game already ships for the super chunk
 /// coordinate labels, so throughput numbers can be drawn straight into the world with

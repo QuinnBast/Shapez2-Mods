@@ -1,3 +1,5 @@
+
+namespace QuinnBast.Shapez2.PlatformEfficiencyOverlay;
 ﻿/// <summary>
 /// One machine's - or one platform's - capacity used over time, kept as five short rings
 /// instead of one long one.

@@ -6,6 +6,8 @@ using Game.Core.Coordinates;
 using Game.Core.Map.Simulation;
 using Game.Core.Simulation;
 
+namespace QuinnBast.Shapez2.PlatformBlackbox;
+
 /// <summary>
 /// Saturates a sandbox and counts what crosses its boundary, which is the whole quantitative
 /// half of a recipe.

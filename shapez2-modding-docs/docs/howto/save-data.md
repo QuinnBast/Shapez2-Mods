@@ -82,6 +82,31 @@ An overlay that only reads and draws needs none of this; it should set
 `AffectsSaveGames: false` and keep settings in a config file instead, so players can
 share saves freely.
 
+## The key is your type's full name — moving it orphans the data
+
+`ModSaveDataExtensions.ResolveId<T>()` is:
+
+```csharp
+mod.GetType().Assembly.GetName().Name + "-" + typeof(T).FullName
+```
+
+`Type.FullName` **includes the namespace**. So renaming the namespace your save-data class
+lives in, moving it to another namespace, or renaming the class, changes the key — and the
+data already in players' saves is silently orphaned. No error, no warning: the mod simply
+comes up with defaults, as if the player had never set anything.
+
+Changing the **assembly name** does the same, and that one also breaks `manifest.json`'s
+`Assemblies` entry, so it fails more loudly.
+
+If you have shipped a mod that uses `AttachSaveData<T>`, treat that type's full name as
+part of its public contract. When you must move it, keep the old class where it was as a
+thin shim, read from it once, and write into the new one.
+
+This is unlike the `[SyncableIdentifier("…")]` attribute used for simulation state, whose
+key is an explicit string the compiler never sees — `PolymorphicSerializer` does
+`TypesById.Add(attribute.Id, type)` with no type-name fallback. Namespaces are free to
+move around those.
+
 ## Gotchas
 
 - Data is stored per save. Global preferences belong in your own file under the mod

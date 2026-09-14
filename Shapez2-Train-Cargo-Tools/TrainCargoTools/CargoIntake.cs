@@ -5,7 +5,7 @@ using Game.Core.Belts.BeltPath;
 using Game.Core.Simulation;
 using Game.Core.Trains;
 
-namespace TrainCargoTools
+namespace QuinnBast.Shapez2.TrainCargoTools
 {
     /// Lets a cargo belt take loose items and package them itself.
     ///

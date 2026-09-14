@@ -4,6 +4,8 @@ using MonoMod.RuntimeDetour;
 using ShapezShifter.SharpDetour;
 using ILogger = Core.Logging.ILogger;
 
+namespace QuinnBast.Shapez2.ModReloader;
+
 /// <summary>
 /// Remembers what the last console command printed, so it can be copied afterwards -
 /// without having to know in advance that it was worth wrapping in <c>mrl.run</c>.

@@ -4,6 +4,8 @@ using System.Reflection;
 using ShapezShifter.Hijack;
 using ILogger = Core.Logging.ILogger;
 
+namespace QuinnBast.Shapez2.ModReloader;
+
 /// <summary>
 /// Replays the one-shot session callbacks a reloaded mod has already missed.
 ///

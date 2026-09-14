@@ -7,7 +7,7 @@ using Game.Core.Trains;
 using MonoMod.RuntimeDetour;
 using ILogger = Core.Logging.ILogger;
 
-namespace TrainCargoTools
+namespace QuinnBast.Shapez2.TrainCargoTools
 {
     /// Teaches every train station, shape and fluid alike, to eat cargo packages as well as
     /// loose items.

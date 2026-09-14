@@ -3,7 +3,7 @@ using Game.Content.Features.SpacePaths;
 using Game.Core.Belts.BeltPath;
 using Game.Core.Simulation;
 
-namespace CrossoverPlatforms
+namespace QuinnBast.Shapez2.CrossoverPlatforms
 {
     /// Two straight paths through one island chunk that never exchange items.
     ///

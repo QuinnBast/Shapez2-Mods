@@ -6,7 +6,7 @@ using UnityEngine;
 using Game.Core.Rendering;
 using ILogger = Core.Logging.ILogger;
 
-namespace TrainCargoTools
+namespace QuinnBast.Shapez2.TrainCargoTools
 {
     /// The art-tuning commands: recolour the machine meshes, and dump the game's own textures
     /// and icons to disk so this mod's art can be matched to them rather than guessed at.

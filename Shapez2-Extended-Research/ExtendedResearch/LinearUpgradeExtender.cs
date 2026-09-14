@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using ILogger = Core.Logging.ILogger;
 
+namespace QuinnBast.Shapez2.ExtendedResearch;
+
 /// <summary>
 /// Appends tiers to an existing linear upgrade.
 ///

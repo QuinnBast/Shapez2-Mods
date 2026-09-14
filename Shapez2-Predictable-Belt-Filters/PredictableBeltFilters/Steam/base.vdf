@@ -17,7 +17,7 @@ Well, after seeing many threads go by on reddit and discord about this problem, 
 [*]Filter a shape: the forward belt predicts only that shape, the side belt predicts the rest.
 [*]Filter 'on': everything forward, nothing to the side.
 [*]Filter 'off': nothing forward, everything to the side.
-[*]Nothing wired: Nothing predicted on either side.
+[*]Nothing wired: Shows all shapes on every side.
 [/list]
 
 [h2]Dependencies[/h2]

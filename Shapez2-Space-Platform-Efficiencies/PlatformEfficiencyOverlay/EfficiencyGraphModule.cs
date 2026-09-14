@@ -5,6 +5,8 @@ using Unity.Core.View;
 using UnityEngine;
 using UnityEngine.UI;
 
+namespace QuinnBast.Shapez2.PlatformEfficiencyOverlay;
+
 /// <summary>
 /// A side panel module drawing capacity used over time as a bar chart, in the style of the
 /// game's own statistics charts: one bar per bucket, oldest at the left, older bars faded,

@@ -1,6 +1,7 @@
+using Game.Content.Features;
 using Game.Core.Simulation;
 
-namespace TrainCargoTools
+namespace QuinnBast.Shapez2.TrainCargoTools
 {
     /// A cargo belt's speed: the space belt's, divided down.
     ///
@@ -17,7 +18,14 @@ namespace TrainCargoTools
     /// Note this changes latency, not throughput. The rate past any point is
     /// `speed / LaneConstants.ItemSpacing`, so slowing the belt does slow delivery - unlike the
     /// lane-length change, which did not.
-    internal sealed class CargoBeltSpeed : IBeltSpeed
+    /// Derives from `BeltSpeed` because `SpaceSplitterConfiguration` takes that concrete class
+    /// rather than the interface, and a splitter has to run at the same speed as the belt either
+    /// side of it. `BeltSpeed` exposes `StepsPerTick` as a plain field but implements
+    /// `IBeltSpeed` *explicitly*, so re-implementing the interface here wins wherever the game
+    /// holds this as an `IBeltSpeed` - which is everywhere that reads a speed. Handing over a
+    /// bare `BeltSpeed` instead would have frozen splitters at whatever the speed was when the
+    /// island was built, cutting them off from belt-speed research.
+    internal sealed class CargoBeltSpeed : BeltSpeed, IBeltSpeed
     {
         /// Five, which is a judgement rather than a derivation: four would exactly undo the
         /// lane shortening and match a vanilla belt, and freight reading a little heavier than
@@ -31,6 +39,6 @@ namespace TrainCargoTools
             Inner = inner;
         }
 
-        public StepRate StepsPerTick => Inner.StepsPerTick / Divisor;
+        StepRate IBeltSpeed.StepsPerTick => Inner.StepsPerTick / Divisor;
     }
 }

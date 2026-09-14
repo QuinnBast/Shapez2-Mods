@@ -3,7 +3,7 @@ using ShapezShifter.Kit;
 using UnityEngine;
 using ILogger = Core.Logging.ILogger;
 
-namespace CrossoverPlatforms
+namespace QuinnBast.Shapez2.CrossoverPlatforms
 {
     /// Finds this mod's Resources folder, including after a hot reload.
     ///

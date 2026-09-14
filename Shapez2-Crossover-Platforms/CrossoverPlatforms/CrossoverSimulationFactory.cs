@@ -4,7 +4,7 @@ using Game.Core.Simulation;
 using ShapezShifter.Flow.Atomic;
 using ShapezShifter.Hijack;
 
-namespace CrossoverPlatforms
+namespace QuinnBast.Shapez2.CrossoverPlatforms
 {
     /// Builds a crossing's simulation, giving each of its two paths the speed of the vanilla
     /// path type it stands in for.

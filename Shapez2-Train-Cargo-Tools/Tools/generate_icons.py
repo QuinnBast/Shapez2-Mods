@@ -331,7 +331,25 @@ def store(fluid):
     return icon
 
 
+def wiki_category():
+    """The Train Cargo tab in the knowledge panel.
+
+    One crate, drawn large. A category icon is rendered smaller than a toolbar entry and
+    with no label beside it, so it has to survive being squinted at: the packager's arrow
+    or the store's six shelves turn to mush at that size, while a single sealed container
+    is still a sealed container.
+
+    It is the same `cargo` glyph the nine toolbar icons are built from - the crate, the lid
+    seam and the amber - so the tab reads as belonging to those entries rather than as a
+    tenth unrelated drawing.
+    """
+    icon = Icon()
+    cargo(icon, 0.5, 0.5, 0.62, False)
+    return icon
+
+
 ICONS = {
+    "WikiCategory": lambda: wiki_category(),
     "CargoBelt": lambda: belt(False, 0),
     "CargoBeltLeft": lambda: belt(False, -1),
     "CargoBeltRight": lambda: belt(False, +1),

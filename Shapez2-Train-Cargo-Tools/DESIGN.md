@@ -88,8 +88,8 @@ have made and wagon-capacity research applies.
 ### Known rough edges
 
 - **The machine meshes are one flat colour each.** Their UVs are placeholders - see below.
-- Unlocked at the *first* milestone so they can be tested without an endgame save. Wrong for
-  balance, deliberate for now.
+- ~~Unlocked at the *first* milestone so they can be tested without an endgame save.~~ Resolved:
+  two research nodes, see "Two research nodes, one selector" below.
 - `AffectsSaveGames: true`, so the mod cannot be added to or removed from an existing save.
 - **The fluid blob size is vanilla's 60 litres**, hardcoded, copied from
   `FluidCargoStationSimulationCreator`. An unpackager has to emit the same blob size a station
@@ -480,8 +480,8 @@ its factory a lane state and nothing else. It walks `for (lane) for (layer)`, so
 lane `n / NumLayers` - deterministic, but an ordering assumption about game code, which is why
 it is named in `CargoLanes.LaneOfFactoryCall` rather than written inline as a division.
 
-Containers are drawn centred across the belt, scaled so their long axis fills about 3.4
-`TrackItemsSpacing` - taken from the theme rather than a world constant - and turned a quarter
+Containers are drawn one file per layer, the three files abreast across the deck (see "Three
+layers, one deck"), scaled so their long axis fills their slot along the run, and turned a quarter
 turn when the mesh's long axis is its local X, so they ride across the belt like freight on a
 flatbed rather than nose-first. Which axis is long is read from `mesh.bounds`, because this is
 vanilla art and nothing says which way round it was authored. Height is capped at just over half
@@ -905,42 +905,74 @@ the belt-tagged one is dropped unless a second bundle is claimed. Sharing one ob
 making two matters - `NextBundle` is a single field, so whichever connector links first satisfies
 both indices, where two separate bundles would leave the unused one dangling and drawing.
 
-Reaching `WithPrediction` needs a cast to `IDefinedAccessibleSimulatablePlaceableIslandExtender`,
-which nothing in this chain returns. Safe for the same reason it is in Crossover Platforms: one
-`AtomicIslandExtender` implements every interface in the fork, and `WithPrediction` only records
-a builder, so the order the simulation and prediction branches are declared in does not matter to
-`Build()`.
+Prediction is **not** registered through the chain's own `WithPrediction`, which would be the
+obvious call. `AtomicIslandExtender.Build` re-arms itself only when `WaitAllRewirers` sees every
+branch clear its link, and the prediction branch fires from a single postfix -
+`PredictionSystemsInterceptor` on `BuiltinPredictionSimulationSystems.CreateSimulationSystems`.
+That method's one caller is skipped outright when the game setting
+`setting.simulation-settings.prediction` is off, so **any player who turns predictions off** never
+completes the branch. The chain then never re-arms and every island is spent on the first scenario
+of the process, which is the main menu's background game rather than the player's save: no
+definitions, no toolbar entries, no unlocks, and no error anywhere. A Crossover Platforms player's
+log is where this was caught; see that mod's DESIGN.md for the log signature.
+
+So each island's prediction goes on by hand through `ReArmingRewirer`, re-armed per scenario load
+and stopped in `Dispose`. The chain then waits only on branches that do fire. It also loses its one
+cast: taking placement and the toolbar *before* the simulation
+(`WithDefaultPlacement().InToolbar(..).WithSimulation(..)`) lands back on `IAtomicIslandExtender`
+under its own power, and only `WithPrediction` ever needed reaching for. Crossover Platforms still
+casts, because it declares its simulation first and has no such route.
 
 Prediction simulations hold no `ISimulationState`, so none of this touches the save blob.
 Registering one is a definition-time change, though, so it needs a restart rather than a reload.
 
-## Three layers that looked like one
+## Three layers, one deck - resolved twice
 
-A loaded cargo belt appeared to be carrying a single file of containers, even though all three
-layers were full and all three drained into a store correctly.
+A loaded cargo belt first appeared to be carrying a single file of containers, even though all
+three layers were full and all three drained into a store correctly.
 
 All three *were* being drawn. The renderer put each layer at
-`SpacePathItemRenderingConfig.LayerOffset * layer + Height`, which is the theme's own spacing and
-correct for what it was authored for: a shape is a fraction of a world unit across, so a fraction
-of a unit between layers separates them cleanly. A cargo container is scaled to fill a whole belt
-slot - about 2.3 units tall - so at that spacing the three layers interpenetrate almost entirely
-and read as one object.
+`SpacePathItemRenderingConfig.LayerOffset * layer + Height`, the theme's own spacing, correct for
+what it was authored for: a shape is a fraction of a world unit across, so a fraction of a unit
+between layers separates them cleanly. A cargo container is scaled to fill a whole belt slot -
+about 2.3 units tall - so at that spacing the three layers interpenetrated almost entirely and
+read as one object.
 
-So a cargo belt sets its own layer spacing. `CargoLanes.LayerSpacing_W` is 3.0 units, sized from
-the freight rather than from the theme, and `CargoLanes.LayerHeight_W` is the single place both
-drawers ask where a layer sits - the track drawer stacks a tier there, the belt renderer puts that
-layer's containers on top of it. Two copies of that arithmetic is exactly how the track and its
-freight drift apart.
+**The first fix was to stack them further apart, and it was the wrong fix.** A cargo belt set its
+own `LayerSpacing_W` of 3.0 units and the track drawer stacked a tier of track at each height.
+That made three distinct layers, and it made a six-unit tower: from the game's angled camera the
+top deck stands in front of the two below it, so a player still could not see what a belt was
+carrying at a glance. Three tiers of track advertised the problem rather than solving it.
 
-The stack is centred on the theme's *middle* layer (`Height + LayerOffset`) rather than built
-upward from layer 0, so a cargo belt still sits roughly where a vanilla space belt does instead of
-floating six units above the station it joins. `LayerOffset` is used only to find that centre.
+**Vanilla does not stack.** `SpacePathSimulationRenderer.DrawItems` computes
 
-Two knock-on fixes came out of the same measurement. The container height cap is now
-`LayerSpacing_W * 0.78` rather than a fraction of its own length, so a container can never reach
-the deck above it; and the belt renderer lifts each container by `-Packages.Bottom`, because the
-package mesh is authored centred on its origin and was therefore riding half-buried in its deck -
-the store had already found this and the belt had not.
+```
+num3 = (layerIndex - 1) * TracksSpacing + (columnIndex - 1.5) * TrackItemsSpacing
+```
+
+and applies `num3` *perpendicular to travel*, alongside a vertical `LayerOffset * layer + Height`.
+A space belt fans its layers **across** the track as well as through it - which is the whole
+reason all three floors of a vanilla belt are legible at once, and it is not something the
+vertical offset alone would ever have achieved.
+
+So a cargo belt now does the same with the lane term dropped, there being one lane per layer:
+**three files abreast on one deck**, at `CargoLanes.Across_W(layer) = (layer - 1) * 2.4`. Nothing
+is behind anything from any angle, and the track drawer is back to a single tier.
+
+2.4 is the mod's own number for the same reason the old vertical gap was: `TracksSpacing` is
+authored for shapes and freight this size would overlap at it. It is sized to the deck instead -
+`cargo_track` sweeps to +-3.7, so the outer two files sit at +-2.4 and the deck edge stays clear.
+
+### Three constraints on a container, not two
+
+`CargoPackageMeshes` scales the crate uniformly to fill its slot along the run, and that says
+nothing about how wide it then is. With three files abreast the width is what binds, so the
+constructor now takes `maxAcross` as well: the *short* horizontal axis is capped at
+`LayerAcross_W * 0.92`, and the smallest of the three constraints wins.
+
+The height cap went the other way and is now gone for belts. It existed to stop a roughly cubic
+package growing into a tower that reached the tier above; there is no tier above any more, and a
+cubic package is caught by the across cap first.
 
 ## Unloading straight into a store or an unpackager - resolved
 
@@ -1122,6 +1154,438 @@ The store and the packager push through `GetSender(...).NextLane` directly rathe
 lane, so they call `CargoHandover.Allows` in their own `Drain`/`TryEmit` instead of going through
 the wrapper. A blocked packager stalls with a full filling container; a blocked store keeps its
 backlog. Neither loses anything.
+
+## Two research nodes, one selector
+
+Everything used to unlock at `ByIndexMilestoneSelector(0)`, which was a testing convenience. It is
+now two purchasable nodes: **Cargo Machines** (belts, corners, both packagers, both unpackagers)
+and **Cargo Stores** behind it. The legacy hidden definitions ride with their modern equivalents,
+so a save holding one keeps working.
+
+### `UnlockedWithNewSideUpgrade` cannot be shared between islands
+
+The obvious call registers the node once *per island group*, not once.
+`UnlockIslandWithNewSideUpgradeResearchProgressionExtender.ExtendResearch` is invoked for each
+group and its body is `SideUpgradeBuilder.Build(...)`, and `Build` appends to `_SideUpgrades`,
+`_ShopItems`, `_AllUpgrades` and `_UpgradesById` every time it is called. Ten islands sharing one
+builder therefore puts ten identical nodes in the shop.
+
+`CustomSideUpgradeSelector` looks like the escape and is not: its `Select` is literally
+`SideUpgrade.Build(scenarioId, progression)`, so passing it to `UnlockedWithExistingSideUpgrade`
+duplicates in exactly the same way.
+
+**So `CargoUnlock` is a get-or-create `ISideUpgradeSelector`.** It answers `Select` from
+`progression.TryGetUpgrade`, and builds only when the lookup misses. The first island extended in
+a scenario creates the node; every island after it gets the built one, and
+`UnlockIslandWithExistingSideUpgradeResearchProgressionExtender` appends its group to that node's
+`Rewards`. Registration order stops mattering.
+
+The lookup is keyed on the `ResearchProgression` passed in rather than cached in a field, because
+`ExtendResearch` runs once per scenario load with a fresh progression each time. A cached upgrade
+object would be appended to a progression that never contained it.
+
+`TryGetUpgrade` returns `IResearchUpgrade`, and `_UpgradesById` holds levels and side quests
+alongside side upgrades, so the result is tested with `is ResearchSideUpgrade` rather than cast.
+
+### The category is copied from the train station node, not named
+
+A side upgrade's `Category` is authored per scenario - `ResearchProgression` reads it from
+`serialized.ScenarioContent.UpgradeCategories` - so no string can be hardcoded and be right in
+every scenario. `ResearchProgression`'s constructor logs `Unknown/non-configured upgrade category`
+for a shop item whose category is not in that list, and the node then has nowhere to render.
+
+So the nodes find the vanilla upgrade that **rewards a train station island group** and copy its
+`Category`, its `ImageId` and its `Id` (as the prerequisite). A reward is structural where a name
+is not: whatever a scenario calls its nodes, the one handing out the station group is the one a
+player reaches before cargo tools are worth anything.
+
+The search runs over `AllUpgrades`, not `SideUpgrades`, because `ResearchLevel` is an
+`IResearchUpgrade` too and hands out island groups the same way - whether stations come from a
+milestone or from the shop is an authoring decision the mod does not need to know. A side upgrade
+is preferred when both match, since only a side upgrade carries a category.
+
+**Nothing vanilla is called "TrainStation" except the spacers.** The first version matched that
+substring and anchored both nodes to `CBTrains_StationSpacer` - cosmetic filler - because
+`AuthoringIslands` names the real stations `TrainShapeLoadersGroup`, `TrainFluidUnloadersGroup`
+and so on, and only `TrainStationStraightSpacerShapeGroup` and its three siblings carry the word
+"station". The marker is now "Train" plus "Loader", which covers unloaders as a substring and is
+the right anchor anyway: a loader is what a cargo belt exists to feed. Spacers stay as a
+last-resort fallback.
+
+That mistake did prove one thing worth keeping: the run matched a real reward group, so island
+group **ids do mirror the `AuthoringIslands` field names**. Those fields are the only evidence
+available - a field name is not an id - and this is the only confirmation that reading them is
+sound.
+
+### A preview image is not optional
+
+`HUDResearchSideUpgradeDisplay.RebuildView` calls `GameData.GetImage(upgrade.ImageId)`
+unconditionally and `GetImage` throws on an id it cannot resolve, the empty one included. The
+throw comes out through the whole `HUDResearchTree` construction and leaves the research screen
+half-built and unclosable. Borrowing an id off a node the game already renders is the only way to
+be sure it resolves, since image ids live in Unity assets. Extended Research hit this first; the
+anchor gives one for free, and `BorrowImage` is the fallback.
+
+### Still to settle
+
+- **Cost.** Both nodes are 4.8k as the research screen shows it, set by hand: cargo tools are a
+  late convenience, so they are priced with the endgame train nodes rather than the cheap early
+  ones.
+
+  **A `ResearchPointCurrency` is not the number the player sees.**
+  `StringFormattingExtensions.Format(this ResearchPointCurrency)` is
+  `FormatIntegerMax4Digits(amount.Amount * 100)`, so the constant is in *hundreds* of displayed
+  points: `48` renders as "4.8k", and a literal 4800 would have priced these at 480k. Confirmed
+  in game - an earlier 100 displayed as 10.0k.
+- **Existing saves.** The gate is new, so a save that is past the first milestone loses the
+  toolbar entries until the nodes are bought. Already-placed islands are unaffected - unlocking
+  gates placement, not simulation.
+
+## Wiki entries, assembled from two halves
+
+Every vanilla machine has a knowledge-panel entry, so the cargo machines have five: an overview,
+and one each for the belt, the packagers, the unpackagers and the store.
+
+**Shifter has no API for this.** `grep -rli wiki` over ShapezShifter finds only incidental
+matches in the island and building builders. The game keeps the pieces in two places and both
+have to be reached:
+
+| Half | Where it lives | How the mod reaches it |
+| --- | --- | --- |
+| The *references* - which ids exist, their category, the research each waits for | `ResearchProgression.WikiConfiguration.WikiReferences` | already handed to every `IIslandResearchProgressionExtender` |
+| The *entries* - a `MetaWikiEntry` per id | `GameData._WikiEntries`, read via `IGameData.GetWikiEntry` | a detour on `GameData.GetWikiEntry` |
+
+A reference whose entry cannot be found throws out of `WikiDatabase`'s constructor, so a half
+landing is worse than neither: it takes the session. `CargoWiki` therefore refuses to register
+any reference unless its lookup detour installed.
+
+### Why a detour and not a dictionary insert
+
+`_WikiEntries` is publicized and could simply be added to. It should not be: `GameData` outlives
+a session and a `ResearchProgression` does not, so an insert would run again on the next scenario
+load and `Dictionary.Add` throws on a duplicate key - the same trap the pipette map sets. A
+detour is stateless with respect to session count.
+
+### The ordering is not luck
+
+`Register` is driven from the research extenders, and Shifter runs those from
+`GameScenarioInterceptor`, an `ILHook` on `GameMode.From` that fires **immediately after
+`new GameScenario(...)`**. `GameMode.From` constructs `new WikiDatabase(...)` thirteen lines
+later, off the same `gameScenario.Progression`. So the references are always in place before
+anything reads them. Worth writing down because nothing enforces it: if Shifter ever moved that
+hook later, the entries would silently stop appearing rather than fail.
+
+### Things that are not ours to name
+
+- **The title key is fixed.** `WikiDatabase.Convert` builds it as
+  `("wiki." + entry.Id.Id + ".title").T()`, so an entry called `CargoTools_CargoBelt` must have
+  `wiki.CargoTools_CargoBelt.title` and nothing else will do.
+- **A `MetaWikiEntry`'s id is its `name`.** It is a `ScriptableObject` with `Id => new
+  WikiEntryId(base.name)` and no id field, so `CreateInstance` then assign `.name`.
+- **`SerializedTranslationId.T()` returns null**, not an empty text, for an unset id. Every
+  heading and text block therefore gets a real key.
+- **A category needs an icon that resolves**, for the same reason a research node needs a preview
+  image, so the cargo category borrows the first icon id already in use.
+
+### What the exported base data settled
+
+The first two versions of these pages were written without ever having read a vanilla entry -
+they are authored ScriptableObjects and cannot be read out of `decompiled/`. That was avoidable:
+`debug.export-game-data` writes `basedata-v<N>/translations-en-US.json`, which holds all 499
+`wiki.*` strings, and `basedata-v<N>/scenarios/*.json`, which holds `WikiConfiguration` with
+every entry id and category.
+
+Four things were wrong until that was read, none of them guessable:
+
+| | Vanilla | What this mod had |
+| --- | --- | --- |
+| Entry ids | `WK<Category>_<Thing>` | `CargoTools_CargoBelt` |
+| Text keys | `wiki.<id>.text-intro-1`, `-2`, `text-robot` | invented `cargo-tools.wiki.*` names |
+| Headings | **none** - not one of the 149 entries uses `MetaWikiEntryContentHeadingData` | four headings per page |
+| Closing line | `text-robot`, a dry aside, on 60 of 149 entries | absent |
+
+The pages now carry vanilla ids, no headings, `
+
+` paragraphs, links out to
+`WKTrains_TrainStations`, `WKIslands_SpaceBelts`, `WKIslands_Floors`, `WKFluids_Pipes` and
+`WKProcessing_Intro`, and a robot line each.
+
+`Tools/check_translations.py` knows those five vanilla ids as well as the mod's own, so a typo
+in a `<gll:>` target is caught at build time rather than becoming an orange link that plays an
+error sound.
+
+### Writing them like vanilla writes them
+
+The first version of these pages was plain prose, and it read as a mod's README rather than a
+wiki entry, because it used none of the markup vanilla uses. Translation text is parsed as
+extended XML by `TranslationExtendedXMLParser`, and `TagMatch` in `Core.Localization` is the
+whole vocabulary:
+
+| Tag | `DefaultTextStyleProvider` emits |
+| --- | --- |
+| `<gl>` | `<color=#ff9e16><b>` on a dark chip - **the bold orange a concept is written in** |
+| `<gll:EntryId>` | the same orange, underlined, wrapped in a TMP `<link>` |
+| `<b>` `<info>` `<unit>` | bold; italic `#ffffff55`; 65% dimmed and letter-spaced |
+| `<link:Id>` | `<color=#00d2ff><b><u>` - the blue used for external links |
+| `<hotkey:X/>` `<icon:X/>` `<wip-warning/>` | self-closing chips |
+
+**The separator is a colon.** `ParseTagData` is `inTag.Split(':')`, so `<gll:CargoTools_CargoBelt>`
+and never `=`. Anything not in the table is treated as a placeholder and must self-close, which
+is what makes `<layer/>` work.
+
+A `<gll:...>` target is a wiki entry id: `HUDWikiContentRenderer.OnLinkClicked` prefixes it with
+`glossary.` and navigates. Ordinary `MetaWikiEntryContentTextData` blocks register the same
+handler, so `…TextWithLinksData` is needed only for an external URL.
+
+A malformed tag throws `XML Tag not properly closed`, the translation file fails to load and the
+mod aborts - with no clue which string was at fault. `Tools/check_translations.py` walks the file
+with the same rules and also checks that every `<gll:>` target is an entry the mod defines.
+
+### Pictures, and where they have to come from
+
+A wiki image block holds a **`Sprite` directly** - `MetaWikiEntryContentImageData.Image` - so it
+needs no registration. A research node's preview is the opposite: it is a `GameImageId` resolved
+through `GetImage`, which throws on an id it does not know.
+
+`CargoImages` therefore detours `GetImage` the same way `CargoWiki` detours `GetWikiEntry`, and
+for the same reason - `GameData` outlives a session, so inserting into `_Images` would need
+guarding against a second load. Sprites load on first request, because nothing asks for one until
+the research or wiki screen is opened.
+
+The pictures are screenshots. They have to be: the machines' appearance is generated at runtime
+from `Tools/generate_meshes.py`, so there is no authored art to point at, and a picture drawn
+from outside the game would show something that is not what the player will see.
+
+`MetaWikiEntryContentVideoData` wants a `GameVideoId`, which is authored-asset territory, so the
+clips vanilla shows are not available - stills are as far as this goes.
+
+### What could not be used
+
+`MetaWikiEntryContentIslandPanelData` would have rendered the island's own panel inside the entry,
+which is what several vanilla entries do. It holds a `MetaIslandDefinitionId` - a reference to an
+authored asset - and a modded island has none, so the entries are heading, text and (later) image
+blocks only.
+
+## A wagon unloader hands over a whole package - resolved
+
+A cargo belt used to accept loose shapes and pack them itself. That was the only way anything
+could put cargo on a belt without a packager, and it cost two things:
+
+- **Any space belt or pipe could feed a cargo belt.** The belt cannot tell one sender from
+  another: `PreAcceptHook` is `Func<IBeltItem, bool>` and sees only the item, and a wagon
+  unloader's output connector is the same `SpaceBeltOutputConnector` class an ordinary belt
+  presents. There is no type-level rule that admits one and refuses the other.
+- **A wagon emptied instantly.** `TrainCargoToBeltFillingContainer.Update` is
+  `while (Peek(...) && NextLane.CanAcceptItem(...)) HandOverItem(...)`, which drains the entire
+  package inside a single update for as long as the receiver keeps saying yes - and a belt
+  packing into a filling container, rather than occupying belt slots, said yes to all of it.
+
+Both go away if the **unloader** offers the package instead. The belt then takes packages only,
+and one package moves per hand-over like any other belt item.
+
+### The seam DESIGN.md previously said did not exist
+
+This was recorded as impossible, on the grounds that `TrainCargoUnloaderSimulation<T>`,
+`TrainCargoToBeltFillingContainer<T>` and `ItemLaneBundle<TLane>` are all generic and MonoMod
+will not hook a method on a generic type. That is true and still true. The mistake was looking
+only at the classes that do the work.
+
+One level out, the classes that *build* them are not generic:
+
+```
+ShapeCargoStationSimulationFactory.Produce(IslandInstance, out TrainCargoUnloaderSimulation<ShapeId>, out ConnectableIslandSimulation)
+FluidCargoStationSimulationCreator .Produce(IslandInstance, out TrainCargoUnloaderSimulation<FluidId>, out ConnectableIslandSimulation)
+```
+
+A non-generic method on a non-generic type, handing back the unloader it just made. Detouring it
+lets the mod construct the unloader with a converter of its own -
+`CargoUnloadConverter<TItem> : ICargoToBeltItemConverter<TItem>`.
+
+`GetMethod("Produce")` is ambiguous - there are three overloads, loader, unloader and
+transferrer, differing only in the `out` parameter - so the lookup matches on that parameter
+type.
+
+### Why a converter and not a per-tick pump
+
+The alternative was a pass over every unloader each tick, taking packages out of
+`_FillingContainers` and pushing them downstream. It would have been simpler to write and is
+wrong: **simulation does not run on the main thread**, so that pass would be writing another
+simulation's state from whichever pool thread happened to run it, racing the unloader's own
+`Update` over the same package.
+
+Replacing the converter puts every decision inside the unloader's own `Update`, on the
+unloader's own thread. There is no shared state and nothing to synchronise.
+
+### All outputs, not any
+
+`Peek` is called once per sender and is handed only the package - never the sender - so a
+station with a cargo belt on one output and an ordinary belt on another has to give both the
+same answer. It offers a package only when **every** connected output would accept one, and
+falls back to loose otherwise. An ordinary belt handed a package would carry it to something
+that cannot read it, which is the failure `CargoHandover` exists to prevent in the other
+direction.
+
+The test is `CargoHandover.Allows`, so the belt, the store, the unpackager and a station's
+loader all count as package-takers, and the answer is cached against the observed `NextLane`
+references because `Peek` runs inside that `while` loop.
+
+### The intake stays, unused
+
+`CargoIntake` is still built, still updated and still part of `CargoBeltSimulationState`.
+Nothing fills it any more, and it is kept for two reasons: its states are fields of the saved
+blob, and changing that blob's shape has broken saves before; and a save written by an earlier
+version can hold a part-filled intake, which the drain still finishes onto the belt.
+
+## Junctions: one in, up to three out
+
+A cargo line can now branch. Four pieces, matching vanilla's own splitter family:
+
+| Definition | Outputs | Classification it is drawn as |
+| --- | --- | --- |
+| `CargoBelt_LeftFwdSplitter` | North, East | `LeftForwardSplitter` |
+| `CargoBelt_RightFwdSplitter` | South, East | `RightForwardSplitter` |
+| `CargoBelt_YSplitter` | North, South | `LeftRightSplitter` |
+| `CargoBelt_TripleSplitter` | North, East, South | `TripleSplitter` |
+
+Three is the ceiling, because the fourth side is the input.
+
+### Almost none of it is new
+
+`SpaceSplitterSimulation` is the game's own space belt splitter: non-generic, public
+constructor, and it already distributes with `RoundRobinDistributionBehaviour` - which is exactly
+"round-robin the content on each level between the downstream routes". `CargoSplitterSimulation`
+subclasses it, the way the packagers re-host `TrainBeltToCargoFillingContainer`, and changes two
+things, neither of them about splitting:
+
+- **The outputs refuse loose items.** A vanilla splitter's lanes take anything, and
+  `BeltPathLane.PreAcceptHook` is public, so each output lane gets the belt's own
+  `IsCargoPackage`. `SplittingItemDistributor.CanAcceptItem` answers by asking the behaviour to
+  find a lane that will take the item, so refusing on the lanes refuses at the junction.
+- **The outputs are guarded.** Vanilla's provider bundle has no `CargoHandover` around it, so a
+  splitter output pointed at an ordinary belt would hand it a package. Each output bundle is
+  wrapped, and `CargoHandover.Allows` gained `SplittingItemDistributor` so a cargo belt will feed
+  a junction in the first place.
+
+`IItemBundleSimulation` is restated in the base list purely so the guarded
+`GetItemProviderBundle` can be an explicit implementation - C# only allows one for an interface
+the type itself names.
+
+### The state is vanilla's, deliberately
+
+`SpaceSplitterSimulationState` is reused unchanged, under vanilla's own
+`SyncableIdentifier("SpaceSplitterState")`. `PolymorphicSerializer` registers from a *set* of
+types, so one type is registered once however many islands use it, and reusing it means reusing
+a blob format that already handles its own version migrations rather than inventing one.
+
+### Speed, and why `CargoBeltSpeed` changed shape
+
+`SpaceSplitterConfiguration` takes the concrete `BeltSpeed` class, not `IBeltSpeed`. Handing it a
+plain `BeltSpeed` would have frozen every splitter at whatever the speed was when it was built,
+silently cutting junctions off from belt-speed research while the belts either side of them sped
+up. `BeltSpeed` implements `IBeltSpeed` **explicitly**, so `CargoBeltSpeed` now derives from it
+and re-implements the interface: everything that reads a speed holds an `IBeltSpeed` and reaches
+the override.
+
+### Belt-tagged only
+
+Unlike the belts, a junction carries one connector type. It only ever meets a cargo belt or a
+cargo machine, and all of those carry a belt connector, so the second tag would buy nothing -
+and it would cost the two-receiver-bundle arrangement `CargoBeltSimulation` needs to make dual
+tags work at all.
+
+### Geometry
+
+`PathNodeClassification` already names all four, and `PlatformPathDrawingClassifier` derives the
+classification from the connectors, so a junction needs no classification logic - only a mesh for
+the one it is given.
+
+`cargo_junction` in Tools/generate_meshes.py builds each from straight arms meeting at the chunk
+centre: the inbound arm from the West edge, then one arm out to each named edge. Not swept arcs -
+a junction is where a line stops being a smooth run, vanilla's own splitters read as a boxy node,
+and arcs radiating from one point would intersect rather than blend. The corner pieces get away
+with arcs only because there are two of them sharing a tangent.
+
+The arms overlap in one channel-width cube at the middle, which reads as the junction box. Each
+arm is its own closed volume, so the union stays closed and outward-wound - which is what the
+generator's own checks confirm.
+
+### Mergers are the other half, and leaving them out broke the splitters
+
+The first version shipped splitters alone and junctions did not work: they placed, but drew
+nothing and passed nothing, and the line feeding them backed up.
+
+Two separate causes, and the second is the interesting one.
+
+**The model.** `CargoAppearance.BeltIds` is the list the track drawer walks, and the junctions
+were not in it. Registering the island and generating its mesh is not enough - a `pathTrack`
+island has `ChunkPlatformDrawingContext.DrawNothing()` and no platform frame to fall back on, so
+one left out of that list places, connects and simulates while drawing nothing at all. Worth
+remembering because it fails silently: the two `Log.Warning` paths in `AddTrack` never run,
+because the id never reaches the loop.
+
+**The flow.** Pulling a new run *out of* an existing one is a split; dragging a new run *into*
+one is a **merge**. With only splitters registered, `MatchingDefinitionFinder` has no family
+member whose connectors fit a merge, so it settles on a splitter - whose outputs sit exactly
+where the inputs are needed. Nothing connects, and the upstream line backs up at the node it
+just made.
+
+So the family is eight pieces, not four. `SpaceMergerSimulation` is vanilla's own and is easier
+to make cargo-only than the splitter was: its inputs are real `FastBeltPathLane`s, so they take
+a `PreAcceptHook` directly rather than through a distributor. Its single output bundle is
+wrapped in the same guard.
+
+### One mesh per set of arms, not per piece
+
+Flow direction is not geometry. A left-forward splitter (in West, out North and East) and a
+left-forward merger (in West and North, out East) occupy the same three arms, so they share a
+mesh. Only the Y pair differs - a Y splitter reaches West, North, South; a Y merger reaches
+North, South, East - so there are five junction meshes for eight pieces.
+
+### Placement
+
+All eight are appended to the family handed to `MatchingDefinitionFinder`, alongside forward and
+the two corners. Nothing in the mod has to know what a branch is: vanilla's placer picks whichever
+family member matches the connections a node ends up with, which is the same reason a turning drag
+picks a corner. A missing junction definition is a warning rather than a failure - the run still
+lays and turns, it just will not branch.
+
+## A wrapped bundle must still answer as itself - resolved
+
+Junctions looked as though they refused cargo. They did not. **No cargo belt could ever be
+disconnected**, and the symptom only became obvious once junctions existed, because a junction is
+placed over belt that is already there.
+
+`ItemOutputChunkConnector` identifies a connection by object:
+
+```csharp
+public bool TryDisconnect(ISimulationConnector other)
+{
+    if (ProviderBundle.NextBundle != other.ReceiverBundle) { return false; }
+    ProviderBundle.NextBundle = null;
+    return true;
+}
+```
+
+`CargoHandover.GuardedProviderBundle` wraps whatever is assigned so every hand-over is checked -
+that is what stops cargo being given to an ordinary belt. Its getter returned the **wrapper**, so
+that comparison never matched, `TryDisconnect` always returned false, and `NextBundle` stayed set
+to a guard around a bundle whose island no longer existed.
+
+`TryConnect` opens with `if (ProviderBundle.NextBundle != null) { return false; }`, so the
+replacement could never connect either. Delete a cargo belt and put another in its place, and
+nothing was handed to it again for the rest of the session.
+
+The fix is to remember what was assigned and return that, while still handing the wrapper to the
+lanes. The guard stays invisible to the simulation and visible to nothing else.
+
+**The general rule this is an instance of:** a wrapper placed on a property the game reads back
+has to be transparent to *identity*, not just to behaviour. Anything the game compares by
+reference - and the connector layer compares bundles by reference throughout - will silently stop
+matching. It fails as "this one thing never works again", which is far harder to read than a
+throw.
+
+It also explains the earlier confusion. Splitters appeared to work occasionally: those were the
+ones placed where no cargo belt had been, so there was no stale connection to block them.
 
 ## Open questions
 

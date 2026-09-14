@@ -112,14 +112,66 @@ inputs*".
 Propagation also moves **one simulation per update**, so after any change a deep graph
 needs several passes before the far end settles.
 
-## Degenerated is the game's own "give up"
+## Degenerated does not mean "more than four"
 
-When the set of possibilities at a point exceeds four, the game pushes
-`PredictedItem.Degenerated` instead of tracking them.
+It is tempting to read `PredictedItem.Degenerated` as the game's marker for "too many
+possibilities to track". It is not. Running past four and giving up are two separate
+behaviours, and only one of them is visible.
 
-That is worth reusing rather than reinventing: if you need to decide whether some region of
-factory is simple enough to reason about, `IsDegenerated()` at its outputs is a criterion
-the game itself computes and stands behind.
+**Overflowing four is silent.** `PredictedItem` holds exactly four `IItem`s, and both places
+that build one from a list simply stop reading at the fourth —
+`PredictionCombinationExtensions.CombinePredictions` breaks out of its outer loop once it
+has four, and `PredictedItem(List<IItem>)` only ever reads indices 0–3. A fifth possibility
+is dropped with no marker of any kind. A four-shape readout can mean "exactly these four"
+or "these and more", and nothing distinguishes them.
+
+**`Degenerated` means the operation failed on everything it was handed.**
+`ItemOperationPredictionExtensions.Predict` pushes it when no candidate produced an output
+at all:
+
+```csharp
+if (scopedList.Count == 0 && input != PredictedItem.None)
+{
+    return PredictedItem.Degenerated;
+}
+```
+
+So it is closer to "this machine cannot do anything with what is arriving" than to "this is
+too complicated".
+
+> [!WARNING]
+> `Degenerated` is **absorbing, and it renders as blank.** Both
+> `PassThroughItemPredictionLane.PushPrediction` and `ItemPredictionConverter.Update`
+> convert it to `PredictedItem.None` on the way through, and a machine that receives it
+> returns `None` as well (`Predict` starts with `if (input.IsDegenerated()) return
+> PredictedItem.None;`). One degenerate point therefore empties the readout for everything
+> downstream of it — which is what is really being reported when a player says their belts
+> "stopped showing anything".
+
+A degenerate branch also **disappears** rather than contaminating a merge:
+`CombinePredictions` skips degenerated entries with `continue`, so merging a degenerate line
+into a concrete one yields just the concrete one.
+
+The practical consequence for a mod that reads predictions: `IsDegenerated()` at an output
+tells you that point is broken or starved, not that the factory there is complex. And an
+empty readout is ambiguous — it may mean nothing is coming, or it may mean something
+upstream degenerated several buildings ago.
+
+## Vanilla predictions are not all accurate
+
+Worth knowing before you trust a reading, or reimplement something the game "already does":
+
+**The belt filter is predicted as a plain splitter.**
+`BuiltinPredictionSimulationSystems.CreateFlowControlSystems` registers it with
+`SplitterPredictionSimulationFactory(2)`, whose `Update` pushes the same set to every
+output — so a filter's match belt and mismatch belt both claim to carry everything on the
+line, even though `SignalControlledDistributionBehaviour.TryFindNextLane` routes them
+precisely. The belt reader and pipe gate registered next to it are fine; they use
+`ForwardingPredictionSimulation`, which is what they really do.
+
+This matters beyond the filter itself, because an over-broad set is what pushes a line past
+the silent four-item cap and hands downstream machines shapes they cannot process — which
+is how a merely imprecise prediction turns into a blank one.
 
 ## Gotchas found the hard way
 

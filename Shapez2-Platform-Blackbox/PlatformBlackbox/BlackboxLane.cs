@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using Game.Core.Simulation;
 
+namespace QuinnBast.Shapez2.PlatformBlackbox;
+
 /// <summary>
 /// One lane out of a blackbox: a few slots the box puts finished items into, emptied onto
 /// whatever the player attached to that notch.

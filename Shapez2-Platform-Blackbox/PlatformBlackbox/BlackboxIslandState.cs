@@ -1,6 +1,8 @@
 using Game.Core.Serialization;
 using Game.Core.Simulation;
 
+namespace QuinnBast.Shapez2.PlatformBlackbox;
+
 /// <summary>
 /// Everything about a blackbox that has to survive a reload.
 ///

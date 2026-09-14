@@ -12,8 +12,10 @@ version before building on them.
 | --- | --- |
 | Add a new machine | [Add a building](add-a-building.md) |
 | Add a new platform or island | [Add an island or platform](add-an-island.md) |
+| Add a new shape quadrant type | [Add a shape part](add-a-shape-part.md) |
 | Put it on the toolbar so it can be selected | [Add to the toolbar](add-to-toolbar.md) |
 | Make it unlockable through research | [Add a research unlock](add-research-unlock.md) |
+| Give it a page in the knowledge panel | [Add a wiki entry](add-a-wiki-entry.md) |
 | Give it a name that is not a translation key | [Add translations](add-translations.md) |
 | Load a `.fbx` model, an icon, or an asset bundle | [Load models and icons](load-models-and-icons.md) |
 | Give it sound | [Add sounds](add-sounds.md) |

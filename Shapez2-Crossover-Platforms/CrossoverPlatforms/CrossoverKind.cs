@@ -1,6 +1,6 @@
 using Game.Core.Content.Islands;
 
-namespace CrossoverPlatforms
+namespace QuinnBast.Shapez2.CrossoverPlatforms
 {
     /// Which two path types a crossing joins.
     ///

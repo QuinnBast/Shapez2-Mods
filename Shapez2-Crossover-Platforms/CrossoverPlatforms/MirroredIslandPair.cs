@@ -1,7 +1,7 @@
 using Game.Core.Content.Islands;
 using ShapezShifter.Flow;
 
-namespace CrossoverPlatforms
+namespace QuinnBast.Shapez2.CrossoverPlatforms
 {
     /// Registers a crossing and its mirror image into one group, so one toolbar entry covers
     /// both and F flips between them.
@@ -14,9 +14,9 @@ namespace CrossoverPlatforms
     /// second toolbar entry.
     ///
     /// Hence one builder that quietly builds both. The original is what gets returned, so the
-    /// rest of the chain - placement, toolbar, simulation, prediction - keeps attaching to it
-    /// exactly as if the mirror were not there. The mirror's own simulation and prediction are
-    /// registered separately; see CrossoverPlatformsMod.KeepRegistered.
+    /// rest of the chain - placement, toolbar, simulation - keeps attaching to it exactly as if
+    /// the mirror were not there. The mirror's own simulation, and both variants' prediction,
+    /// are registered separately; see CrossoverPlatformsMod.ReArmedRegistrations.
     internal sealed class MirroredIslandPair : IIslandBuilder
     {
         private readonly IIslandBuilder Original;

@@ -89,12 +89,52 @@ East/West one alone. Only **belt-over-pipe** actually needs it: for the symmetri
 rotations already reach every combination of the two path directions, and the mirror is just a
 shortcut. All three are flippable so F behaves consistently.
 
-Two costs to this. The mirror never travels the extender chain, so its simulation and prediction
-are registered by hand (`KeepRegistered`), including the re-arm that `AtomicIslandExtender` does
-for its own chain - a hand-registered rewirer that does not re-arm silently stops working on the
-second scenario load. And reaching `WithPrediction` at all needs a cast to
-`IDefinedSimulatableIslandExtender`: nothing in the fluent chain returns that interface, though the
-same `AtomicIslandExtender` instance implements it.
+Two costs to this. The mirror never travels the extender chain, so its simulation is registered by
+hand (`ReArmedRegistrations`), including the re-arm that `AtomicIslandExtender` does for its own
+chain - a hand-registered rewirer that does not re-arm silently stops working on the second
+scenario load. And placement is reached only by casting to `IDefinedSimulatableIslandExtender`:
+nothing in the fluent chain returns that interface, though the same `AtomicIslandExtender` instance
+implements it.
+
+### Prediction is registered by hand for both variants, not just the mirror
+
+The straight variant's prediction used to go on the chain, through `.WithPrediction(...)`. A
+player's `Player.log` showed why it cannot.
+
+`AtomicIslandExtender.Build` re-arms itself only when `WaitAllRewirers` sees every branch clear its
+link - modules, placement + toolbar, simulation **and** prediction. Prediction fires from exactly
+one place, `PredictionSystemsInterceptor`, a MonoMod postfix on
+`BuiltinPredictionSimulationSystems.CreateSimulationSystems`. That method in turn has exactly one
+caller, `GameSessionOrchestrator.SetupPredictions` - and `StartPredictionUpdate` skips it outright:
+
+```csharp
+if (!SimulationSettings.Predict) { if (PredictionSimulator != null) ShutDownPredictions(); return; }
+if (PredictionSimulator == null) SetupPredictions(...);
+```
+
+`SimulationSettings.Predict` is `BoolGameSetting("prediction", ..., defaultValue: true)`, stored as
+`setting.simulation-settings.prediction`. **The player had predictions turned off.** No prediction
+system is ever created, so `IslandPredictionExtender` was added six times - three from the chain,
+three from the mirrors - and removed none across four sessions. The link never cleared and the
+chain never re-armed.
+
+Everything else was a red herring: their mod set, load order, the Workshop packaging and the icon
+paths all reproduce clean on a machine with the setting left on, and all eleven of their mods were
+installed at matching versions to prove it.
+
+The chain is therefore consumed by the first scenario of the process - which is the **main menu's
+background game** (`Initializing Main Menu`, then `Init existing savegame memory`), not the
+player's save. `New islands: 170 + 163` in that menu session, `164 + 163` in every session after
+it: the six crossings registered once, into a map nobody plays. The real save had no definitions,
+no toolbar group and no research unlock, and the mod logged not one error. The reported symptoms
+were exactly that - no hotbar icons, and `CrossoverPlacementRewirer` falling through to vanilla
+lift bridges because it could find no crossing definition to substitute.
+
+So prediction goes through `ReArmingRewirer` for the straight variant too. The chain then waits
+only on branches that do fire, and prediction still attaches whenever `CreateSimulationSystems`
+runs. The cost is a second cast: what `InToolbar` returns offers only `WithPrediction` and
+`WithoutPrediction`, and `WithoutPrediction` is `throw new NotImplementedException()`
+(`AtomicIslandExtender:307`), so there is no fluent route onward that skips prediction.
 
 ### The look, without authoring a mesh
 
@@ -305,7 +345,7 @@ the game running and anything still registered keeps firing against a dead insta
 | `CrossoverPlacementRewirer` | `RemoveRewirer(PlacementHandle)` |
 | `CrossoverModulesRewirer` | `RemoveRewirer(ModulesHandle)` |
 | `CreateIslandPlatformDrawers` detour | `CrossoverAppearance.Uninstall()` |
-| Six mirrored simulation/prediction registrations | `ReArmingRewirer.Dispose()` |
+| Nine prediction/simulation registrations (three straight predictions, three mirrored pairs) | `ReArmingRewirer.Dispose()` |
 | `CrossoverScenario`, `ToolbarKit.Log` statics | cleared explicitly |
 
 The re-arming ones are why `RewirerChain.BeginRewiringWith` could not be used: it arms the rewirer

@@ -3,7 +3,7 @@ using Core.Pooling;
 using Game.Core.Simulation;
 using Game.Core.Trains;
 
-namespace TrainCargoTools
+namespace QuinnBast.Shapez2.TrainCargoTools
 {
     /// Takes a cargo package off a belt and drops it into a filling container's state.
     ///

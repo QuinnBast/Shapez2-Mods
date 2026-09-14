@@ -384,16 +384,18 @@ def sweep_box(mesh, path, a0, a1, u0, u1, uv="hull", caps=True):
 
 
 def cargo_track(path):
-    """One tier of the cargo belt's track: a deck in a channel, with sleepers across it.
+    """The cargo belt's track: a deck in a channel, with sleepers across it.
 
-    A belt has three of these, one per lane layer, stacked `CargoLanes.LayerSpacing_W` apart by
-    the drawer - see CargoTrackDrawer. A single tier at one height was wrong: cargo rides at a
-    different height on each layer, so the lower layers' containers sank through the floor of a
-    one-tier model.
+    One deck carrying all three lane layers abreast, which is how a vanilla space belt does it -
+    `SpacePathSimulationRenderer.DrawItems` fans its layers sideways by `TracksSpacing` rather
+    than stacking them. This briefly was three stacked tiers instead, and that was the mistake:
+    freight scaled to fill a slot needs about three units of headroom, so three tiers made a
+    six-unit tower and the top deck hid the two below it from the game's camera angle. A belt
+    you cannot read at a glance is worse than one whose layers are hard to tell apart.
 
-    The spacing is the mod's own, not the theme's `LayerOffset`. That one is authored for shapes
-    and is far too tight for freight scaled to fill a slot - at shape spacing the three layers
-    of containers overlap so completely that a loaded belt appears to be carrying one.
+    The deck therefore has to be wide enough for three containers side by side. It sweeps to
+    +-3.7; `CargoLanes.LayerAcross_W` puts the outer two files at +-2.4 and caps a container at
+    2.2 across, so the outermost edge lands at 3.5 and the deck edge stays clear.
 
 
     A cargo belt used to draw with vanilla's belt track and be told apart by a marker or a tint.
@@ -406,6 +408,27 @@ def cargo_track(path):
     on to be mistaken for damage.
     """
     m = Mesh()
+    channel(m, path)
+
+    # A sweep's handedness follows the direction it curves, so the two corner pieces come out
+    # mirror images and one of them is inside out. Rather than special-casing the ring order per
+    # turn - which is the sort of sign that gets fixed in one place and forgotten in another -
+    # the volume is measured and the whole thing flipped if it came out negative. The checks in
+    # main() then confirm it either way.
+    if signed_volume(m.tris) < 0:
+        m.tris = [(c, b, a, uv) for a, b, c, uv in m.tris]
+
+    return m
+
+
+def channel(m, path):
+    """Adds one run of channel section - deck, walls, rails, sleepers - along `path`.
+
+    Separate from cargo_track so a junction can lay several arms into one mesh. The arms
+    overlap at the centre, which is fine: each is a closed volume on its own, so the union is
+    still closed and still outward-wound, and the corner pieces have overlapped like this from
+    the start.
+    """
 
     # Deck. Its top is at u = 0, so the drawer can place a tier by the same offset the cargo
     # renderer uses and the containers sit *on* it rather than in it.
@@ -427,19 +450,83 @@ def cargo_track(path):
             continue
         sweep_box(m, rib, -3.4, 3.4, -0.44, -0.18, "metal")
 
-    # A sweep's handedness follows the direction it curves, so the two corner pieces come out
-    # mirror images and one of them is inside out. Rather than special-casing the ring order per
-    # turn - which is the sort of sign that gets fixed in one place and forgotten in another -
-    # the volume is measured and the whole thing flipped if it came out negative. The checks in
-    # main() then confirm it either way.
+
+def cargo_track_straight():
+    return cargo_track(straight_path(-10.0, 10.0, 5))
+
+
+ARMS = {
+    # direction -> (edge x, edge z, heading). Headings match corner_path's: North is +pi/2.
+    "E": (10.0, 0.0, 0.0),
+    "N": (0.0, 10.0, math.pi * 0.5),
+    "S": (0.0, -10.0, -math.pi * 0.5),
+    "W": (-10.0, 0.0, 0.0),
+}
+
+
+def splitter_arm(name):
+    """An arm leading away from the West edge: straight on to East, or curving to a side.
+
+    The side arms are `corner_path` itself - radius 10 about the chunk corner, West edge midpoint
+    to side edge midpoint - so a branch leaving a junction follows exactly the line it would round
+    a corner, and the two meet without a kink. Reusing it rather than rebuilding the arc also
+    means the frames keep the heading convention the corner pieces are already checked against;
+    a hand-rolled version differed at the end frames and swept 0.6 units past the chunk edge.
+
+    Straight arms were the first version. They read as a crossroads dropped onto the track rather
+    than a belt that divides, which is not how the game draws its own junctions.
+    """
+    if name == "E":
+        return straight_path(-10.0, 10.0, 3)
+
+    return corner_path(1 if name == "N" else -1)
+
+
+def merger_arm(name):
+    """An arm leading into the East edge: a splitter arm mirrored across the chunk's centre line.
+
+    A merger cannot share a splitter's mesh once the arms curve. A left-forward splitter bends
+    West-to-North about the North-West corner; a left-forward merger bends North-to-East about
+    the North-East one. Mirroring in x maps one to the other, and maps a heading to pi - heading.
+    """
+    if name == "E":
+        return straight_path(-10.0, 10.0, 3)
+
+    return [(-x, z, math.pi - heading) for x, z, heading in corner_path(1 if name == "N" else -1)]
+
+
+def cargo_junction(arms):
+    """A junction, built from one arm per direction it reaches.
+
+    Flow direction is not geometry. A left-forward *splitter* (in from West, out North and East)
+    and a left-forward *merger* (in from West and North, out East) occupy the same three arms, so
+    they share a mesh; only the Y pair differs, because a Y splitter reaches West/North/South and
+    a Y merger reaches North/South/East.
+
+    The side arms curve, sharing a radius and centre with the corner pieces - see junction_arm -
+    so cargo leaving a junction sideways follows the same line it would round a corner.
+
+    Every arm starts at the chunk centre, so they overlap there in roughly one channel width.
+    That reads as the junction box and costs nothing: each arm is its own closed volume, which is
+    what the checks in main() confirm.
+    """
+    m = Mesh()
+
+    for name, path in arms:
+        channel(m, path)
+
     if signed_volume(m.tris) < 0:
         m.tris = [(c, b, a, uv) for a, b, c, uv in m.tris]
 
     return m
 
 
-def cargo_track_straight():
-    return cargo_track(straight_path(-10.0, 10.0, 5))
+def splitter(names):
+    return cargo_junction([(n, splitter_arm(n)) for n in names])
+
+
+def merger(names):
+    return cargo_junction([(n, merger_arm(n)) for n in names])
 
 
 def cargo_track_left():
@@ -831,6 +918,16 @@ MACHINES = {
     "CargoTrack": cargo_track_straight,
     "CargoTrackLeft": cargo_track_left,
     "CargoTrackRight": cargo_track_right,
+    # Eight, not five: once the arms curve, a splitter and the merger on the same spokes bend
+    # opposite ways and can no longer share a mesh. See merger_arm.
+    "CargoTrackSplitLeftFwd": lambda: splitter(("E", "N")),
+    "CargoTrackSplitRightFwd": lambda: splitter(("E", "S")),
+    "CargoTrackSplitY": lambda: splitter(("N", "S")),
+    "CargoTrackSplitTriple": lambda: splitter(("E", "N", "S")),
+    "CargoTrackMergeLeftFwd": lambda: merger(("E", "N")),
+    "CargoTrackMergeRightFwd": lambda: merger(("E", "S")),
+    "CargoTrackMergeY": lambda: merger(("N", "S")),
+    "CargoTrackMergeTriple": lambda: merger(("E", "N", "S")),
     "CargoPackager": cargo_packager,
     "CargoUnpackager": cargo_unpackager,
     "CargoStore": cargo_store,

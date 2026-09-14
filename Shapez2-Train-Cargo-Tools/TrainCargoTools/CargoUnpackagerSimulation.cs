@@ -7,7 +7,7 @@ using Game.Content.Features.SpacePaths;
 using Game.Core.Simulation;
 using Game.Core.Trains;
 
-namespace TrainCargoTools
+namespace QuinnBast.Shapez2.TrainCargoTools
 {
     /// Cargo packages in on a cargo belt, loose items out onto an ordinary space belt or pipe.
     ///

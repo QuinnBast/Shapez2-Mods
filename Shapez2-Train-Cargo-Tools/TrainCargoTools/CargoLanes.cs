@@ -1,6 +1,6 @@
 using Game.Content.Features.SpacePaths;
 
-namespace TrainCargoTools
+namespace QuinnBast.Shapez2.TrainCargoTools
 {
     /// Which of a space path's twelve lanes a cargo belt actually uses.
     ///
@@ -55,40 +55,53 @@ namespace TrainCargoTools
         /// renderer draws one full chunk of run per segment.
         public const float SlotSpacing_W = 20f / SlotsPerLane;
 
-        /// Vertical gap between the three lane layers on a cargo belt, in world units.
+        /// Sideways gap between the three lane layers on a cargo belt, in world units.
         ///
-        /// **Not the theme's `SpacePathItemRenderingConfig.LayerOffset`**, which is what this
-        /// used at first, and the reason a loaded belt looked like it was only carrying one
-        /// layer. That offset is authored for shapes - small things, a fraction of a world unit
-        /// apart. A cargo container is scaled to fill a whole slot, about two and a half units
-        /// tall, so three of them at shape spacing interpenetrate almost completely: all three
-        /// layers *were* being drawn, stacked so closely that they read as one.
+        /// The three layers ride **abreast on one deck**, not stacked. Stacking was the mod's
+        /// own idea and it did not survive contact: three decks three units apart made a
+        /// six-unit tower, and from the game's angled camera the top deck hid the two beneath
+        /// it, so a loaded belt could not be read at a glance.
         ///
-        /// So a cargo belt sets its own layer spacing, from the size of the thing it carries.
-        /// The track drawer stacks its three tiers by the same number, which is why this lives
-        /// here rather than in either drawer - one constant, or they drift apart and the freight
-        /// stops sitting on the deck.
-        public const float LayerSpacing_W = 3.0f;
+        /// Vanilla does not stack either. `SpacePathSimulationRenderer.DrawItems` computes a
+        /// *lateral* offset of `(layer - 1) * TracksSpacing + (lane - 1.5) * TrackItemsSpacing`
+        /// and applies it perpendicular to travel, so a space belt fans its layers across the
+        /// track as well as through it. Cargo does the same thing with the lane term dropped,
+        /// there being one lane per layer: three files side by side, nothing behind anything.
+        ///
+        /// 2.4 rather than the theme's `TracksSpacing`, for the same reason the old vertical gap
+        /// was the mod's own: that number is authored for shapes, which are a fraction of a unit
+        /// across, and freight scaled to fill a slot would overlap at it. Sized instead to the
+        /// deck, which `cargo_track` in Tools/generate_meshes.py sweeps to +-3.7: three files at
+        /// this spacing put the outer two at +-2.4 and leave the deck edge clear.
+        public const float LayerAcross_W = 2.4f;
 
-        /// The tallest a container may be drawn, leaving room for the deck of the tier above.
+        /// The widest a container may be drawn across the belt, so two files cannot touch.
         ///
-        /// A tier's deck is about 0.42 units thick beneath its surface, so a container of this
-        /// height clears the underside of the next tier with a little air to spare.
-        public const float MaxHeight_W = LayerSpacing_W * 0.78f;
+        /// This is a *third* constraint on the package scale, and it is the one that usually
+        /// binds now: a container is scaled to fill its slot along the run, and a crate authored
+        /// much squarer than that slot would be far too wide to put three of abreast.
+        public const float MaxAcross_W = LayerAcross_W * 0.92f;
 
-        /// Where one layer's deck sits, in world units above the chunk centre.
+        /// How far off the centre line a layer's file of containers runs.
         ///
-        /// Both drawers go through this so the track and the freight on it cannot disagree - the
-        /// track drawer stacks a tier here and the belt renderer puts that layer's containers on
-        /// top of it.
-        ///
-        /// Centred on the theme's *middle* layer rather than stacked up from layer 0, so a cargo
-        /// belt sits where a vanilla space belt sits instead of floating six units above the
-        /// station it joins. `LayerOffset` is used only to find that centre; the gap between the
-        /// tiers is the mod's own, for the reason on LayerSpacing_W.
-        public static float LayerHeight_W(SpacePathItemRenderingConfig config, int layer)
+        /// Layer 1 is the middle, which is where a one-layer belt drew before and where a belt
+        /// fed from a single floor still draws - so the common case did not move.
+        public static float Across_W(int layer)
         {
-            return config.Height + config.LayerOffset + LayerSpacing_W * (layer - 1);
+            return (layer - 1) * LayerAcross_W;
+        }
+
+        /// Where the deck sits, in world units above the chunk centre.
+        ///
+        /// One deck now, where the middle of the three tiers used to be, so a cargo belt still
+        /// meets the station it joins at the height it always did. Both drawers go through this
+        /// so the track and the freight on it cannot disagree.
+        ///
+        /// Read from the theme rather than baked in: how high a space path floats is authored
+        /// data, and `config.Height + config.LayerOffset` is vanilla's own middle layer.
+        public static float DeckHeight_W(SpacePathItemRenderingConfig config)
+        {
+            return config.Height + config.LayerOffset;
         }
 
         /// True for the one lane per layer that carries cargo.

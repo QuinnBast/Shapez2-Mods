@@ -3,6 +3,8 @@ using Game.Core.Blueprint.Exporter;
 using Game.Core.Blueprint.Importer;
 using ILogger = Core.Logging.ILogger;
 
+namespace QuinnBast.Shapez2.PlatformBlackbox;
+
 /// <summary>
 /// Holds the session-scoped services this mod needs but cannot be handed directly.
 ///

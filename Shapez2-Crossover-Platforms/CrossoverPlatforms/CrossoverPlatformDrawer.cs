@@ -6,7 +6,7 @@ using UnityEngine;
 
 #pragma warning disable CS0618 // IIslandPlatformDrawer is obsolete, but it is how space paths draw.
 
-namespace CrossoverPlatforms
+namespace QuinnBast.Shapez2.CrossoverPlatforms
 {
     /// Draws a crossing as two space path segments at right angles.
     ///

@@ -3,6 +3,8 @@ using System.Linq;
 using Game.Core.Map.Simulation;
 using ShapezShifter.Hijack;
 
+namespace QuinnBast.Shapez2.PlatformEfficiencyOverlay;
+
 /// <summary>
 /// Adds the history chart to a machine's own side panel, under whatever the game already
 /// shows there - including its efficiency gauge, which answers "right now" while the chart

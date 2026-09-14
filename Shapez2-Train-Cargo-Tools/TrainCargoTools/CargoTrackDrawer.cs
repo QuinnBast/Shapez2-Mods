@@ -7,7 +7,7 @@ using UnityEngine;
 
 #pragma warning disable CS0618 // IIslandPlatformDrawer is obsolete, but it is how space paths draw.
 
-namespace TrainCargoTools
+namespace QuinnBast.Shapez2.TrainCargoTools
 {
     /// Draws a cargo belt's own track.
     ///
@@ -38,8 +38,8 @@ namespace TrainCargoTools
         private readonly PathNodeClassification Run;
         private readonly ILODMeshMaterial Mesh;
 
-        /// The mesh is one *tier*. A belt has three, one per lane layer, stacked by the drawer
-        /// at the same offsets the cargo renderer uses - see Draw.
+        /// The mesh is the whole deck. It was one of three stacked tiers until the lane layers
+        /// were moved to ride abreast on a single deck - see CargoLanes.Across_W.
         public CargoTrackDrawer(
             ISpacePathResources track, PathNodeClassification run, ILODMeshMaterial mesh)
         {
@@ -58,20 +58,17 @@ namespace TrainCargoTools
                 return;
             }
 
-            // One tier per lane layer, at exactly the heights the cargo renderer puts containers
-            // at. A single tier was wrong in a way that only shows once something is on the belt:
-            // layers 1 and 2 sit lower, so their containers sank through the floor of the model.
+            // One tier. It briefly was three, one per lane layer, back when the layers were
+            // stacked vertically - and three decks three units apart made a six-unit tower whose
+            // top deck hid the two below it. The layers ride abreast on this one deck now, so
+            // the tier that carries them is single again. See CargoLanes.Across_W.
             //
-            // The offsets are read from the theme rather than baked into the mesh, because how
-            // far apart a space path's layers sit is authored data.
+            // The height is read from the theme rather than baked into the mesh, because how
+            // high a space path floats is authored data.
             SpacePathItemRenderingConfig config = Track.ItemRenderingConfig;
 
-            for (int layer = 0; layer < SpacePathConstants.NumLayers; layer++)
-            {
-                float height = CargoLanes.LayerHeight_W(config, layer);
-                drawOptions.Renderers.SpacePaths.Add(
-                    mesh, material, Trs(transform, scale, height));
-            }
+            drawOptions.Renderers.SpacePaths.Add(
+                mesh, material, Trs(transform, scale, CargoLanes.DeckHeight_W(config)));
         }
 
         private static Matrix4x4 Trs(in GlobalChunkTransform transform, float3 scale, float height)
@@ -94,19 +91,15 @@ namespace TrainCargoTools
 
             SpacePathItemRenderingConfig config = Track.ItemRenderingConfig;
 
-            for (int layer = 0; layer < SpacePathConstants.NumLayers; layer++)
-            {
-                float3 centre = transform.Position.ToCenter_W(
-                    CargoLanes.LayerHeight_W(config, layer));
-                float3 offset = IslandsBlueprintDrawUtils.GetCameraPositionOffset(drawOptions, centre);
+            float3 centre = transform.Position.ToCenter_W(CargoLanes.DeckHeight_W(config));
+            float3 offset = IslandsBlueprintDrawUtils.GetCameraPositionOffset(drawOptions, centre);
 
-                Matrix4x4 trs = Matrix4x4.TRS(
-                    (Vector3)(centre + offset),
-                    FastMatrix.RotateY(transform.Rotation), (Vector3)scale);
+            Matrix4x4 trs = Matrix4x4.TRS(
+                (Vector3)(centre + offset),
+                FastMatrix.RotateY(transform.Rotation), (Vector3)scale);
 
-                IslandsBlueprintDrawUtils.DrawBlueprintMesh(
-                    drawOptions, mesh, trs, propertyBlock, propertyBlockHash);
-            }
+            IslandsBlueprintDrawUtils.DrawBlueprintMesh(
+                drawOptions, mesh, trs, propertyBlock, propertyBlockHash);
         }
 
         public void DrawBlueprintNonInstanced(
@@ -122,19 +115,15 @@ namespace TrainCargoTools
 
             SpacePathItemRenderingConfig config = Track.ItemRenderingConfig;
 
-            for (int layer = 0; layer < SpacePathConstants.NumLayers; layer++)
-            {
-                float3 centre = transform.Position.ToCenter_W(
-                    CargoLanes.LayerHeight_W(config, layer));
-                float3 offset = IslandsBlueprintDrawUtils.GetCameraPositionOffset(drawOptions, centre);
+            float3 centre = transform.Position.ToCenter_W(CargoLanes.DeckHeight_W(config));
+            float3 offset = IslandsBlueprintDrawUtils.GetCameraPositionOffset(drawOptions, centre);
 
-                Matrix4x4 trs = Matrix4x4.TRS(
-                    (Vector3)(centre + offset),
-                    FastMatrix.RotateY(transform.Rotation), (Vector3)scale);
+            Matrix4x4 trs = Matrix4x4.TRS(
+                (Vector3)(centre + offset),
+                FastMatrix.RotateY(transform.Rotation), (Vector3)scale);
 
-                IslandsBlueprintDrawUtils.DrawBlueprintMeshNonInstanced(
-                    drawOptions, mesh, trs, propertyBlock);
-            }
+            IslandsBlueprintDrawUtils.DrawBlueprintMeshNonInstanced(
+                drawOptions, mesh, trs, propertyBlock);
         }
 
         /// The zoomed-out map builds one static mesh, so a belt that drew nothing here would

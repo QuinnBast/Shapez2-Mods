@@ -9,6 +9,8 @@ using ShapezShifter.Hijack;
 using ShapezShifter.Kit;
 using ILogger = Core.Logging.ILogger;
 
+namespace QuinnBast.Shapez2.PlatformBlackbox;
+
 /// <summary>
 /// The mod's commands. Registered directly as an <see cref="IConsoleRewirer"/> so they keep
 /// a short prefix instead of being named after the assembly.

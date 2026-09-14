@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using ILogger = Core.Logging.ILogger;
 
+namespace QuinnBast.Shapez2.ModReloader;
+
 /// <summary>
 /// Installs staged builds that have never been installed.
 ///

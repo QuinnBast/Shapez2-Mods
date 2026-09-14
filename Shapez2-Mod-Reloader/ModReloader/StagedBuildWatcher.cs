@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using ILogger = Core.Logging.ILogger;
 
+namespace QuinnBast.Shapez2.ModReloader;
+
 /// <summary>
 /// Watches the staged build folder and reloads whatever was rebuilt, so the loop becomes
 /// "build" rather than "build, alt-tab, type".
@@ -22,6 +24,31 @@ public class StagedBuildWatcher : IDisposable
 {
     /// <summary>Where <c>dotnet build -p:Dev=true</c> stages a mod.</summary>
     public static string Root => Path.Combine(GameEnvironment.DataPath, "mods-dev");
+
+    /// <summary>
+    /// Every folder staged for reload.
+    ///
+    /// Shared by the two places that reload without being given a name - the pause menu and
+    /// the crash screen - because neither has anywhere to type one. Reload resolves each
+    /// name and reports the ones that are not running mods, so a stale folder costs a line
+    /// of report rather than a throw.
+    /// </summary>
+    public static List<string> StagedFolders()
+    {
+        List<string> folders = new List<string>();
+
+        if (!Directory.Exists(Root))
+        {
+            return folders;
+        }
+
+        foreach (string path in Directory.GetDirectories(Root))
+        {
+            folders.Add(Path.GetFileName(path));
+        }
+
+        return folders;
+    }
 
     /// How long the folder has to stay quiet before a build counts as finished.
     private static readonly TimeSpan Settle = TimeSpan.FromMilliseconds(750);

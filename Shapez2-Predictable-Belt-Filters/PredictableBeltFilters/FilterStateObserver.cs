@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using Core.Events;
 using Game.Core.Map.Simulation;
 
-namespace PredictableBeltFilters
+namespace QuinnBast.Shapez2.PredictableBeltFilters
 {
     /// Watches belt filters on the *real* simulation side and records where their state lives.
     ///

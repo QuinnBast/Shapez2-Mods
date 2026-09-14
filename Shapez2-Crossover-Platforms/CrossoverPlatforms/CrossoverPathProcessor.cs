@@ -5,7 +5,7 @@ using Game.Placement.MapManipulation;
 using Game.Placement.Processing;
 using Game.Placement.Utils;
 
-namespace CrossoverPlatforms
+namespace QuinnBast.Shapez2.CrossoverPlatforms
 {
     /// Turns a blocked space path node into a crossing instead of leaving it for the lift.
     ///
