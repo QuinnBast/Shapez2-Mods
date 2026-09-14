@@ -520,8 +520,9 @@ will also appear in research goals.
   the frame, which is too late for an `AddComponent` on the next line. There is no HUD rewirer in
   ShapezShifter, so it takes a MonoMod postfix on `HUDShapeCodesPreview.Construct` — which is safe
   to hook, the class not being generic.
-  `HUDMapResourcesFilterRow` builds a row per part in `MapGenerationAllParts` the same way and may
-  overflow too; that one is still a prediction.
+  `HUDMapResourcesFilterRow` builds a row per part in `MapGenerationAllParts` the same way and is
+  the obvious candidate for the same problem — but checked in game with fourteen parts it copes, so
+  the shared pattern is not on its own a reason to expect the shared bug.
 - Keep a reference to the ScriptableObjects you create, and set
   `HideFlags.HideAndDontSave`. `Resources.UnloadUnusedAssets` runs on scene changes and will
   collect an unreferenced one, leaving the registered part pointing at a destroyed Unity

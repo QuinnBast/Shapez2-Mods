@@ -726,7 +726,11 @@ after - because the prefab's structure is not readable from the assemblies. `pan
 the rebuild is expected: no layout pass has run at `Construct` time, which is also why the cell has
 to be measured after a forced rebuild rather than read off the transform.
 
-The warning about `HUDMapResourcesFilterRow` still stands and is still unconfirmed.
+**`HUDMapResourcesFilterRow` turned out to be fine**, checked in game with all fourteen parts
+registered. It builds a row per part in `MapGenerationAllParts` exactly as `HUDShapeCodesPreview`
+does, so it was the obvious candidate for the same overflow and it is not one - whatever that panel
+does with its rows, it copes. Worth recording because the prediction had been repeated three times
+on the strength of the shared pattern, and repeating a guess does not make it a finding.
 
 ### The mockup, and what checks it
 
@@ -942,5 +946,5 @@ map.
 - Ten parts is a lot. Trimming is a one-word edit per part - `NotSpawned` registers a code without
   putting it on the map.
 - Eight new parts at once may be too many for map legibility even at rare.
-- `HUDMapResourcesFilterRow` builds a row per part in `MapGenerationAllParts`. Ten parts instead of
-  four may overflow that UI.
+- ~~`HUDMapResourcesFilterRow` builds a row per part in `MapGenerationAllParts`. Ten parts instead
+  of four may overflow that UI.~~ Checked in game: it copes.
