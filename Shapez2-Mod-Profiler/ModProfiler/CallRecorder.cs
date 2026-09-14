@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 
+namespace QuinnBast.Shapez2.ModProfiler;
+
 /// <summary>
 /// The hot path: what every instrumented method calls on the way in and on the way out.
 ///

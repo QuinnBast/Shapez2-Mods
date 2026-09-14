@@ -5,6 +5,8 @@ using Unity.Profiling;
 using Unity.Profiling.LowLevel.Unsafe;
 using UnityEngine.Profiling;
 
+namespace QuinnBast.Shapez2.ModProfiler;
+
 /// <summary>
 /// Asks the running game which profiling APIs it actually implements.
 ///

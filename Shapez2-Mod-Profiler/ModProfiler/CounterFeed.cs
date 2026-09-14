@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using Unity.Profiling;
 using UnityEngine;
 
+namespace QuinnBast.Shapez2.ModProfiler;
+
 /// <summary>
 /// Samples the counters this player actually feeds, once per frame.
 ///
@@ -50,8 +52,31 @@ public class CounterFeed : IDisposable
 
         public bool Live => Recorder.Valid;
 
+        /// <summary>
+        /// Folds one reading into the statistics, unless it is zero.
+        ///
+        /// **A zero is the recorder having nothing to say, not the counter being zero.**
+        /// <c>ProfilerRecorder.LastValue</c> reads zero until it has taken a sample, and the
+        /// render counters read zero on any frame that drew nothing - a loading screen, the
+        /// frames either side of a save being opened. This feed starts sampling when the mod is
+        /// constructed, at the main menu, so it walks through a pile of those before anybody
+        /// opens the page.
+        ///
+        /// A minimum only ever decreases, so one of them pinned every counter's min at zero for
+        /// the rest of the session. Max and mean were dragged the same way, less visibly.
+        ///
+        /// None of the counters in this set can legitimately read zero while a frame is being
+        /// drawn - they are byte totals and draw call counts - so skipping the reading outright
+        /// is the honest treatment rather than a special case for min. <c>Value</c> is still the
+        /// raw reading, because "now" should say what the counter actually said.
+        /// </summary>
         public void Observe(long value)
         {
+            if (value <= 0)
+            {
+                return;
+            }
+
             if (Samples == 0 || value < Min)
             {
                 Min = value;
@@ -113,13 +138,30 @@ public class CounterFeed : IDisposable
     private readonly Dictionary<string, List<Gauge>> Sections = new Dictionary<string, List<Gauge>>();
     private readonly List<string> Order = new List<string>();
 
-    /// <summary>How many frames the strip chart remembers.</summary>
-    public const int HistoryLength = 180;
+    /// <summary>How many buckets the strip chart remembers.</summary>
+    public const int HistoryLength = 240;
 
-    /// <summary>Frame times, newest last, for the strip chart.</summary>
+    /// <summary>
+    /// How long one bucket covers.
+    ///
+    /// One slot per *frame* made the chart a 180-frame window - three seconds at 60fps, which
+    /// scrolled past faster than a stutter could be looked at. Bucketing by time gives a minute
+    /// of history in the same space, and the aggregate is the bucket's **worst** frame rather
+    /// than its mean: a mean over a quarter second hides exactly the single 80ms frame the chart
+    /// exists to show.
+    /// </summary>
+    public const float BucketSeconds = 0.25f;
+
+    /// <summary>How much history the chart holds, in seconds. 240 x 0.25 is a minute.</summary>
+    public const float WindowSeconds = HistoryLength * BucketSeconds;
+
+    /// <summary>Worst frame time per bucket, newest last, for the strip chart.</summary>
     public readonly float[] FrameHistory = new float[HistoryLength];
 
+    /// <summary>Indexes the bucket still being filled, which is the newest one drawn.</summary>
     private int FrameCursor;
+
+    private float BucketElapsed;
 
     private long LastGcUsed;
     private int LastCollections;
@@ -218,23 +260,46 @@ public class CounterFeed : IDisposable
 
         float ms = deltaTime * 1000f;
 
-        FrameHistory[FrameCursor] = ms;
-        FrameCursor = (FrameCursor + 1) % FrameHistory.Length;
+        // The bucket under the cursor is live: it is written every frame and only sealed when
+        // its window runs out, so the right hand end of the chart tracks the current frame
+        // instead of lagging a quarter second behind it.
+        FrameHistory[FrameCursor] = Mathf.Max(FrameHistory[FrameCursor], ms);
+        BucketElapsed += deltaTime;
+
+        if (BucketElapsed >= BucketSeconds)
+        {
+            BucketElapsed = 0f;
+            FrameCursor = (FrameCursor + 1) % FrameHistory.Length;
+
+            // Cleared on arrival rather than on departure, because the slot being moved into is
+            // a minute-old reading that would otherwise be drawn as if it were current.
+            FrameHistory[FrameCursor] = 0f;
+        }
 
         FrameLast = ms;
-        FrameMin = FrameSamples == 0 ? ms : Mathf.Min(FrameMin, ms);
-        FrameMax = FrameSamples == 0 ? ms : Mathf.Max(FrameMax, ms);
-        FrameSum += ms;
-        FrameSamples++;
-        FrameMean = (float)(FrameSum / FrameSamples);
+
+        // Same reasoning as Gauge.Observe: a frame that took no time did not happen. Unity
+        // reports an unscaled delta of zero on the first frame after a scene loads, which is
+        // enough to pin the minimum at zero for good.
+        if (ms > 0f)
+        {
+            FrameMin = FrameSamples == 0 ? ms : Mathf.Min(FrameMin, ms);
+            FrameMax = FrameSamples == 0 ? ms : Mathf.Max(FrameMax, ms);
+            FrameSum += ms;
+            FrameSamples++;
+            FrameMean = (float)(FrameSum / FrameSamples);
+        }
 
         UpdateGcRates(deltaTime, gcUsed);
     }
 
-    /// <summary>Newest-last view of the frame history, for drawing left to right.</summary>
+    /// <summary>
+    /// Newest-last view of the frame history, for drawing left to right. Index zero is the
+    /// oldest bucket, which is the one *after* the live cursor.
+    /// </summary>
     public float FrameAt(int index)
     {
-        return FrameHistory[(FrameCursor + index) % FrameHistory.Length];
+        return FrameHistory[(FrameCursor + 1 + index) % FrameHistory.Length];
     }
 
     /// <summary>Frame time now, and the shape of the window behind it.</summary>

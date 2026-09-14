@@ -3,6 +3,8 @@ using MonoMod.RuntimeDetour;
 using ShapezShifter.SharpDetour;
 using ILogger = Core.Logging.ILogger;
 
+namespace QuinnBast.Shapez2.ModProfiler;
+
 /// <summary>
 /// Makes the panel modal: while it is open the world beneath it stops responding, and Escape
 /// closes it.

@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using Unity.Profiling;
 using Unity.Profiling.LowLevel.Unsafe;
 
+namespace QuinnBast.Shapez2.ModProfiler;
+
 /// <summary>
 /// Holds recorders open across frames, which is the only way to find out whether a counter
 /// carries a number.

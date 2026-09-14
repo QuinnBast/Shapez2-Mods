@@ -3,18 +3,26 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
+namespace QuinnBast.Shapez2.ModProfiler;
+
 /// <summary>
 /// The profiler page: a modal screen with tabs, laid out like one of the game's own full
-/// screen pages - a title bar, a row of tabs, a scrolling body - and drawn with IMGUI.
+/// screen pages - a title top left, a centred tab row with the live one underlined in warm
+/// light, a rule across the screen, then cards of content - and drawn with IMGUI.
 ///
-/// **Why IMGUI and not a HUDPart.** It will not look exactly like the game's UI, and that is
-/// the trade being made deliberately. A real screen means the game's prefab and dependency
+/// **Why IMGUI and not a HUDPart.** A real screen means the game's prefab and dependency
 /// injection machinery: <c>[Construct]</c> that never runs on a runtime clone,
 /// <c>HUDLocalizedText</c> throwing because its resolver is null, layout groups to fight. That
 /// is where the hours went on the last two HUD additions, and for a page whose whole job is
-/// dense tables of numbers it buys nothing back. What the game's screens *do* have that
-/// matters is behaviour - they stop the world behind them, they close on Escape - and that is
-/// reproduced exactly: see <see cref="PanelInput"/> and <see cref="SyncBlocker"/>.
+/// dense tables of numbers it buys nothing back.
+///
+/// What that trade used to cost was the look, and it no longer has to: everything the game's
+/// pages are made of - the translucent ground, soft-cornered surfaces, one warm accent for
+/// selection, a hairline scrollbar - is a texture, and <see cref="PanelTheme"/> generates them.
+/// Nothing on this page uses IMGUI's default skin.
+///
+/// The behaviour that matters is reproduced exactly: the page stops the world behind it and
+/// closes on Escape. See <see cref="PanelInput"/> and <see cref="SyncBlocker"/>.
 ///
 /// The top bar button that opens it <em>is</em> a real game button, so the page is found the
 /// way the rest of the game is found.
@@ -28,7 +36,17 @@ public class DebugPanel : MonoBehaviour
         Cpu,
     }
 
-    private static readonly string[] TabNames = { "Overview", "Memory", "CPU" };
+    private static readonly string[] TabNames = { "OVERVIEW", "MEMORY", "CPU" };
+    private static readonly string[] ScopeNames = { "Mods only", "Everything" };
+
+    /// <summary>
+    /// How long Record runs before stopping itself, and what the buttons say. Two minutes is the
+    /// default because the failure this prevents is pressing Record and walking away: the weave
+    /// keeps costing two timestamps a call, and the tree keeps growing, until somebody stops it.
+    /// </summary>
+    private static readonly string[] LimitNames = { "30 s", "2 min", "5 min", "No limit" };
+
+    private static readonly float[] LimitValues = { 30f, 120f, 300f, 0f };
 
     private CounterFeed Feed;
     private ProfilerSession Session;
@@ -42,11 +60,17 @@ public class DebugPanel : MonoBehaviour
     private bool ShowAllManaged;
 
     private bool PickerOpen;
+    private Rect PickerAnchor;
     private string SelectedMod;
     private List<string> Lines = new List<string>();
 
     private string AssemblyFilter;
-    private bool ModsOnly;
+
+    // A mod's own objects are the only ones this panel can do anything about, and the full table
+    // is four hundred rows of the game's. Start where the answer is.
+    private bool ModsOnly = true;
+
+    private int LimitChoice = 1;
     private string ExportMessage;
 
     private string HoverText;
@@ -55,19 +79,7 @@ public class DebugPanel : MonoBehaviour
     private GameObject Blocker;
 
     private Vector2 Scroll;
-    private GUIStyle Header;
-    private GUIStyle Label;
-    private GUIStyle Value;
-    private GUIStyle Title;
-    private GUIStyle CloseButton;
-    private GUIStyle TabOn;
-    private GUIStyle TabOff;
-    private GUIStyle Tooltip;
-    private GUIStyle FrameLabel;
-    private Texture2D Pixel;
-    private Texture2D Chrome;
-    private Texture2D Dim;
-    private Texture2D Graph;
+    private float ContentHeight;
 
     public bool Open { get; private set; }
 
@@ -107,6 +119,15 @@ public class DebugPanel : MonoBehaviour
     public void Toggle()
     {
         Open = !Open;
+
+        // Retried on every open until it succeeds: the game's background only exists inside a
+        // session, and the panel can be opened before one has started.
+        if (Open && !GameBackdrop.Available)
+        {
+            GameBackdrop.Invalidate();
+            GameBackdrop.Resolve();
+        }
+
         SyncBlocker();
     }
 
@@ -132,7 +153,7 @@ public class DebugPanel : MonoBehaviour
     /// through it.
     ///
     /// A canvas of our own with a high sorting order wins that raycast, and one Image with
-    /// <c>raycastTarget</c> set swallows the event. It is invisible on purpose - the dimming
+    /// <c>raycastTarget</c> set swallows the event. It is invisible on purpose - the backdrop
     /// is drawn in IMGUI instead, where it is certain to sit under our own page rather than
     /// over it; the two systems' draw order is not worth betting a blacked-out panel on.
     /// </summary>
@@ -190,6 +211,15 @@ public class DebugPanel : MonoBehaviour
         {
             Managed.Step(6);
         }
+
+        // A recording that has run out of time stops here rather than in the panel's draw,
+        // because it has to happen whether or not anybody is looking at the page.
+        IEnumerable<string> stopped = Session?.Tick();
+
+        if (stopped != null)
+        {
+            Lines = new List<string>(stopped);
+        }
     }
 
     private void OnGUI()
@@ -199,7 +229,9 @@ public class DebugPanel : MonoBehaviour
             return;
         }
 
-        EnsureStyles();
+        PanelTheme.Ensure();
+        PanelFont.Probe();
+
         HoverText = null;
 
         // A fallback for the game binding PanelInput consumes: if this build calls cancel
@@ -211,115 +243,215 @@ public class DebugPanel : MonoBehaviour
             return;
         }
 
-        // Full screen rather than a window, because that is what the game's own pages are:
-        // Statistics fills the screen, puts its title top left, its tabs centred and its close
-        // button top right. Same skeleton here.
-        GUI.color = Color.white;
-        GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), Dim);
+        PanelTheme.DrawBackdrop();
 
-        float margin = Mathf.Max(46f, (Screen.width - 1500f) / 2f);
-        const float headerHeight = 104f;
+        // Claimed here, before anything else asks, so the scrollbar keeps the same id however
+        // many rows the page below it grows or loses. See PanelTheme.ScrollBar.
+        int scrollId = GUIUtility.GetControlID(FocusType.Passive);
 
-        GUI.Label(new Rect(margin, 26f, 500f, 44f), "Mod Profiler", Title);
+        // Held to a readable measure rather than stretched across an ultrawide, which is what
+        // the game's own pages do with their content.
+        float margin = Mathf.Max(52f, (Screen.width - 1560f) / 2f);
+        float width = Screen.width - margin * 2f;
 
-        DrawTabs(new Rect(0f, 32f, Screen.width, 34f));
-
-        if (GUI.Button(new Rect(Screen.width - margin - 34f, 30f, 34f, 30f), "X", CloseButton))
+        if (DrawHeader(margin))
         {
-            Close();
             return;
         }
 
-        GUI.Label(new Rect(Screen.width - margin - 150f, 34f, 110f, 22f), "Esc to close", Label);
+        Rect toolbar = new Rect(margin, PanelTheme.HeaderHeight + 12f, width,
+            PanelTheme.ToolbarHeight);
+        DrawToolbar(toolbar);
 
-        if (GUI.Button(new Rect(Screen.width - margin - 250f, 30f, 90f, 30f), "Export", CloseButton))
+        // The open dropdown takes its clicks here, before the content under it is laid out, and
+        // is painted at the end. Immediate mode has one pass for both, so a floating menu has to
+        // be split in two or it hands every click to whatever it is covering as well.
+        if (PickerOpen)
         {
-            Export();
+            HandlePicker();
         }
 
-        if (ExportMessage != null)
-        {
-            GUI.Label(new Rect(margin, 72f, Screen.width - margin * 2f - 60f, 20f), ExportMessage, Label);
-        }
+        float top = toolbar.yMax + 16f;
+        Rect body = new Rect(margin, top, width - PanelTheme.Gutter, Screen.height - top - 26f);
 
-        GUI.color = new Color(0.45f, 0.62f, 0.78f, 0.35f);
-        GUI.DrawTexture(new Rect(margin, headerHeight - 10f, Screen.width - margin * 2f, 1f), Pixel);
-        GUI.color = Color.white;
-
-        GUILayout.BeginArea(new Rect(margin, headerHeight, Screen.width - margin * 2f,
-            Screen.height - headerHeight - 24f));
-
-        Scroll = GUILayout.BeginScrollView(Scroll);
+        GUILayout.BeginArea(body);
+        Scroll = GUILayout.BeginScrollView(Scroll, GUIStyle.none, GUIStyle.none);
+        GUILayout.BeginVertical();
 
         switch (Current)
         {
             case Tab.Memory:
                 DrawGarbageCollector();
-                DrawManagedObjects();
-                DrawObjects();
+                DrawManagedObjects(body.width);
+                DrawObjects(body.width);
                 break;
 
             case Tab.Cpu:
-                DrawRecorderControls();
-                DrawFlameGraph();
-                DrawHotMethods();
+                DrawRecorderStatus();
+                DrawFlameGraph(body.width);
+                DrawHotMethods(body.width);
                 break;
 
             default:
+                DrawTiles(body.width);
                 DrawFrameGraph();
 
                 foreach (string section in Feed.SectionNames)
                 {
-                    DrawSection(section);
+                    DrawSection(section, body.width);
                 }
 
                 break;
         }
 
+        GUILayout.EndVertical();
+
+        if (Event.current.type == EventType.Repaint)
+        {
+            ContentHeight = GUILayoutUtility.GetLastRect().yMax;
+        }
+
         GUILayout.EndScrollView();
         GUILayout.EndArea();
+
+        Scroll.y = PanelTheme.ScrollBar(scrollId, new Rect(body.xMax + 6f, body.y, 6f, body.height),
+            Scroll.y, body.height, ContentHeight);
+
+        if (PickerOpen)
+        {
+            PaintPicker();
+        }
 
         DrawTooltip();
     }
 
-    /// <summary>
-    /// The tab row. Tabs rather than one long page because the three questions get asked at
-    /// different times: what is the frame doing now, what is on the heap, and where did the
-    /// time go in the recording I just took.
-    /// </summary>
-    private void DrawTabs(Rect area)
-    {
-        const float width = 150f;
-        const float gap = 14f;
+    // ------------------------------------------------------------------ chrome
 
-        float total = TabNames.Length * width + (TabNames.Length - 1) * gap;
-        float x = Mathf.Round((area.width - total) / 2f);
+    /// <summary>
+    /// Title, tabs and the actions that belong to the page rather than to a tab. Returns true if
+    /// the page closed, because everything after it would then be drawing into a dead frame.
+    /// </summary>
+    private bool DrawHeader(float margin)
+    {
+        GUI.Label(new Rect(margin, 24f, 520f, 46f), "Mod Profiler", PanelTheme.Title);
+
+        float rule = PanelTheme.HeaderHeight;
+        PanelTheme.Rule(0f, rule, Screen.width);
+
+        // Measured rather than fixed-width, so a longer tab name does not crowd its neighbours
+        // and the row stays centred on the screen the way the game's does.
+        float[] widths = new float[TabNames.Length];
+        float total = 0f;
 
         for (int i = 0; i < TabNames.Length; i++)
         {
-            Rect slot = new Rect(x + i * (width + gap), area.y, width, area.height);
+            widths[i] = Mathf.Round(PanelTheme.TabOn.CalcSize(new GUIContent(TabNames[i])).x) + 56f;
+            total += widths[i];
+        }
+
+        float x = Mathf.Round((Screen.width - total) / 2f);
+
+        for (int i = 0; i < TabNames.Length; i++)
+        {
+            Rect slot = new Rect(x, 28f, widths[i], 50f);
             bool active = (int)Current == i;
 
-            if (GUI.Button(slot, TabNames[i].ToUpperInvariant(), active ? TabOn : TabOff))
+            if (active)
+            {
+                PanelTheme.DrawTabGlow(slot.center.x, rule, slot.width);
+            }
+
+            if (GUI.Button(slot, TabNames[i], active ? PanelTheme.TabOn : PanelTheme.TabOff))
             {
                 Current = (Tab)i;
                 Scroll = Vector2.zero;
                 PickerOpen = false;
             }
 
-            if (!active)
-            {
-                continue;
-            }
+            x += widths[i];
+        }
 
-            // The game marks the live tab with a warm underline rather than a filled
-            // background; copying that is most of what makes this read as the same family of
-            // screen.
-            GUI.color = new Color(1f, 0.62f, 0.25f);
-            GUI.DrawTexture(new Rect(slot.x + 12f, slot.yMax + 2f, slot.width - 24f, 2f), Pixel);
-            GUI.color = Color.white;
+        Rect close = new Rect(Screen.width - margin - 36f, 28f, 36f, 36f);
+
+        // The multiplication sign, not an ex: it is in Latin-1, so every face has it, and it is
+        // symmetrical where a letter is not.
+        if (GUI.Button(close, "×", PanelTheme.Close))
+        {
+            Close();
+            return true;
+        }
+
+        Rect export = new Rect(close.x - 114f, 31f, 102f, 30f);
+
+        if (GUI.Button(export, "Export", PanelTheme.Button))
+        {
+            Export();
+        }
+
+        GUI.Label(new Rect(export.x - 210f, 33f, 200f, 26f), "Esc to close", PanelTheme.CaptionRight);
+
+        return false;
+    }
+
+    /// <summary>
+    /// The strip under the rule: what this tab is, on the left, and the one control that acts on
+    /// the whole tab, on the right. The same shape as the game's own pages, where the range
+    /// selector sits opposite the section name.
+    /// </summary>
+    private void DrawToolbar(Rect area)
+    {
+        string caption;
+
+        switch (Current)
+        {
+            case Tab.Memory:
+                caption = ExportMessage
+                          ?? "The collector's numbers, this process's managed objects, and the engine's";
+                break;
+
+            case Tab.Cpu:
+                caption = ExportMessage
+                          ?? "Weave one mod's methods, play, and see where its frames went";
+                break;
+
+            default:
+                caption = ExportMessage
+                          ?? "Frame time, and the counters a release player still feeds";
+                break;
+        }
+
+        // The CPU tab's controls are the widest on the page, so its caption gets less room.
+        float room = Mathf.Max(area.width - (Current == Tab.Cpu ? 700f : 420f), 200f);
+
+        GUI.Label(new Rect(area.x, area.y, room, area.height), caption,
+            ExportMessage == null ? PanelTheme.Caption : PanelTheme.Note);
+
+        switch (Current)
+        {
+            case Tab.Memory:
+                ModsOnly = PanelTheme.Segmented(Right(area, 240f), ScopeNames, ModsOnly ? 0 : 1) == 0;
+                break;
+
+            case Tab.Cpu:
+                DrawRecorderControls(area);
+                break;
+
+            default:
+                if (GUI.Button(Right(area, 130f), "Reset stats", PanelTheme.Button))
+                {
+                    Feed.ResetStatistics();
+                }
+
+                break;
         }
     }
+
+    private static Rect Right(Rect area, float width)
+    {
+        return new Rect(area.xMax - width, area.y, width, area.height);
+    }
+
+    // ------------------------------------------------------------------ recording
 
     /// <summary>
     /// Start and stop a recording without leaving the page.
@@ -328,15 +460,13 @@ public class DebugPanel : MonoBehaviour
     /// picker, because choosing from a list of the mods actually loaded beats typing a name
     /// that has to match one.
     /// </summary>
-    private void DrawRecorderControls()
+    private void DrawRecorderControls(Rect area)
     {
-        GUILayout.Label("RECORDING", Header);
-
         IReadOnlyList<string> mods = ModAssemblies.All;
 
         if (mods.Count == 0)
         {
-            GUILayout.Label("No mod assemblies are loaded, so there is nothing to record.", Label);
+            GUI.Label(Right(area, 380f), "No mod assemblies are loaded.", PanelTheme.CaptionRight);
             return;
         }
 
@@ -345,64 +475,116 @@ public class DebugPanel : MonoBehaviour
             SelectedMod = mods[0];
         }
 
-        GUILayout.BeginHorizontal();
-
-        GUILayout.Label("Mod", Label, GUILayout.Width(34f));
-
-        // A dropdown, hand-rolled: IMGUI has no popup that floats above a scroll view, so the
-        // list opens as rows underneath instead of over the content.
-        if (GUILayout.Button(SelectedMod + (PickerOpen ? "   ^" : "   v"), GUILayout.Width(260f)))
-        {
-            PickerOpen = !PickerOpen;
-        }
-
-        GUILayout.Space(10f);
-
         bool recording = Session != null && Session.Recording;
+
+        Rect action = Right(area, 108f);
 
         if (recording)
         {
-            if (GUILayout.Button("Stop", GUILayout.Width(110f)))
+            if (GUI.Button(action, "Stop", PanelTheme.ButtonOn))
             {
                 Lines = new List<string>(Session.StopRecording());
                 PickerOpen = false;
             }
         }
-        else if (GUILayout.Button("Record", GUILayout.Width(110f)))
+        else if (GUI.Button(action, "Record", PanelTheme.Button))
         {
+            Session.LimitSeconds = LimitValues[LimitChoice];
             Lines = new List<string>(Session.Record(SelectedMod, ProfilerSession.DefaultBudget));
             PickerOpen = false;
         }
 
-        GUILayout.EndHorizontal();
+        PickerAnchor = new Rect(action.x - 274f, area.y, 264f, area.height);
 
-        GUILayout.Label(recording
-            ? "Recording " + Session.Target + " - play through whatever you want to measure, then Stop."
-            : "Record weaves enter/exit hooks into that assembly, and Stop takes them out again.", Label);
-
-        if (PickerOpen)
+        if (GUI.Button(PickerAnchor, SelectedMod, PanelTheme.Dropdown))
         {
-            foreach (string mod in mods)
-            {
-                if (GUILayout.Button("   " + mod, TabOff, GUILayout.Width(260f)))
-                {
-                    SelectedMod = mod;
-                    PickerOpen = false;
-                }
-            }
+            PickerOpen = !PickerOpen;
         }
 
-        if (Lines.Count > 0)
-        {
-            GUILayout.Space(6f);
+        PanelTheme.DrawCaret(new Rect(PickerAnchor.xMax - 24f, PickerAnchor.y + area.height / 2f - 2f, 11f, 6f),
+            PanelTheme.Muted);
 
-            foreach (string line in Lines)
-            {
-                GUILayout.Label(line, Label);
-            }
+        Rect limit = new Rect(PickerAnchor.x - 250f, area.y, 240f, area.height);
+
+        if (!recording)
+        {
+            LimitChoice = PanelTheme.Segmented(limit, LimitNames, LimitChoice);
+            return;
         }
 
-        GUILayout.Space(6f);
+        // While it runs, the slot the limit picker was in says how long is left, because the
+        // whole point of the limit is that somebody who walked away can see it counting down.
+        // Tested against the limit rather than against the remaining time: Remaining is also zero
+        // for the frame between the deadline passing and Update noticing, which would otherwise
+        // flash "No limit" at exactly the wrong moment.
+        GUI.Label(limit, Session.LimitSeconds <= 0f
+            ? "No limit - press Stop"
+            : "Stops in " + Clock(Session.Remaining), PanelTheme.CaptionRight);
+    }
+
+    /// <summary>Seconds as m:ss, which is how long a capture is talked about.</summary>
+    private static string Clock(double seconds)
+    {
+        int whole = Mathf.CeilToInt((float)seconds);
+
+        return (whole / 60) + ":" + (whole % 60).ToString("00");
+    }
+
+    /// <summary>Rows are hit here, before the page under the menu is laid out. See OnGUI.</summary>
+    private void HandlePicker()
+    {
+        IReadOnlyList<string> mods = ModAssemblies.All;
+        Rect box = PickerBox(mods.Count);
+        Event current = Event.current;
+
+        if (current.type != EventType.MouseDown)
+        {
+            return;
+        }
+
+        if (!box.Contains(current.mousePosition))
+        {
+            // A click anywhere else closes the menu and is then allowed through, so dismissing
+            // it does not also cost the click the user meant to make.
+            PickerOpen = false;
+            return;
+        }
+
+        int index = Mathf.FloorToInt((current.mousePosition.y - box.y - 6f) / 26f);
+
+        if (index >= 0 && index < mods.Count)
+        {
+            SelectedMod = mods[index];
+        }
+
+        PickerOpen = false;
+        current.Use();
+    }
+
+    private void PaintPicker()
+    {
+        IReadOnlyList<string> mods = ModAssemblies.All;
+        Rect box = PickerBox(mods.Count);
+
+        PanelTheme.Rounded(box, new Color(0.058f, 0.075f, 0.110f, 0.99f), new Color(1f, 1f, 1f, 0.17f));
+
+        for (int i = 0; i < mods.Count; i++)
+        {
+            Rect row = new Rect(box.x + 5f, box.y + 6f + i * 26f, box.width - 10f, 26f);
+
+            if (row.Contains(Event.current.mousePosition))
+            {
+                PanelTheme.Rounded(row, new Color(1f, 1f, 1f, 0.07f), new Color(0f, 0f, 0f, 0f),
+                    PanelTheme.Corner.Small);
+            }
+
+            GUI.Label(row, "  " + mods[i], mods[i] == SelectedMod ? PanelTheme.Value : PanelTheme.Cell);
+        }
+    }
+
+    private Rect PickerBox(int count)
+    {
+        return new Rect(PickerAnchor.x, PickerAnchor.yMax + 6f, PickerAnchor.width, count * 26f + 12f);
     }
 
     private static bool Contains(IReadOnlyList<string> values, string value)
@@ -418,13 +600,69 @@ public class DebugPanel : MonoBehaviour
         return false;
     }
 
+    // ------------------------------------------------------------------ overview
+
     /// <summary>
-    /// Frame time, as a graph and as four numbers.
+    /// The four numbers worth reading without scrolling, as tiles.
     ///
-    /// The graph was unreadable in its first form - dark bars on a dark page with nothing to
-    /// measure them against. It now draws on a lighter ground with the two lines that matter
-    /// marked: 16.7 ms, which is 60 frames a second, and 33.3 ms, which is 30. A bar's colour
-    /// says which band it is in, so a stutter shows up without comparing heights.
+    /// A table is the right shape for thirty counters and the wrong shape for the two or three
+    /// that answer "is anything wrong right now" - those have to be legible from across the
+    /// desk, which is what the game does with its own headline figures.
+    /// </summary>
+    private void DrawTiles(float width)
+    {
+        const float gap = 14f;
+        float tile = Mathf.Floor((width - gap * 3f) / 4f);
+
+        GUILayout.BeginHorizontal();
+
+        Tile(tile, "FRAME TIME", Feed.FrameLast.ToString("0.0"), "ms", BandOf(Feed.FrameLast));
+        GUILayout.Space(gap);
+
+        Tile(tile, "FRAMES PER SECOND",
+            (Feed.FrameLast <= 0.01f ? 0f : 1000f / Feed.FrameLast).ToString("0"), "fps", PanelTheme.Ink);
+        GUILayout.Space(gap);
+
+        string heap = Bytes(GC.GetTotalMemory(false));
+        int cut = heap.LastIndexOf(' ');
+
+        Tile(tile, "MANAGED HEAP", cut < 0 ? heap : heap.Substring(0, cut),
+            cut < 0 ? "" : heap.Substring(cut + 1), PanelTheme.Ink);
+        GUILayout.Space(gap);
+
+        Tile(tile, "COLLECTIONS PER SECOND", Feed.CollectionRate.ToString("0.00"), "/s", PanelTheme.Ink);
+
+        GUILayout.EndHorizontal();
+        GUILayout.Space(14f);
+    }
+
+    private static void Tile(float width, string caption, string value, string unit, Color colour)
+    {
+        GUILayout.BeginVertical(PanelTheme.Tile, GUILayout.Width(width));
+
+        GUILayout.Label(caption, PanelTheme.TileCaption);
+        GUILayout.Space(2f);
+        GUILayout.Label(PanelTheme.Tint(value, colour) + " <size=13><color=#7a869a>" + unit + "</color></size>",
+            PanelTheme.TileValue);
+
+        GUILayout.EndVertical();
+    }
+
+    private static Color BandOf(float milliseconds)
+    {
+        return milliseconds > 33.3f
+            ? PanelTheme.Bad
+            : milliseconds > 16.7f
+                ? PanelTheme.Warn
+                : PanelTheme.Good;
+    }
+
+    /// <summary>
+    /// Frame time, as a graph and as three numbers.
+    ///
+    /// The graph draws on a recessed well with the two lines that matter marked: 16.7 ms, which
+    /// is 60 frames a second, and 33.3 ms, which is 30. A bar's colour says which band it is in,
+    /// so a stutter shows up without comparing heights.
     ///
     /// The numbers are there because a graph is a window and a spike leaves it. Min, mean and
     /// max hold since the last reset, so a stutter that happened while you were looking
@@ -432,34 +670,34 @@ public class DebugPanel : MonoBehaviour
     /// </summary>
     private void DrawFrameGraph()
     {
+        BeginCard("Frame time");
+
         GUILayout.BeginHorizontal();
-        GUILayout.Label("FRAME TIME", Header, GUILayout.Width(120f));
-
-        GUILayout.Label("now " + Feed.FrameLast.ToString("0.0") + " ms", Value, GUILayout.Width(110f));
-        GUILayout.Label("min " + Feed.FrameMin.ToString("0.0"), Label, GUILayout.Width(80f));
-        GUILayout.Label("mean " + Feed.FrameMean.ToString("0.0"), Label, GUILayout.Width(95f));
-        GUILayout.Label("max " + Feed.FrameMax.ToString("0.0"), Label, GUILayout.Width(80f));
-
-        if (GUILayout.Button("Reset stats", GUILayout.Width(110f)))
-        {
-            Feed.ResetStatistics();
-        }
-
+        GUILayout.Label("Worst frame per " + (CounterFeed.BucketSeconds * 1000f).ToString("0")
+                        + " ms bucket, last " + (CounterFeed.WindowSeconds / 60f).ToString("0")
+                        + " minute", PanelTheme.Cell);
+        GUILayout.FlexibleSpace();
+        Stat("min", Feed.FrameMin);
+        Stat("mean", Feed.FrameMean);
+        Stat("max", Feed.FrameMax);
         GUILayout.EndHorizontal();
 
-        Rect area = GUILayoutUtility.GetRect(10f, 110f);
+        GUILayout.Space(10f);
 
-        GUI.color = Color.white;
-        GUI.DrawTexture(area, Graph);
+        Rect area = GUILayoutUtility.GetRect(10f, 132f);
+
+        PanelTheme.Rounded(area, new Color(0f, 0f, 0f, 0.32f), new Color(1f, 1f, 1f, 0.06f));
+
+        Rect plot = new Rect(area.x + 2f, area.y + 2f, area.width - 4f, area.height - 4f);
 
         // A fixed ceiling rather than an auto-scaled one: the question a frame graph is asked
         // is "are we missing frames", and a scale that moves with the data hides exactly that.
         const float ceiling = 40f;
 
-        DrawGridline(area, 16.7f, ceiling, "16.7 ms - 60 fps");
-        DrawGridline(area, 33.3f, ceiling, "33.3 ms - 30 fps");
+        DrawGridline(plot, 16.7f, ceiling, "16.7 ms  ·  60 fps");
+        DrawGridline(plot, 33.3f, ceiling, "33.3 ms  ·  30 fps");
 
-        float step = area.width / CounterFeed.HistoryLength;
+        float step = plot.width / CounterFeed.HistoryLength;
 
         for (int i = 0; i < CounterFeed.HistoryLength; i++)
         {
@@ -470,70 +708,109 @@ public class DebugPanel : MonoBehaviour
                 continue;
             }
 
-            float height = Mathf.Clamp01(ms / ceiling) * area.height;
+            float height = Mathf.Clamp01(ms / ceiling) * plot.height;
 
-            GUI.color = ms > 33.3f
-                ? new Color(1f, 0.38f, 0.36f)
-                : ms > 16.7f
-                    ? new Color(1f, 0.74f, 0.3f)
-                    : new Color(0.42f, 0.86f, 1f);
-
-            GUI.DrawTexture(new Rect(area.x + i * step, area.y + area.height - height,
-                Mathf.Max(step, 1f), height), Pixel);
+            PanelTheme.Fill(new Rect(plot.x + i * step, plot.y + plot.height - height,
+                Mathf.Max(step - 1f, 1f), height), BandOf(ms));
         }
 
-        GUI.color = Color.white;
-        GUILayout.Space(6f);
-    }
-
-    private void DrawGridline(Rect area, float milliseconds, float ceiling, string label)
-    {
-        float y = area.y + area.height - Mathf.Clamp01(milliseconds / ceiling) * area.height;
-
-        GUI.color = new Color(0.55f, 0.68f, 0.8f, 0.35f);
-        GUI.DrawTexture(new Rect(area.x, y, area.width, 1f), Pixel);
-        GUI.color = Color.white;
-
-        GUI.Label(new Rect(area.x + 6f, y - 16f, 220f, 16f), label, Label);
-    }
-
-    private void DrawSection(string section)
-    {
-        GUILayout.Space(10f);
+        GUILayout.Space(4f);
 
         GUILayout.BeginHorizontal();
-        GUILayout.Label(section.ToUpperInvariant(), Header, GUILayout.Width(240f));
-        GUILayout.Label("now", Header, GUILayout.Width(110f));
-        GUILayout.Label("min", Header, GUILayout.Width(110f));
-        GUILayout.Label("mean", Header, GUILayout.Width(110f));
-        GUILayout.Label("max", Header);
+        // Spelt out rather than drawn with an arrow: U+2190 is outside Latin-1 and a face that
+        // lacks it renders a box.
+        GUILayout.Label((CounterFeed.WindowSeconds / 60f).ToString("0") + " minute ago",
+            PanelTheme.Caption);
+        GUILayout.FlexibleSpace();
+        GUILayout.Label("now", PanelTheme.CaptionRight);
         GUILayout.EndHorizontal();
+
+        EndCard();
+    }
+
+    private static void Stat(string name, float milliseconds)
+    {
+        GUILayout.Label(name, PanelTheme.Caption, GUILayout.Width(name == "mean" ? 38f : 28f));
+        GUILayout.Label(milliseconds.ToString("0.0") + " <color=#7a869a>ms</color>", PanelTheme.Value,
+            GUILayout.Width(66f));
+    }
+
+    private static void DrawGridline(Rect area, float milliseconds, float ceiling, string label)
+    {
+        float y = Mathf.Round(area.y + area.height - Mathf.Clamp01(milliseconds / ceiling) * area.height);
+
+        PanelTheme.Fill(new Rect(area.x, y, area.width, 1f), new Color(1f, 1f, 1f, 0.13f));
+        GUI.Label(new Rect(area.x + 8f, y - 17f, 240f, 16f), label, PanelTheme.Caption);
+    }
+
+    private void DrawSection(string section, float width)
+    {
+        BeginCard(section);
+
+        const float numbers = 108f;
+        float name = NameColumn(width, numbers, 4);
+
+        GUILayout.BeginHorizontal(PanelTheme.RowEven);
+        GUILayout.Label("Counter", PanelTheme.Caption, GUILayout.Width(name));
+        Head("now", numbers);
+        Head("min", numbers);
+        Head("mean", numbers);
+        Head("max", numbers);
+        GUILayout.EndHorizontal();
+
+        int index = 0;
 
         foreach (CounterFeed.Gauge gauge in Feed.Section(section))
         {
-            GUILayout.BeginHorizontal();
-            GUILayout.Label(gauge.Label, Label, GUILayout.Width(240f));
+            GUILayout.BeginHorizontal(index++ % 2 == 1 ? PanelTheme.RowOdd : PanelTheme.RowEven);
+            GUILayout.Label(gauge.Label, PanelTheme.Cell, GUILayout.Width(name));
 
             if (!gauge.Live)
             {
-                GUILayout.Label("not exposed by this build", Label);
+                GUILayout.Label("not exposed by this build", PanelTheme.Note);
                 GUILayout.EndHorizontal();
                 continue;
             }
 
-            GUILayout.Label(Format(gauge, gauge.Value), Value, GUILayout.Width(110f));
-            GUILayout.Label(Format(gauge, gauge.Min), Label, GUILayout.Width(110f));
-            GUILayout.Label(Format(gauge, (long)gauge.Mean), Label, GUILayout.Width(110f));
-            GUILayout.Label(Format(gauge, gauge.Max), Label);
+            GUILayout.Label(PanelTheme.Unit(Format(gauge, gauge.Value)), PanelTheme.ValueRight,
+                GUILayout.Width(numbers));
+            GUILayout.Label(PanelTheme.Unit(Format(gauge, gauge.Min)), PanelTheme.LabelRight,
+                GUILayout.Width(numbers));
+            GUILayout.Label(PanelTheme.Unit(Format(gauge, (long)gauge.Mean)), PanelTheme.LabelRight,
+                GUILayout.Width(numbers));
+            GUILayout.Label(PanelTheme.Unit(Format(gauge, gauge.Max)), PanelTheme.LabelRight,
+                GUILayout.Width(numbers));
             GUILayout.EndHorizontal();
         }
+
+        EndCard();
     }
+
+    private static void Head(string text, float width)
+    {
+        GUILayout.Label(text, PanelTheme.CaptionRight, GUILayout.Width(width));
+    }
+
+    /// <summary>
+    /// What is left for the name column once the numbers have taken theirs.
+    ///
+    /// Thirty-six for the card's own padding and twenty for the row's. Both are set on styles
+    /// rather than guessed, so the only way to get this wrong is to change one and not the other.
+    /// </summary>
+    private static float NameColumn(float width, float numbers, int columns)
+    {
+        return Mathf.Max(width - 56f - numbers * columns, 160f);
+    }
+
+    // ------------------------------------------------------------------ memory
 
     private void DrawGarbageCollector()
     {
-        GUILayout.Label("GARBAGE COLLECTOR", Header);
+        BeginCard("Garbage collector");
 
-        Row("Managed heap", Bytes(GC.GetTotalMemory(false)));
+        int index = 0;
+
+        Row("Managed heap", Bytes(GC.GetTotalMemory(false)), index++);
 
         // Boehm's own numbers, straight off the collector, when the runtime exports them.
         // GC.GetTotalMemory is derived from these two; having both makes it obvious how much
@@ -543,19 +820,21 @@ public class DebugPanel : MonoBehaviour
 
         if (MonoRuntime.CanReadHeapSize)
         {
-            Row("Boehm heap reserved", Bytes(MonoRuntime.HeapSize()));
-            Row("Boehm heap in use", Bytes(MonoRuntime.UsedSize()));
+            Row("Boehm heap reserved", Bytes(MonoRuntime.HeapSize()), index++);
+            Row("Boehm heap in use", Bytes(MonoRuntime.UsedSize()), index++);
         }
 
-        Row("Collections", GC.CollectionCount(0).ToString());
-        Row("Collections / sec", Feed.CollectionRate.ToString("0.00"));
-        Row("Heap growth / sec", Bytes((long)Feed.AllocationRate));
+        Row("Collections", GC.CollectionCount(0).ToString("N0"), index++);
+        Row("Collections / sec", Feed.CollectionRate.ToString("0.00"), index++);
+        Row("Heap growth / sec", Bytes((long)Feed.AllocationRate), index);
 
-        GUILayout.Space(6f);
+        GUILayout.Space(10f);
         GUILayout.Label("Heap growth is measured from the sawtooth between collections, because this "
                         + "build exposes no allocation counter: GC.GetAllocatedBytesForCurrentThread is "
                         + "frozen at zero, and neither 'GC Allocated In Frame' nor 'Scripts / GC.Alloc' "
-                        + "is fed. It is process-wide and cannot be attributed to a mod.", Label);
+                        + "is fed. It is process-wide and cannot be attributed to a mod.", PanelTheme.Note);
+
+        EndCard();
     }
 
     /// <summary>
@@ -565,13 +844,13 @@ public class DebugPanel : MonoBehaviour
     /// The walk runs a slice per frame, so the button starts it rather than performing it, and
     /// the status line is live while it runs.
     /// </summary>
-    private void DrawManagedObjects()
+    private void DrawManagedObjects(float width)
     {
-        GUILayout.Space(14f);
-        GUILayout.Label("MANAGED OBJECTS", Header);
+        BeginCard("Managed objects");
 
         if (Managed == null)
         {
+            EndCard();
             return;
         }
 
@@ -579,102 +858,94 @@ public class DebugPanel : MonoBehaviour
 
         if (Managed.Running)
         {
-            if (GUILayout.Button("Cancel", GUILayout.Width(120f)))
+            if (GUILayout.Button("Cancel", PanelTheme.ButtonOn, GUILayout.Width(118f)))
             {
                 Managed.Cancel();
             }
         }
-        else if (GUILayout.Button(Managed.HasScanned ? "Scan again" : "Scan", GUILayout.Width(120f)))
+        else if (GUILayout.Button(Managed.HasScanned ? "Scan again" : "Scan", PanelTheme.Button,
+                     GUILayout.Width(118f)))
         {
             Managed.Begin();
         }
 
-        GUILayout.Label(Managed.Status, Label);
+        GUILayout.Space(12f);
+        GUILayout.Label(Managed.Status, PanelTheme.Cell);
         GUILayout.EndHorizontal();
 
         if (Managed.Running)
         {
+            GUILayout.Space(8f);
+
             // There is no total to measure against - the size of the heap is the thing being
             // discovered - so this shows the share of known work done, not a true fraction.
-            Rect area = GUILayoutUtility.GetRect(10f, 6f);
-            GUI.DrawTexture(area, Chrome);
-
             float share = Managed.Visited + Managed.Queued == 0
                 ? 0f
                 : Managed.Visited / (float)(Managed.Visited + Managed.Queued);
 
-            GUI.color = new Color(0.45f, 0.75f, 0.95f);
-            GUI.DrawTexture(new Rect(area.x, area.y, area.width * share, area.height), Pixel);
-            GUI.color = Color.white;
+            PanelTheme.Meter(GUILayoutUtility.GetRect(10f, 6f), share, PanelTheme.Cool);
         }
 
         if (!Managed.HasScanned)
         {
+            GUILayout.Space(8f);
             GUILayout.Label("Every C# object reachable from a static field or from a live UnityEngine.Object, "
                             + "grouped by the assembly that declares its type. A mod's objects are mostly held "
                             + "by the game - Shifter holds the IMod, the simulation holds whatever the mod "
                             + "registered - so the walk starts everywhere and attributes by type rather than "
                             + "by where it started. Sizes are estimated from field layout; counts are exact.",
-                Label);
+                PanelTheme.Note);
+
+            EndCard();
             return;
         }
 
         if (Managed.Truncated)
         {
-            GUILayout.Label("The walk hit its cap, so this is a partial count.", Label);
+            GUILayout.Space(6f);
+            GUILayout.Label("The walk hit its cap, so this is a partial count.", PanelTheme.Note);
         }
 
-        GUILayout.Space(8f);
-        GUILayout.Label("By assembly - click one to filter the table below", Value);
+        GUILayout.Space(14f);
+
+        const float numbers = 120f;
+        float name = NameColumn(width, numbers, 2);
+
+        GUILayout.BeginHorizontal(PanelTheme.RowEven);
+        GUILayout.Label("Assembly  ·  click to filter the table below", PanelTheme.Caption, GUILayout.Width(name));
+        Head("objects", numbers);
+        Head("size", numbers);
+        GUILayout.EndHorizontal();
+
+        int index = 0;
 
         foreach (ManagedCensus.Entry entry in Managed.ByAssembly)
         {
+            if (ModsOnly && !entry.IsMod)
+            {
+                continue;
+            }
+
             bool selected = AssemblyFilter == entry.Assembly;
 
-            GUILayout.BeginHorizontal();
+            GUILayout.BeginHorizontal(index++ % 2 == 1 ? PanelTheme.RowOdd : PanelTheme.RowEven);
 
-            GUI.color = selected
-                ? new Color(1f, 0.78f, 0.42f)
-                : entry.IsMod
-                    ? new Color(0.65f, 0.9f, 1f)
-                    : Color.white;
+            GUI.color = selected ? new Color(1f, 0.78f, 0.42f) : Color.white;
 
-            // A label would be dead text and a button would be a box round every row; a
-            // left-aligned flat button is the row itself, which is what makes clicking it the
-            // obvious thing to do.
-            if (GUILayout.Button((entry.IsMod ? "* " : "   ") + entry.TypeName, TabOff, GUILayout.Width(430f)))
+            if (GUILayout.Button((entry.IsMod ? "•  " : "    ") + entry.TypeName, PanelTheme.RowButton,
+                    GUILayout.Width(name)))
             {
                 AssemblyFilter = selected ? null : entry.Assembly;
             }
 
             GUI.color = Color.white;
 
-            GUILayout.Label(entry.Count.ToString("N0"), Value, GUILayout.Width(90f));
-            GUILayout.Label(Bytes(entry.Bytes), Value);
+            GUILayout.Label(entry.Count.ToString("N0"), PanelTheme.LabelRight, GUILayout.Width(numbers));
+            GUILayout.Label(PanelTheme.Unit(Bytes(entry.Bytes)), PanelTheme.ValueRight, GUILayout.Width(numbers));
             GUILayout.EndHorizontal();
         }
 
-        GUILayout.Space(8f);
-        GUILayout.BeginHorizontal();
-
-        GUILayout.Label("By type", Value, GUILayout.Width(70f));
-
-        if (GUILayout.Button(ModsOnly ? "Mods only: on" : "Mods only: off", GUILayout.Width(130f)))
-        {
-            ModsOnly = !ModsOnly;
-        }
-
-        if (AssemblyFilter != null)
-        {
-            if (GUILayout.Button("Clear filter", GUILayout.Width(110f)))
-            {
-                AssemblyFilter = null;
-            }
-
-            GUILayout.Label("showing " + AssemblyFilter, Label);
-        }
-
-        GUILayout.EndHorizontal();
+        GUILayout.Space(16f);
 
         List<ManagedCensus.Entry> rows = new List<ManagedCensus.Entry>();
 
@@ -693,11 +964,42 @@ public class DebugPanel : MonoBehaviour
             rows.Add(entry);
         }
 
+        GUILayout.BeginHorizontal();
+        GUILayout.Label(AssemblyFilter == null ? "By type" : "By type in " + AssemblyFilter, PanelTheme.Value);
+
+        if (AssemblyFilter != null)
+        {
+            GUILayout.Space(12f);
+
+            if (GUILayout.Button("Clear filter", PanelTheme.Button, GUILayout.Width(110f)))
+            {
+                AssemblyFilter = null;
+            }
+        }
+
+        GUILayout.FlexibleSpace();
+
+        if (rows.Count > 40)
+        {
+            ShowAllManaged = PanelTheme.Segmented(GUILayoutUtility.GetRect(230f, 28f, GUILayout.Width(230f)),
+                new[] { "Top 40", "All " + rows.Count }, ShowAllManaged ? 1 : 0) == 1;
+        }
+
+        GUILayout.EndHorizontal();
+        GUILayout.Space(8f);
+
         if (rows.Count == 0)
         {
-            GUILayout.Label("Nothing matches that filter.", Label);
+            GUILayout.Label("Nothing matches that filter.", PanelTheme.Note);
+            EndCard();
             return;
         }
+
+        GUILayout.BeginHorizontal(PanelTheme.RowEven);
+        GUILayout.Label("Type", PanelTheme.Caption, GUILayout.Width(name));
+        Head("objects", numbers);
+        Head("size", numbers);
+        GUILayout.EndHorizontal();
 
         int limit = ShowAllManaged ? rows.Count : Mathf.Min(40, rows.Count);
 
@@ -705,29 +1007,15 @@ public class DebugPanel : MonoBehaviour
         {
             ManagedCensus.Entry entry = rows[i];
 
-            GUILayout.BeginHorizontal();
-
-            GUI.color = entry.IsMod ? new Color(0.65f, 0.9f, 1f) : Color.white;
-            GUILayout.Label(entry.TypeName, Label, GUILayout.Width(430f));
-            GUI.color = Color.white;
-
-            GUILayout.Label(entry.Count.ToString("N0"), Value, GUILayout.Width(90f));
-            GUILayout.Label(Bytes(entry.Bytes), Value);
+            GUILayout.BeginHorizontal(i % 2 == 1 ? PanelTheme.RowOdd : PanelTheme.RowEven);
+            GUILayout.Label(entry.TypeName, entry.IsMod ? PanelTheme.CellMod : PanelTheme.Cell,
+                GUILayout.Width(name));
+            GUILayout.Label(entry.Count.ToString("N0"), PanelTheme.LabelRight, GUILayout.Width(numbers));
+            GUILayout.Label(PanelTheme.Unit(Bytes(entry.Bytes)), PanelTheme.ValueRight, GUILayout.Width(numbers));
             GUILayout.EndHorizontal();
         }
 
-        if (rows.Count > 40)
-
-        {
-            GUILayout.Space(4f);
-
-            if (GUILayout.Button(ShowAllManaged
-                    ? "Show top 40"
-                    : "Show all " + rows.Count + " types", GUILayout.Width(200f)))
-            {
-                ShowAllManaged = !ShowAllManaged;
-            }
-        }
+        EndCard();
     }
 
     /// <summary>
@@ -736,47 +1024,64 @@ public class DebugPanel : MonoBehaviour
     /// Scanned on demand rather than every frame: the walk covers every object the engine
     /// knows about, and on a large save that is a visible hitch.
     /// </summary>
-    private void DrawObjects()
+    private void DrawObjects(float width)
     {
-        GUILayout.Space(14f);
-        GUILayout.Label("UNITY OBJECTS", Header);
+        BeginCard("Unity objects");
 
         GUILayout.BeginHorizontal();
 
-        if (GUILayout.Button(Census.HasScanned ? "Scan again" : "Scan", GUILayout.Width(120f)))
+        if (GUILayout.Button(Census.HasScanned ? "Scan again" : "Scan", PanelTheme.Button, GUILayout.Width(118f)))
         {
             Census.Scan();
         }
 
+        GUILayout.Space(12f);
+
         if (Census.HasScanned)
         {
             GUILayout.Label(Census.TotalObjects.ToString("N0") + " objects, " + Bytes(Census.TotalBytes)
-                            + ", scanned in " + Census.Milliseconds.ToString("0") + " ms", Label);
+                            + ", scanned in " + Census.Milliseconds.ToString("0") + " ms", PanelTheme.Cell);
+        }
+
+        GUILayout.FlexibleSpace();
+
+        if (Census.HasScanned && Census.Entries.Count > 40)
+        {
+            ShowAllTypes = PanelTheme.Segmented(GUILayoutUtility.GetRect(230f, 28f, GUILayout.Width(230f)),
+                new[] { "Top 40", "All " + Census.Entries.Count }, ShowAllTypes ? 1 : 0) == 1;
         }
 
         GUILayout.EndHorizontal();
 
         if (!Census.HasScanned)
         {
+            GUILayout.Space(8f);
             GUILayout.Label("Every live UnityEngine.Object - textures, meshes, materials, audio, "
                             + "components - by type, largest first, with the real size the engine reports. "
                             + "This is the engine's half of the heap and nearly all of it is the game's.",
-                Label);
+                PanelTheme.Note);
+
+            EndCard();
             return;
         }
 
         if (Census.SizesUnavailable)
         {
+            GUILayout.Space(6f);
             GUILayout.Label("Sizes all came back zero, so Profiler.GetRuntimeMemorySizeLong is present "
                             + "but does nothing in this build - the same way the allocation counter is. "
-                            + "The counts below are still real.", Label);
+                            + "The counts below are still real.", PanelTheme.Note);
         }
 
-        GUILayout.Space(6f);
-        GUILayout.BeginHorizontal();
-        GUILayout.Label("Type", Header, GUILayout.Width(420f));
-        GUILayout.Label("Count", Header, GUILayout.Width(90f));
-        GUILayout.Label("Size", Header);
+        GUILayout.Space(12f);
+
+        const float numbers = 120f;
+        float name = NameColumn(width, numbers, 2);
+
+        GUILayout.BeginHorizontal(PanelTheme.RowEven);
+        GUILayout.Label("Type", PanelTheme.Caption, GUILayout.Width(name));
+        Head("objects", numbers);
+        Head("size", numbers);
         GUILayout.EndHorizontal();
 
         int limit = ShowAllTypes ? Census.Entries.Count : Mathf.Min(40, Census.Entries.Count);
@@ -785,24 +1090,59 @@ public class DebugPanel : MonoBehaviour
         {
             ObjectCensus.Entry entry = Census.Entries[i];
 
-            GUILayout.BeginHorizontal();
-            GUILayout.Label(entry.TypeName, Label, GUILayout.Width(420f));
-            GUILayout.Label(entry.Count.ToString("N0"), Value, GUILayout.Width(90f));
-            GUILayout.Label(Bytes(entry.Bytes), Value);
+            GUILayout.BeginHorizontal(i % 2 == 1 ? PanelTheme.RowOdd : PanelTheme.RowEven);
+            GUILayout.Label(entry.TypeName, PanelTheme.Cell, GUILayout.Width(name));
+            GUILayout.Label(entry.Count.ToString("N0"), PanelTheme.LabelRight, GUILayout.Width(numbers));
+            GUILayout.Label(PanelTheme.Unit(Bytes(entry.Bytes)), PanelTheme.ValueRight, GUILayout.Width(numbers));
             GUILayout.EndHorizontal();
         }
 
-        if (Census.Entries.Count > 40)
-        {
-            GUILayout.Space(4f);
+        EndCard();
+    }
 
-            if (GUILayout.Button(ShowAllTypes
-                    ? "Show top 40"
-                    : "Show all " + Census.Entries.Count + " types", GUILayout.Width(200f)))
-            {
-                ShowAllTypes = !ShowAllTypes;
-            }
+    // ------------------------------------------------------------------ cpu
+
+    /// <summary>What the recorder last said, and what it is doing now. The controls are in the toolbar.</summary>
+    private void DrawRecorderStatus()
+    {
+        if (Session == null)
+        {
+            return;
         }
+
+        BeginCard("Recording");
+
+        bool recording = Session.Recording;
+
+        GUILayout.Label(recording
+            ? "Recording " + Session.Target + ". Play through whatever you want to measure, then Stop."
+            : "Record weaves enter and exit hooks into the selected assembly, and Stop takes them out "
+              + "again. Only that mod's own methods are woven, and methods on generic types cannot be "
+              + "hooked at all, so they will be missing.", PanelTheme.Note);
+
+        if (Lines.Count > 0)
+        {
+            GUILayout.Space(12f);
+
+            // The recorder's own report, kept verbatim in a recessed block: it is the line that
+            // says whether the weave found anything, and paraphrasing it has already cost a
+            // session once.
+            GUILayout.BeginVertical(PanelTheme.Well);
+            GUILayout.Space(10f);
+
+            foreach (string line in Lines)
+            {
+                GUILayout.BeginHorizontal();
+                GUILayout.Space(12f);
+                GUILayout.Label(line, PanelTheme.Cell);
+                GUILayout.EndHorizontal();
+            }
+
+            GUILayout.Space(10f);
+            GUILayout.EndVertical();
+        }
+
+        EndCard();
     }
 
     /// <summary>
@@ -812,13 +1152,13 @@ public class DebugPanel : MonoBehaviour
     /// methods the recorder was compiled into, so every one carries your own type and method
     /// name. Click a frame to zoom into it; hover for the numbers that do not fit on it.
     /// </summary>
-    private void DrawFlameGraph()
+    private void DrawFlameGraph(float width)
     {
-        GUILayout.Space(10f);
-        GUILayout.Label("FLAME GRAPH", Header);
+        BeginCard("Flame graph");
 
         if (Session == null)
         {
+            EndCard();
             return;
         }
 
@@ -828,9 +1168,10 @@ public class DebugPanel : MonoBehaviour
         {
             GUILayout.Label(Session.Recording
                 ? "Recording. Stop when you have played through whatever you want to measure."
-                : "Nothing recorded yet. Pick a mod above and press Record, play for a few seconds, then "
-                  + "Stop. Only that mod's own methods are woven - and methods on generic types cannot be "
-                  + "hooked at all, so they will be missing.", Label);
+                : "Nothing recorded yet. Pick a mod in the bar above and press Record, play for a few "
+                  + "seconds, then Stop.", PanelTheme.Note);
+
+            EndCard();
             return;
         }
 
@@ -839,42 +1180,71 @@ public class DebugPanel : MonoBehaviour
 
         if (total <= 0)
         {
-            GUILayout.Label("The recording captured no time.", Label);
+            GUILayout.Label("The recording captured no time.", PanelTheme.Note);
+            EndCard();
             return;
         }
 
         GUILayout.BeginHorizontal();
 
-        if (Focus != null && GUILayout.Button("Back", GUILayout.Width(90f)))
+        if (Focus != null)
         {
-            Focus = Focus.Parent == CallRecorder.Tree ? null : Focus.Parent;
+            if (GUILayout.Button("Back", PanelTheme.Button, GUILayout.Width(86f)))
+            {
+                Focus = Focus.Parent == CallRecorder.Tree ? null : Focus.Parent;
+            }
+
+            GUILayout.Space(12f);
         }
 
         GUILayout.Label(Focus == null
-            ? "All frames, " + Milliseconds(total) + " total"
-            : Session.NameOf(shown.MethodId) + " - " + Milliseconds(total) + " over "
-              + shown.Calls.ToString("N0") + " calls", Label);
+            ? "All frames  ·  " + Milliseconds(total) + " over " + Capture()
+            : Session.NameOf(shown.MethodId) + "  ·  " + Milliseconds(total) + " over "
+              + shown.Calls.ToString("N0") + " calls", PanelTheme.Cell);
 
         GUILayout.EndHorizontal();
+        GUILayout.Space(10f);
 
-        const float rowHeight = 20f;
-        int depth = DepthOf(shown, 0);
-        Rect area = GUILayoutUtility.GetRect(10f, Mathf.Min(depth, 20) * rowHeight + 4f);
+        const float rowHeight = 21f;
 
-        DrawFrames(shown, area, area.y, area.width, total, rowHeight);
+        // Sized to the rows that will survive the one-pixel cull rather than to the tree's true
+        // depth. A deep capture is mostly frames too narrow to draw, and measuring the tree's true depth
+        // left two thirds of the box empty.
+        float plot = Mathf.Max(width - 44f, 80f);
+        int depth = Mathf.Clamp(VisibleDepth(shown, plot, total, 0), 1, 24);
 
-        GUI.color = Color.white;
+        Rect area = GUILayoutUtility.GetRect(10f, depth * rowHeight + 8f);
+
+        PanelTheme.Rounded(area, new Color(0f, 0f, 0f, 0.32f), new Color(1f, 1f, 1f, 0.06f));
+
+        Rect inner = new Rect(area.x + 4f, area.y + 4f, area.width - 8f, area.height - 8f);
+
+        DrawFrames(shown, inner, inner.x, inner.y, inner.width, total, rowHeight);
+
+        EndCard();
     }
 
-    /// <summary>Lays out one node's children across the width its own time earned.</summary>
-    private void DrawFrames(CallRecorder.Node node, Rect area, float y, float width, long total, float rowHeight)
+    /// <summary>
+    /// Lays out one node's children across the span its own time earned, starting at its own
+    /// left edge.
+    ///
+    /// **That left edge is the whole point of a flame graph** and it was missing: this took a
+    /// width but no origin and restarted every level at <c>area.x</c>, so each row was packed
+    /// against the left of the graph instead of sitting under the frame that called it. Widths
+    /// were right, positions were not, and the picture said nothing about who called whom.
+    ///
+    /// The span passed down is the child's full share, not its drawn width - subtracting the
+    /// two-pixel gap before recursing shrank every level a little more than the last.
+    /// </summary>
+    private void DrawFrames(CallRecorder.Node node, Rect area, float left, float y, float width,
+        long total, float rowHeight)
     {
         if (y > area.yMax || width < 1f || total <= 0)
         {
             return;
         }
 
-        float x = area.x;
+        float x = left;
 
         foreach (KeyValuePair<int, CallRecorder.Node> pair in node.Children)
         {
@@ -887,27 +1257,28 @@ public class DebugPanel : MonoBehaviour
                 continue;
             }
 
-            Rect frame = new Rect(x, y, Mathf.Max(span - 1f, 1f), rowHeight - 1f);
+            Rect frame = new Rect(x, y, Mathf.Max(span - 2f, 1f), rowHeight - 2f);
 
-            GUI.color = ColourFor(child.MethodId);
-            GUI.DrawTexture(frame, Pixel);
-            GUI.color = Color.white;
+            // Square, not rounded: a frame can be one pixel wide, and rounded corners on a
+            // shape narrower than their own radius stop being corners and start being the
+            // whole shape. The two-pixel gaps are what separate the frames.
+            PanelTheme.Fill(frame, ColourFor(child.MethodId));
 
             // The numbers go on the frame when they fit and in the tooltip when they do not.
             // A truncated name with no timing was the worst of both.
             if (span > 150f)
             {
-                GUI.Label(frame, " " + Short(Session.NameOf(child.MethodId)) + "  " + Milliseconds(child.Ticks),
-                    FrameLabel);
+                GUI.Label(frame, "  " + Short(Session.NameOf(child.MethodId)) + "   " + Milliseconds(child.Ticks),
+                    PanelTheme.FrameLabel);
             }
             else if (span > 55f)
             {
-                GUI.Label(frame, " " + Short(Session.NameOf(child.MethodId)), FrameLabel);
+                GUI.Label(frame, "  " + Short(Session.NameOf(child.MethodId)), PanelTheme.FrameLabel);
             }
 
             if (frame.Contains(Event.current.mousePosition))
             {
-                HoverText = Session.NameOf(child.MethodId)
+                HoverText = "<b>" + Session.NameOf(child.MethodId) + "</b>"
                             + "\n" + Milliseconds(child.Ticks) + " total, " + Milliseconds(SelfOf(child)) + " self"
                             + "\n" + child.Calls.ToString("N0") + " calls, "
                             + (child.Ticks * 100f / total).ToString("0.0") + "% of the frame above";
@@ -921,7 +1292,7 @@ public class DebugPanel : MonoBehaviour
                 }
             }
 
-            DrawFrames(child, area, y + rowHeight, Mathf.Max(span - 1f, 1f), child.Ticks, rowHeight);
+            DrawFrames(child, area, x, y + rowHeight, span, child.Ticks, rowHeight);
             x += span;
         }
     }
@@ -933,7 +1304,7 @@ public class DebugPanel : MonoBehaviour
     /// expensive" - a method called from six places is six narrow frames, none of them
     /// obviously the problem. Self time summed across the tree is the number that names it.
     /// </summary>
-    private void DrawHotMethods()
+    private void DrawHotMethods(float width)
     {
         CallRecorder.Node root = CallRecorder.Tree;
 
@@ -942,8 +1313,7 @@ public class DebugPanel : MonoBehaviour
             return;
         }
 
-        GUILayout.Space(16f);
-        GUILayout.Label("HOTTEST METHODS, BY SELF TIME", Header);
+        BeginCard("Hottest methods, by self time");
 
         Dictionary<int, long[]> totals = new Dictionary<int, long[]>();
         Accumulate(root, totals);
@@ -951,24 +1321,50 @@ public class DebugPanel : MonoBehaviour
         List<KeyValuePair<int, long[]>> ordered = new List<KeyValuePair<int, long[]>>(totals);
         ordered.Sort((a, b) => b.Value[0].CompareTo(a.Value[0]));
 
-        GUILayout.BeginHorizontal();
-        GUILayout.Label("Method", Header, GUILayout.Width(430f));
-        GUILayout.Label("Self", Header, GUILayout.Width(90f));
-        GUILayout.Label("Total", Header, GUILayout.Width(90f));
-        GUILayout.Label("Calls", Header);
+        const float numbers = 110f;
+        float name = NameColumn(width, numbers, 3);
+
+        GUILayout.BeginHorizontal(PanelTheme.RowEven);
+        GUILayout.Label("Method", PanelTheme.Caption, GUILayout.Width(name));
+        Head("self", numbers);
+        Head("total", numbers);
+        Head("calls", numbers);
         GUILayout.EndHorizontal();
 
         for (int i = 0; i < Mathf.Min(20, ordered.Count); i++)
         {
             KeyValuePair<int, long[]> row = ordered[i];
 
-            GUILayout.BeginHorizontal();
-            GUILayout.Label(Session.NameOf(row.Key), Label, GUILayout.Width(430f));
-            GUILayout.Label(Milliseconds(row.Value[0]), Value, GUILayout.Width(90f));
-            GUILayout.Label(Milliseconds(row.Value[1]), Value, GUILayout.Width(90f));
-            GUILayout.Label(row.Value[2].ToString("N0"), Value);
+            GUILayout.BeginHorizontal(i % 2 == 1 ? PanelTheme.RowOdd : PanelTheme.RowEven);
+            GUILayout.Label(Session.NameOf(row.Key), PanelTheme.CellMod, GUILayout.Width(name));
+            GUILayout.Label(PanelTheme.Unit(Milliseconds(row.Value[0])), PanelTheme.ValueRight,
+                GUILayout.Width(numbers));
+            GUILayout.Label(PanelTheme.Unit(Milliseconds(row.Value[1])), PanelTheme.LabelRight,
+                GUILayout.Width(numbers));
+            GUILayout.Label(row.Value[2].ToString("N0"), PanelTheme.LabelRight, GUILayout.Width(numbers));
             GUILayout.EndHorizontal();
         }
+
+        EndCard();
+    }
+
+    /// <summary>
+    /// How long the recording ran and across how many threads.
+    ///
+    /// Without it the header is a bare total, and a bare total invites the reasonable question of
+    /// whether it is the whole capture or some sample of it. It is the whole capture - and it is
+    /// summed across threads, so on a mod whose simulation runs on the pool it can legitimately
+    /// exceed the wall clock beside it. Saying both is what makes that read as arithmetic rather
+    /// than as a bug.
+    /// </summary>
+    private static string Capture()
+    {
+        double seconds = (CallRecorder.StoppedAt - CallRecorder.StartedAt)
+                         / (double)System.Diagnostics.Stopwatch.Frequency;
+
+        int threads = CallRecorder.Threads.Count;
+
+        return seconds.ToString("0.0") + " s, " + threads + (threads == 1 ? " thread" : " threads");
     }
 
     /// <summary>Sums self time, total time and calls per method across every path it appears on.</summary>
@@ -1004,10 +1400,44 @@ public class DebugPanel : MonoBehaviour
         return Math.Max(node.Ticks - children, 0);
     }
 
+    // ------------------------------------------------------------------ shared pieces
+
     /// <summary>
-    /// Drawn last and outside the scroll view, so it is never clipped by the row it belongs
-    /// to - which is what a tooltip inside a scrolling table would otherwise be.
+    /// A card: a surface lifted a few percent off the ground with its name along the top.
+    ///
+    /// <c>BeginVertical</c> with a style is the only way IMGUI will draw a background behind a
+    /// group whose height is not known until its contents have been laid out, which is every
+    /// section on this page.
     /// </summary>
+    private static void BeginCard(string title)
+    {
+        GUILayout.BeginVertical(PanelTheme.Card);
+
+        if (title == null)
+        {
+            return;
+        }
+
+        GUILayout.Label(title, PanelTheme.CardTitle);
+
+        Rect rule = GUILayoutUtility.GetRect(10f, 11f);
+        PanelTheme.Fill(new Rect(rule.x, Mathf.Round(rule.y + 5f), rule.width, 1f), new Color(1f, 1f, 1f, 0.07f));
+    }
+
+    private static void EndCard()
+    {
+        GUILayout.EndVertical();
+    }
+
+    private static void Row(string label, string value, int index)
+    {
+        GUILayout.BeginHorizontal(index % 2 == 1 ? PanelTheme.RowOdd : PanelTheme.RowEven);
+        GUILayout.Label(label, PanelTheme.Cell);
+        GUILayout.FlexibleSpace();
+        GUILayout.Label(PanelTheme.Unit(value), PanelTheme.ValueRight, GUILayout.Width(180f));
+        GUILayout.EndHorizontal();
+    }
+
     /// <summary>
     /// Writes everything on the page to a file beside <c>Player.log</c> and puts the folder on
     /// the clipboard.
@@ -1036,10 +1466,16 @@ public class DebugPanel : MonoBehaviour
             // The clipboard is the convenience; the path in the message is the fallback.
         }
 
-        ExportMessage = "Wrote " + System.IO.Path.GetFileName(path) + " to " + folder
-                        + "  (folder path copied to the clipboard)";
+        // Short enough to fit the toolbar strip. The folder itself is on the clipboard, which is
+        // what a developer does with it anyway.
+        ExportMessage = "Wrote " + System.IO.Path.GetFileName(path)
+                        + " beside Player.log - folder path copied to the clipboard.";
     }
 
+    /// <summary>
+    /// Drawn last and outside the scroll view, so it is never clipped by the row it belongs
+    /// to - which is what a tooltip inside a scrolling table would otherwise be.
+    /// </summary>
     private void DrawTooltip()
     {
         if (HoverText == null || Event.current.type != EventType.Repaint)
@@ -1048,21 +1484,18 @@ public class DebugPanel : MonoBehaviour
         }
 
         Vector2 point = GUIUtility.ScreenToGUIPoint(HoverPoint);
-        Vector2 size = Tooltip.CalcSize(new GUIContent(HoverText));
+        Vector2 size = PanelTheme.Tooltip.CalcSize(new GUIContent(HoverText));
 
-        size.x = Mathf.Min(size.x + 16f, 640f);
-        size.y += 10f;
+        size.x = Mathf.Min(size.x + 8f, 660f);
+        size.y += 6f;
 
         float x = Mathf.Min(point.x + 16f, Screen.width - size.x - 8f);
         float y = Mathf.Min(point.y + 18f, Screen.height - size.y - 8f);
 
         Rect box = new Rect(x, y, size.x, size.y);
 
-        GUI.color = new Color(0.30f, 0.55f, 0.72f, 0.95f);
-        GUI.DrawTexture(new Rect(box.x - 1f, box.y - 1f, box.width + 2f, box.height + 2f), Pixel);
-        GUI.color = Color.white;
-        GUI.DrawTexture(box, Chrome);
-        GUI.Label(box, HoverText, Tooltip);
+        PanelTheme.Rounded(box, new Color(0.058f, 0.075f, 0.110f, 0.98f), new Color(1f, 1f, 1f, 0.18f));
+        GUI.Label(box, HoverText, PanelTheme.Tooltip);
     }
 
     private static long TotalOf(CallRecorder.Node node)
@@ -1082,13 +1515,30 @@ public class DebugPanel : MonoBehaviour
         return total;
     }
 
-    private static int DepthOf(CallRecorder.Node node, int depth)
+    /// <summary>
+    /// How many rows will actually be drawn, applying the same sub-pixel cull that
+    /// <see cref="DrawFrames"/> does, so the box can be sized to its contents.
+    /// </summary>
+    private static int VisibleDepth(CallRecorder.Node node, float width, long total, int depth)
     {
+        if (width < 1f || total <= 0)
+        {
+            return depth;
+        }
+
         int deepest = depth;
 
         foreach (KeyValuePair<int, CallRecorder.Node> pair in node.Children)
         {
-            int found = DepthOf(pair.Value, depth + 1);
+            CallRecorder.Node child = pair.Value;
+            float span = width * (child.Ticks / (float)total);
+
+            if (span < 1f)
+            {
+                continue;
+            }
+
+            int found = VisibleDepth(child, span, child.Ticks, depth + 1);
 
             if (found > deepest)
             {
@@ -1106,7 +1556,7 @@ public class DebugPanel : MonoBehaviour
 
         // Bright and saturated: the first version drew a dark fill on a dark page, which made
         // the graph a texture rather than a diagram. The on-frame text is dark to match.
-        return Color.HSVToRGB(hue, 0.62f, 0.98f);
+        return Color.HSVToRGB(hue, 0.55f, 0.95f);
     }
 
     private static string Short(string name)
@@ -1130,14 +1580,6 @@ public class DebugPanel : MonoBehaviour
         return ms >= 100 ? ms.ToString("0") + " ms" : ms.ToString("0.0") + " ms";
     }
 
-    private void Row(string label, string value)
-    {
-        GUILayout.BeginHorizontal();
-        GUILayout.Label(label, Label, GUILayout.Width(220f));
-        GUILayout.Label(value, Value);
-        GUILayout.EndHorizontal();
-    }
-
     private static string Format(CounterFeed.Gauge gauge, long value)
     {
         if (gauge.IsTime)
@@ -1154,120 +1596,8 @@ public class DebugPanel : MonoBehaviour
         return ManagedCensus.Bytes(value);
     }
 
-    /// <summary>
-    /// IMGUI styles have to be built inside OnGUI - GUI.skin is null anywhere else - so this
-    /// runs on the first draw rather than at construction.
-    /// </summary>
-    private void EnsureStyles()
-    {
-        if (Header != null)
-        {
-            return;
-        }
-
-        // White, so GUI.color alone decides what a rectangle looks like. Every fill in this
-        // page is this texture tinted, which is why the bars could be the page's own colour
-        // by accident in the first place.
-        Pixel = Fill(Color.white);
-        Chrome = Fill(new Color(0.11f, 0.14f, 0.18f, 1f));
-
-        // A lighter ground for graphs: bars drawn on the page's own colour were invisible,
-        // which is the complaint this answers.
-        Graph = Fill(new Color(0.10f, 0.13f, 0.17f, 1f));
-
-        // The backdrop is drawn by us rather than by the blocker canvas, so it is certain to
-        // sit under this page instead of over it. Dark enough that the game reads as inactive,
-        // short of opaque so it is still obvious what is behind.
-        Dim = Fill(new Color(0.035f, 0.055f, 0.085f, 0.955f));
-
-        Header = new GUIStyle(GUI.skin.label)
-        {
-            fontSize = 14,
-            fontStyle = FontStyle.Bold,
-            normal = { textColor = new Color(0.6f, 0.85f, 1f) },
-        };
-
-        Title = new GUIStyle(GUI.skin.label)
-        {
-            fontSize = 24,
-            normal = { textColor = new Color(0.93f, 0.96f, 1f) },
-        };
-
-        CloseButton = new GUIStyle(GUI.skin.button)
-        {
-            fontSize = 13,
-            fontStyle = FontStyle.Bold,
-        };
-
-        // Tabs are drawn as text, not as buttons with a frame: the game's tab row is a line of
-        // labels with the live one underlined, and a chunky IMGUI button next to that reads as
-        // a different piece of software.
-        TabOn = new GUIStyle(GUI.skin.label)
-        {
-            fontSize = 15,
-            alignment = TextAnchor.MiddleCenter,
-            normal = { textColor = Color.white },
-            hover = { textColor = Color.white },
-        };
-
-        TabOff = new GUIStyle(GUI.skin.label)
-        {
-            fontSize = 15,
-            alignment = TextAnchor.MiddleCenter,
-            normal = { textColor = new Color(0.62f, 0.68f, 0.76f) },
-            hover = { textColor = new Color(0.85f, 0.9f, 0.96f) },
-        };
-
-        Label = new GUIStyle(GUI.skin.label)
-        {
-            fontSize = 12,
-            wordWrap = true,
-            normal = { textColor = new Color(0.75f, 0.78f, 0.82f) },
-        };
-
-        Value = new GUIStyle(GUI.skin.label)
-        {
-            fontSize = 12,
-            fontStyle = FontStyle.Bold,
-            normal = { textColor = Color.white },
-        };
-
-        FrameLabel = new GUIStyle(GUI.skin.label)
-        {
-            fontSize = 12,
-            normal = { textColor = new Color(0.08f, 0.09f, 0.12f) },
-        };
-
-        Tooltip = new GUIStyle(GUI.skin.label)
-        {
-            fontSize = 12,
-            padding = new RectOffset(8, 8, 5, 5),
-            normal = { textColor = new Color(0.88f, 0.93f, 1f) },
-        };
-    }
-
-    private static Texture2D Fill(Color colour)
-    {
-        Texture2D texture = new Texture2D(1, 1);
-        texture.SetPixel(0, 0, colour);
-        texture.Apply();
-
-        return texture;
-    }
-
     private void OnDestroy()
     {
-        Discard(Pixel);
-        Discard(Chrome);
-        Discard(Dim);
-        Discard(Graph);
-    }
-
-    private static void Discard(Texture2D texture)
-    {
-        if (texture != null)
-        {
-            Destroy(texture);
-        }
+        PanelTheme.Release();
     }
 }

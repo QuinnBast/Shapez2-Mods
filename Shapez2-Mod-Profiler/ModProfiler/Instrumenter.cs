@@ -6,6 +6,8 @@ using MonoMod.Cil;
 using MonoMod.RuntimeDetour;
 using ILogger = Core.Logging.ILogger;
 
+namespace QuinnBast.Shapez2.ModProfiler;
+
 /// <summary>
 /// Weaves <see cref="CallRecorder"/> into every method of one mod assembly.
 ///

@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 
+namespace QuinnBast.Shapez2.ModProfiler;
+
 /// <summary>
 /// Which loaded assemblies are mods.
 ///

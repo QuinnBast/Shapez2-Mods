@@ -4,6 +4,8 @@ using System.Diagnostics;
 using System.Reflection;
 using ILogger = Core.Logging.ILogger;
 
+namespace QuinnBast.Shapez2.ModProfiler;
+
 /// <summary>
 /// Starting and stopping a recording, and finding the assembly to record.
 ///
@@ -19,8 +21,22 @@ public class ProfilerSession : IDisposable
     /// </summary>
     public const int DefaultBudget = 4000;
 
+    /// <summary>
+    /// How long a recording runs before it stops itself, in seconds. Zero means never.
+    ///
+    /// **Not a nicety.** The weave costs two timestamp reads and a dictionary lookup on every
+    /// call of every method in the assembly, and a recording nobody stops keeps paying that for
+    /// the rest of the session while the call tree grows without bound. Pressing Record and then
+    /// forgetting is the obvious mistake, so the default is two minutes - longer than any capture
+    /// worth reading, short enough that forgetting costs nothing.
+    /// </summary>
+    public float LimitSeconds = 120f;
+
     private readonly ILogger Logger;
     private readonly Instrumenter Weaver;
+
+    /// <summary>Stopwatch ticks at which <see cref="Tick"/> stops the recording. Zero means never.</summary>
+    private long Deadline;
 
     public ProfilerSession(ILogger logger)
     {
@@ -31,6 +47,32 @@ public class ProfilerSession : IDisposable
     public bool Recording => CallRecorder.Recording;
 
     public string Target => Weaver.Assembly;
+
+    /// <summary>Seconds left before the recording stops itself, or zero if it will not.</summary>
+    public double Remaining => Deadline == 0L || !Recording
+        ? 0d
+        : Math.Max(Deadline - Stopwatch.GetTimestamp(), 0L) / (double)Stopwatch.Frequency;
+
+    /// <summary>
+    /// Stops the recording if its time is up, and returns what the stop reported - or null on
+    /// every other frame, which is nearly all of them.
+    ///
+    /// Driven from the panel's Update rather than from a timer, because stopping unweaves a few
+    /// thousand methods and that has to happen somewhere predictable. A build with no panel - a
+    /// hot reload - has no auto-stop and still has prof.stop.
+    /// </summary>
+    public IEnumerable<string> Tick()
+    {
+        if (!Recording || Deadline == 0L || Stopwatch.GetTimestamp() < Deadline)
+        {
+            return null;
+        }
+
+        List<string> report = new List<string> { "Reached the recording limit, so it stopped itself." };
+        report.AddRange(StopRecording());
+
+        return report;
+    }
 
     public string NameOf(int methodId)
     {
@@ -64,7 +106,14 @@ public class ProfilerSession : IDisposable
 
         CallRecorder.Start();
 
-        report.Add("Recording. Play for a few seconds, then prof.stop, then open the panel.");
+        Deadline = LimitSeconds <= 0f
+            ? 0L
+            : Stopwatch.GetTimestamp() + (long)(LimitSeconds * Stopwatch.Frequency);
+
+        report.Add(Deadline == 0L
+            ? "Recording, with no time limit. Play, then prof.stop, then open the panel."
+            : "Recording for up to " + LimitSeconds.ToString("0") + "s, or until stopped.");
+
         return report;
     }
 
@@ -79,6 +128,7 @@ public class ProfilerSession : IDisposable
         }
 
         CallRecorder.Stop();
+        Deadline = 0L;
 
         // The weave comes out as soon as the recording does - leaving it in would keep paying
         // the per-call cost for a measurement nobody is taking - but the names stay, because

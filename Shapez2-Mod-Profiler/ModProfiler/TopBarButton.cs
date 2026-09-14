@@ -1,9 +1,12 @@
 using System;
+using Core.Localization;
 using MonoMod.RuntimeDetour;
 using ShapezShifter.SharpDetour;
 using UnityEngine;
 using UnityEngine.UI;
 using ILogger = Core.Logging.ILogger;
+
+namespace QuinnBast.Shapez2.ModProfiler;
 
 /// <summary>
 /// Puts a Mod Profiler button in the top bar, beside Statistics.
@@ -63,6 +66,8 @@ public class TopBarButton : IDisposable
                 return;
             }
 
+            Brand(button);
+
             button.OnClick.RemoveAllListeners();
             button.OnClick.AddListener(button.PlayClickAnimation);
 
@@ -97,17 +102,85 @@ public class TopBarButton : IDisposable
         // button throws the first time the mouse crosses it.
         button.UISoundPlayer = template.UISoundPlayer;
 
-        // The clone carries Statistics' own icon and tooltip translation ids, and there is no
-        // icon of our own to swap in. Tinting is the honest minimum: it makes the button
-        // findable and obviously not the one beside it. The tooltip is left alone because
-        // setting it goes through HUDLocalizedText, which throws on an unconstructed clone.
-        Image icon = button.UIIcon;
+        return button;
+    }
 
-        if (icon != null)
+    /// <summary>
+    /// Gives the button its own icon and tooltip.
+    ///
+    /// Applied on every attach rather than only when the button is first cloned: a button
+    /// inherited from a previous generation is carrying that generation's sprite, and the
+    /// tooltip text the old assembly allocated.
+    ///
+    /// <c>_Icon</c> is written as well as <c>UIIcon.sprite</c> for the reason the tooltip fields
+    /// are - <c>HUDIconButton.Run()</c> copies the serialized field over the live one, so setting
+    /// only the live one leaves the Statistics icon to come back the next time anything runs the
+    /// view.
+    /// </summary>
+    private void Brand(HUDIconButton button)
+    {
+        try
         {
-            icon.color = new Color(0.55f, 0.9f, 1f, 0.95f);
+            Sprite glyph = PanelIcon.FlameGraph();
+
+            button._Icon = glyph;
+
+            Image icon = button.UIIcon;
+
+            if (icon != null)
+            {
+                icon.sprite = glyph;
+
+                // The bar's icons rest at 0.75 alpha and animate to 1 on hover, which is
+                // Construct's work and does not happen on a clone. Splitting the difference
+                // keeps it from reading as disabled beside the real ones.
+                icon.color = new Color(1f, 1f, 1f, 0.9f);
+            }
+        }
+        catch (Exception exception)
+        {
+            Logger.Exception?.LogException(exception);
         }
 
-        return button;
+        Describe(button);
+    }
+
+    /// <summary>
+    /// Gives the clone its own tooltip.
+    ///
+    /// **Why the clone had an empty one.** <c>HUDIconButton</c> resolves its serialized
+    /// translation ids into <c>_TooltipTitle</c> and <c>_TooltipText</c> in <c>[Construct]</c>,
+    /// which never runs on a runtime clone - and <c>Run()</c> then copies those two nulls over
+    /// the <c>HUDTooltipTarget</c>'s own serialized ids. So the tooltip opened and said nothing:
+    /// not a missing translation, a null written over a good value.
+    ///
+    /// **Why the fields and not the properties.** The <c>TooltipTitle</c> and <c>TooltipText</c>
+    /// setters are safe, but they are the only two that are. <c>HasTooltip</c>,
+    /// <c>TooltipKeybinding</c>, <c>Interactable</c> and <c>Highlighted</c> all end in
+    /// <c>OnHighlightChanged</c>, which dereferences <c>TutorialHighlightProvider</c> - another
+    /// thing <c>[Construct]</c> would have set and did not. Writing the backing fields and
+    /// calling <c>UpdateTooltipConfig</c> touches only the tooltip target.
+    ///
+    /// The keybinding is cleared for the same reason it has to be set at all: it is Statistics',
+    /// and this button does not have one.
+    /// </summary>
+    private void Describe(HUDIconButton button)
+    {
+        try
+        {
+            button._TooltipKeybinding = string.Empty;
+            button._TooltipTitle = new RawText("Mod Profiler");
+            button._TooltipText = new RawText(
+                "Frame time, what the loaded mods are holding on the heap, and a flame graph for "
+                + "one mod's own methods. Escape closes it.");
+
+            button.UpdateTooltipConfig();
+        }
+        catch (Exception exception)
+        {
+            // A button with no tooltip is the behaviour this replaces, not a reason to lose the
+            // button.
+            Logger.Exception?.LogException(exception);
+        }
     }
 }

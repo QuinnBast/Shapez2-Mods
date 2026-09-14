@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Profiling;
 
+namespace QuinnBast.Shapez2.ModProfiler;
+
 /// <summary>
 /// Counts what is on the heap, by type, largest first.
 ///

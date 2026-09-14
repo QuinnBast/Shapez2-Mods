@@ -4,6 +4,8 @@ using ShapezShifter.Hijack;
 using UnityEngine;
 using ILogger = Core.Logging.ILogger;
 
+namespace QuinnBast.Shapez2.ModProfiler;
+
 /// <summary>
 /// The probe's console commands.
 ///
@@ -62,6 +64,27 @@ public class ProbeCommands : IConsoleRewirer
 
         Register(console, "stop", context => Emit(context, Session.StopRecording()));
 
+        // The panel's typeface is a probe, not a certainty: whether the game's own font is
+        // reachable from a mod depends on whether its TMP asset kept its source file. These two
+        // commands are how that question gets answered by looking at the screen.
+        Register(console, "fonts", context => Emit(context, Fonts()));
+
+        // The other half of "does the page look right": whether the game's own full-screen
+        // background was found, or whether the panel is falling back to its generated gradient.
+        Register(console, "backdrop", context =>
+        {
+            GameBackdrop.Resolve();
+            Emit(context, new[] { GameBackdrop.Status });
+        });
+
+        RegisterWithArgument(console, "font", new DebugConsole.StringOption("name"),
+            context => Emit(context, new[] { PanelFont.Apply(context.GetString(0)) }));
+
+        // Judging a background is a thing you do by looking at it beside a real page, which is
+        // not something the numbers can settle on their own. This makes that a live dial.
+        RegisterWithArgument(console, "bg", new DebugConsole.StringOption("scale"),
+            context => Emit(context, new[] { Brightness(context.GetString(0)) }));
+
         Register(console, "watch", context => Emit(context, Counters.Start()));
         Register(console, "live", context => Emit(context, Counters.Read()));
 
@@ -85,6 +108,50 @@ public class ProbeCommands : IConsoleRewirer
                 Logger.Exception?.LogException(exception);
             }
         });
+    }
+
+    /// <summary>Scales the panel's ground. 1 is the tuned value; useful range is about 0.6 to 1.6.</summary>
+    private static string Brightness(string argument)
+    {
+        if (!float.TryParse(argument, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out float scale))
+        {
+            return "Give it a number, for example prof.bg 1.2. Currently "
+                   + PanelTheme.Brightness.ToString("0.00") + ".";
+        }
+
+        PanelTheme.Brightness = UnityEngine.Mathf.Clamp(scale, 0.2f, 2.5f);
+
+        return "Background brightness is now " + PanelTheme.Brightness.ToString("0.00")
+               + ". Tell me the value that looks right and it becomes the default.";
+    }
+
+    /// <summary>Every face the panel could be drawn in, and which one it is using.</summary>
+    private static IEnumerable<string> Fonts()
+    {
+        List<string> lines = new List<string>();
+        List<UnityEngine.Font> candidates = PanelFont.Candidates();
+
+        lines.Add("Panel font: " + (PanelTheme.CurrentFont == null
+            ? "IMGUI built-in"
+            : PanelTheme.CurrentFont.name));
+
+        if (candidates.Count == 0)
+        {
+            lines.Add("No dynamic font is loaded in this process, so there is nothing to switch to.");
+            lines.Add("That means every TMP_FontAsset in the build dropped its sourceFontFile.");
+
+            return lines;
+        }
+
+        lines.Add(candidates.Count + " candidate(s) - prof.font <name> to use one, prof.font default to revert:");
+
+        foreach (UnityEngine.Font font in candidates)
+        {
+            lines.Add("  " + font.name);
+        }
+
+        return lines;
     }
 
     /// <summary>

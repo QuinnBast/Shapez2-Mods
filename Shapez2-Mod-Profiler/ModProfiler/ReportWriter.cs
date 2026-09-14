@@ -5,6 +5,8 @@ using System.IO;
 using System.Text;
 using UnityEngine;
 
+namespace QuinnBast.Shapez2.ModProfiler;
+
 /// <summary>
 /// Writes what is on screen to files beside <c>Player.log</c>, and puts the path on the
 /// clipboard.

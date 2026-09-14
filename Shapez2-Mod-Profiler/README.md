@@ -7,7 +7,9 @@ running game.
 - **Managed object census** — every C# object a loaded mod is holding, grouped by the assembly
   that declares its type. This is the one that says how much of the heap is *yours*.
 - **Unity object census** — every live `UnityEngine.Object` with its real size.
-- **Counters and frame graph** — everything a release player feeds for free.
+- **Counters and frame graph** — everything a release player feeds for free. The graph holds a
+  minute, bucketed at a quarter second, and each bucket shows its **worst** frame rather than its
+  mean — a mean over a quarter second hides the single 80 ms frame the graph exists to show.
 
 Open it from the tinted button beside Statistics, or drive it from the debug console (**F1**).
 
@@ -35,9 +37,13 @@ throw; a counter can exist and return a constant zero. Hence `prof.probe`: call 
 | `prof.counters` | every `ProfilerRecorder` counter the player exposes, by category |
 | `prof.native` | which Mono runtime symbols resolve — resolves only, calls nothing |
 | `prof.managed` | what the loaded mods are holding, by assembly and by type |
-| `prof.record <mod>` | weave enter/exit hooks into one mod's assembly and start recording |
+| `prof.record <mod>` | weave enter/exit hooks into one mod's assembly and start recording (stops itself after the panel's limit) |
 | `prof.stop` | stop, and remove the weave |
 | `prof.watch` / `prof.live` | open the live counters, then read them |
+| `prof.fonts` | which typefaces the panel could be drawn in, and which it is using |
+| `prof.backdrop` | whether the game's own page background was found, or the gradient stood in |
+| `prof.bg <scale>` | brightness of the panel's background, if 1 is wrong on your monitor |
+| `prof.font <name>` | draw the panel in one of them, or `default` to revert |
 | `prof.copy` | put the last report on the clipboard |
 
 `prof.counters` runs to hundreds of lines, which no in-game console is readable at — that is
@@ -105,10 +111,30 @@ Read off the install before any of it runs:
 
 ## The page
 
-Three tabs: **Overview** (frame graph and the player's own counters), **Memory** (GC, the
-managed census, the Unity census), **CPU** (pick a mod, Record, Stop, then the flame graph and
-a list of the hottest methods by self time). Recording no longer needs the console — the
-picker lists the mods actually loaded.
+Three tabs: **Overview** (headline tiles, the frame graph and the player's own counters),
+**Memory** (GC, the managed census, the Unity census), **CPU** (pick a mod, Record, Stop, then
+the flame graph and a list of the hottest methods by self time). Recording no longer needs the
+console — the picker lists the mods actually loaded.
+
+It is laid out like one of the game's own full-screen pages: title top left, tabs centred with
+the live one underlined in warm light, a rule across the screen, then cards - over the game's
+*actual* page background, read off the live `HUDFullscreenDialogBackground` that Statistics and
+Research use. See
+[Make an IMGUI page look like the game's](../shapez2-modding-docs/docs/howto/notifications-and-hud-screens.md#make-an-imgui-page-look-like-the-games)
+for how, and `prof.fonts` for the one part that cannot be guaranteed — whether the game's own
+typeface is reachable from a mod at all.
+
+## Recording stops itself
+
+Record weaves two timestamp reads and a dictionary lookup into every call of every method in the
+chosen assembly, and a recording nobody stops keeps paying that for the rest of the session while
+the call tree grows without bound. So a capture has a time limit: **30 s, 2 min, 5 min or none**,
+picked in the CPU tab's bar, defaulting to two minutes. While it runs, that control is replaced
+by the countdown, so a recording somebody walked away from is visibly on its way out rather than
+quietly expensive.
+
+`prof.record` from the console uses whatever limit the panel last had. A build with no panel - a
+hot reload - has no auto-stop, and still has `prof.stop`.
 
 ## Export
 
@@ -125,10 +151,11 @@ swallows clicks aimed at the toolbar. Escape closes it. The mechanism is
 `context.ConsumeAll()`, which is what the game's own screens do — see
 [Notifications and HUD screens](../shapez2-modding-docs/docs/howto/notifications-and-hud-screens.md#make-your-own-overlay-modal).
 
-The page itself is IMGUI rather than a `HUDPart`. It will not look like the game's UI, and
-that is the trade: none of the prefab and dependency-injection machinery applies to it, which
-is where the hours went on the last two HUD additions. For a page whose job is dense numbers,
-that machinery buys nothing back.
+The page itself is IMGUI rather than a `HUDPart`, because none of the prefab and
+dependency-injection machinery applies to it — that is where the hours went on the last two
+HUD additions, and for a page whose job is dense numbers it buys nothing back. What that used
+to cost was the look, and it no longer has to: every surface on the page is a texture generated
+at startup from a distance field, and nothing on it uses IMGUI's default skin.
 
 ## Building
 

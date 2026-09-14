@@ -5,6 +5,8 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using UnityEngine;
 
+namespace QuinnBast.Shapez2.ModProfiler;
+
 /// <summary>
 /// The managed heap by type, and by the assembly that declares the type - which is what turns
 /// it into "how much of this is my mod".

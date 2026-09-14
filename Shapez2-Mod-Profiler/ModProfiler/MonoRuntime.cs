@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
+namespace QuinnBast.Shapez2.ModProfiler;
+
 /// <summary>
 /// The Mono runtime's own C entry points, reached by <c>GetProcAddress</c> on the copy of
 /// <c>mono-2.0-bdwgc.dll</c> already mapped into the process.

@@ -4,7 +4,7 @@ A development tool: where a mod's frames and memory go, measured from inside the
 What follows is what was read off the assemblies, the runtime and two crash logs rather than
 assumed, so none of it has to be re-derived.
 
-## Status: working, 2026-09-11
+## Status: working, 2026-09-13
 
 Three tabs, modal, driven from the panel rather than the console:
 
@@ -184,6 +184,140 @@ Four things about it are load-bearing:
 Inlined calls under-report: Mono's JIT inlines small methods, and a body rewritten after a caller
 inlined it does not affect that caller's copy.
 
+## The page's look
+
+Rebuilt 2026-09-13. The page is still IMGUI and still not a `HUDPart`, but "it will not look
+like the game's UI" is no longer part of the trade. Everything the game's pages are made of is a
+texture, and `PanelTheme` generates them on the first draw:
+
+- **Rounded surfaces** are a white mask built from a signed distance field, nine-sliced through a
+  `GUIStyle.border`. `GUI.DrawTexture` does not nine-slice; `GUIStyle.Draw` does, honours
+  `GUI.color`, and throws outside `EventType.Repaint`. One mask serves every colour.
+- **Three corner radii, not one.** A nine-sliced texture drawn smaller than the sum of its own
+  borders squashes them, so the 6-pixel scrollbar and the 6-pixel progress meter take a radius-3
+  mask and a flame graph frame - which can be one pixel wide - is a plain rectangle.
+- **Cards** are `GUILayout.BeginVertical(style)`, the only way IMGUI will put a background behind
+  a group whose height is not known until its contents are laid out.
+- **The scrollbar is ours.** `GUI.VerticalScrollbar` resolves its thumb by looking up
+  `style.name + "thumb"` in `GUI.skin`, so restyling it means replacing a skin the game's own
+  debug console shares. `GUIStyle.none` for both scrollbars, a hand-drawn track and thumb with
+  their own hot control, and `GUI.EndScrollView` still handles the wheel.
+- **The mod picker is split in two.** Immediate mode does input and drawing in one pass, so a
+  menu painted last is on top but has already let every click through to what it covers. Its rows
+  are hit-tested before the content is laid out and painted after it.
+
+**The palette is sampled, and its polarity was wrong the first time.** Off a screenshot of the
+Statistics page: ground `36,55,90`, a stat tile on it `21,35,51`, the chart well inside that tile
+`18,29,40`, an unselected control `66,84,113`, a selected one `97,105,125`. Content surfaces are
+**recessed** and controls **lift** - the opposite of the usual habit of floating cards a few
+percent of white above the background. Building them the wrong way round cost twice: the cards
+were only visible with the page dropped to about half a real page's brightness, and every label
+on them was then fighting a near-black ground. Surfaces are now black at 34%, the well at 50%,
+and the buttons are the white.
+
+**The background is the game's own.** Every full-screen page holds a
+`HUDFullscreenDialogBackground` - a vignette, a glow top and bottom, and two faint line layers its
+`OnUpdate` rotates at 2 and -1.333 degrees a second. `GameBackdrop` reads those five sprites, their
+tint colours and both rotation rates off the live instance (`FindObjectsOfTypeAll`, because each
+one is inactive until its page opens) and draws them in IMGUI. The *component* is deliberately not
+cloned: it is a `HUDComponent` whose `[Construct]` would not run and whose `OnUpdate` ends in
+`ConsumeAll()`, which is a second thing fighting this panel for input it already consumes.
+
+**The sprites do not outlive the session.** They belong to the HUD, so quitting to the main menu
+destroys them, and a destroyed `UnityEngine.Object` compares equal to null. `GameBackdrop.Available`
+was a bool set once at resolve, which meant the layers all went invalid and drew nothing while the
+flag still said yes - so the panel's retry never fired and every later save ran on the bare
+gradient. It is now derived from the layer references each time it is asked, which costs five null
+checks a frame and cannot go stale.
+
+What could not be taken is the layout. The prefab's rectangles are authored, and the live
+instance's transforms are a pose rather than a layout - `Construct` parks the vignette at half
+height and the glows at three times width until `Show` animates them in - so the five positions
+are matched against a screenshot. `prof.backdrop` says whether the layers were found; if they were
+not, the generated three-stop gradient stands in.
+
+Two things about the page cannot be settled from here.
+
+**The typeface.** Every string the game draws goes through TextMeshPro, which uses a
+`TMP_FontAsset` - a baked atlas, not a font - and IMGUI needs a `UnityEngine.Font`. The only
+bridge is `TMP_FontAsset.sourceFontFile`, which a build keeps only if the asset was imported with
+its font data included. `PanelFont` probes for one and takes it if it is there and `dynamic`;
+otherwise the page draws in IMGUI's built-in face and looks no worse than it did. `prof.fonts`
+says which happened and `prof.font` overrides it, because choosing between candidates needs eyes
+on the screen.
+
+**Glyph coverage.** Which characters a face carries is unknowable from a mod, and the built-in
+font and the game's do not have to agree. Only Latin-1 is safe: `×` is the close button,
+and the dropdown caret is a generated mask rather than `▾`, which would be a box on a face
+that lacks it.
+
+The palette was matched by eye against a screenshot of the Statistics page. The game's real
+values live in authored prefabs, which cannot be read from an assembly, so it is a likeness
+rather than the same numbers.
+
+## The flame graph was drawing the right widths in the wrong places
+
+`DrawFrames` took a width but no origin, and started every recursion at `area.x`. Each row was
+therefore packed against the left edge of the graph rather than laid out under the frame that
+called it. The widths were correct the whole time, which is why it looked plausible: the
+proportions were right and only the positions were wrong, so the picture said nothing at all
+about who called whom - the one thing a flame graph is for.
+
+It now carries the parent's left edge down with the span. Two details that go with it:
+
+- The span passed to the recursion is the child's **full** share, not its drawn width.
+  Subtracting the two-pixel gap before recursing shrank every level a little more than the last.
+- The box is sized by `VisibleDepth`, which applies the same sub-pixel cull the draw does, rather
+  than by the tree's real depth. A deep capture is mostly frames too narrow to draw, and
+  measuring the true depth left two thirds of the card empty.
+
+## The frame graph is bucketed, not per frame
+
+One slot per frame made the chart a 180-frame window, which is three seconds at 60fps - it
+scrolled past faster than a stutter could be looked at. `CounterFeed` now keeps 240 buckets of a
+quarter second each, a minute of history in the same width.
+
+The aggregate is the bucket's **worst** frame, not its mean. A mean over a quarter second is
+fifteen frames averaged together, which is precisely how a single 80 ms hitch disappears. The
+bucket under the cursor is live - written every frame and only sealed when its window runs out -
+so the right hand end of the chart is the current frame rather than a quarter second behind it,
+and the slot being moved into is cleared on arrival, because otherwise a minute-old reading is
+drawn as if it were current.
+
+## Recording has a deadline
+
+`ProfilerSession.LimitSeconds` defaults to 120 and `Tick()`, called from `DebugPanel.Update`,
+stops the capture when it expires. The failure this prevents is not hypothetical: Record weaves
+the whole assembly, the weave costs two timestamp reads and a dictionary lookup per call, and
+nothing about a running recording is visible from outside the CPU tab. Somebody who presses
+Record to see what it does and then plays for an hour is paying for it the entire time.
+
+The deadline is held in `ProfilerSession` rather than the panel so that `prof.record` gets it too,
+and it is checked from `Update` rather than a timer because stopping unweaves a few thousand
+methods. A build with no panel - a hot reload, where `AddComponent` refuses the MonoBehaviour -
+has no auto-stop and still has `prof.stop`.
+
+## A zero reading is not a measurement
+
+Every min on the Overview tab read zero, permanently, and the cause is worth recording because
+nothing about it looks like a bug in the statistics code.
+
+`ProfilerRecorder.LastValue` returns zero until the recorder has taken a sample, and the render
+counters return zero on any frame that drew nothing - a loading screen, the frames either side of
+a save being opened. `CounterFeed.Sample` runs from `DebugPanel.Update`, which exists from mod
+construction, so the feed walks through a pile of those at the main menu and again on every load
+before anybody opens the page. A minimum only ever decreases, so one zero pinned every counter's
+min there for the session; max and mean were dragged the same way, less visibly.
+
+`Gauge.Observe` now discards non-positive readings entirely rather than special-casing min, and
+`Sample` does the same for a frame time of zero - Unity reports an unscaled delta of zero on the
+first frame after a scene load. None of the counters in the verified set can legitimately read
+zero while a frame is being drawn; they are byte totals and draw call counts. `Value` is still
+the raw reading, because "now" should say what the counter actually said.
+
+What this does **not** fix is `max` carrying the hitch from loading a save, which is a real frame
+and belongs in the statistics. `Reset stats` in the Overview bar is the answer to that.
+
 ## Known rough edges
 
 - Merging the per-thread trees at `Stop` can race a thread still inside an instrumented call. The
@@ -198,8 +332,6 @@ inlined it does not affect that caller's copy.
 
 ## Open questions
 
-- **Diffing two heap scans.** Scan, play, scan, sort by delta. The single most useful thing not
-  yet built, and everything needed is already in `ManagedCensus`.
 - **Overhead calibration.** Time an empty instrumented method at Record time and report
   `calls × cost` as a share of the capture.
 - **The Mono sampling profiler.** `mono_profiler_create`, `mono_profiler_enable_sampling` and

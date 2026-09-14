@@ -3,6 +3,8 @@ using ShapezShifter.Flow;
 using ShapezShifter.Hijack;
 using ILogger = Core.Logging.ILogger;
 
+namespace QuinnBast.Shapez2.ModProfiler;
+
 /// <summary>
 /// Mod Profiler - a development tool.
 ///
