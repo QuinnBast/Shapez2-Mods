@@ -1,0 +1,21 @@
+{
+  "Version": "1.0.0",
+  "Title": "Extra Shape Parts",
+  "Description": "Adds ten new shape quadrant types - gear, cross, bar, diamond, dot, dome, wedge, sawblade, flower and leaf - puts them into map generation alongside circle, square, windmill and star, and adds seven side quest chains that use them. Works in hexagonal mode as well as the standard four-part one.",
+  "Author": "Quinn Bast",
+  "SavedModVersionCompabilityRangeWithSelf": "*-*",
+  "GameVersionSupportRange": "*-*",
+  "AffectsSaveGames": true,
+  "DisablesAchievements": false,
+  "Conflicts": [],
+  "Assemblies": [
+    "ExtraShapeParts.dll"
+  ],
+  "Dependencies": [
+    {
+      "ModId": "steam:3542611357",
+      "ModTitle": "Shapez Shifter",
+      "Version": "*-*"
+    }
+  ]
+}

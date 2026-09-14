@@ -1,0 +1,136 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>netstandard2.1</TargetFramework>
+        <Nullable>disable</Nullable>
+        <LangVersion>10</LangVersion>
+        <RootNamespace>QuinnBast.Shapez2.ExtraShapeParts</RootNamespace>
+        <!-- The publicizer and ShapezShifter each ship a copy of IgnoresAccessChecksTo -->
+        <NoWarn>$(NoWarn);CS0436</NoWarn>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <OutputPath>$(SPZ2_PERSISTENT)\mods\ExtraShapeParts</OutputPath>
+        <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="'$(Dev)' == 'true'">
+        <OutputPath>$(SPZ2_PERSISTENT)\mods-dev\ExtraShapeParts\</OutputPath>
+    </PropertyGroup>
+
+    <!--
+        dotnet build -t:SteamPublish   uploads the built mod folder to the workshop item
+        named in Steam/base.vdf. Build first: the target publishes whatever is already at
+        OutputPath, it does not build it.
+
+        The publish script is bash. MSBuild runs Exec through cmd, which does not have
+        Git's bin folder on its PATH, so a bare `sh` fails with 9009 even when Git Bash is
+        installed. Find the shell ourselves; set ShellExe to override.
+
+        OutputPath ends in a directory separator, and a trailing backslash before a closing
+        quote escapes the quote - which would leave a stray quote inside the content path.
+    -->
+    <Target Name="SteamPublish">
+        <PropertyGroup>
+            <ShellExe Condition="'$(ShellExe)' == '' And Exists('$(ProgramFiles)\Git\bin\sh.exe')">$(ProgramFiles)\Git\bin\sh.exe</ShellExe>
+            <ShellExe Condition="'$(ShellExe)' == '' And Exists('$(ProgramFiles)\Git\usr\bin\sh.exe')">$(ProgramFiles)\Git\usr\bin\sh.exe</ShellExe>
+            <ShellExe Condition="'$(ShellExe)' == '' And Exists('$(LocalAppData)\Programs\Git\bin\sh.exe')">$(LocalAppData)\Programs\Git\bin\sh.exe</ShellExe>
+            <PublishContentPath>$(OutputPath.TrimEnd('\'))</PublishContentPath>
+        </PropertyGroup>
+
+        <Error Condition="'$(ShellExe)' == ''"
+               Text="Could not find sh.exe. Install Git for Windows, or publish by hand: bash Steam/SteamPublish.sh &quot;$(PublishContentPath)&quot;" />
+
+        <Message Importance="high" Text="Publishing $(PublishContentPath) using $(ShellExe)" />
+
+        <Exec Command="&quot;$(ShellExe)&quot; ./Steam/SteamPublish.sh &quot;$(PublishContentPath)&quot;"
+              WorkingDirectory="$(MSBuildProjectDirectory)" />
+    </Target>
+
+    <ItemGroup>
+        <Reference Include="ShapezShifter">
+            <HintPath>$(SPZ2_SHIFTER)</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <!-- MetaShapeSubPart, MetaShapesConfiguration, ShapesConfiguration, LODMeshAsset consumers -->
+        <Reference Include="SPZGameAssembly">
+            <HintPath>$(SPZ2_PATH)\SPZGameAssembly.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="Core">
+            <HintPath>$(SPZ2_PATH)\Core.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="Game.Core">
+            <HintPath>$(SPZ2_PATH)\Game.Core.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <!-- RawText: a side quest group's title is an IText, and ".T()" on a string with no
+             matching translation key renders as "?the-string". -->
+        <Reference Include="Core.Localization">
+            <HintPath>$(SPZ2_PATH)\Core.Localization.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="Game.Core.Modding">
+            <HintPath>$(SPZ2_PATH)\Game.Core.Modding.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <!-- IContent, the first argument of the injection hook's target -->
+        <Reference Include="Game.Core.Content">
+            <HintPath>$(SPZ2_PATH)\Game.Core.Content.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <!-- LOD6Mesh / LODMeshAsset / UnityMeshReference -->
+        <Reference Include="Game.Core.Rendering">
+            <HintPath>$(SPZ2_PATH)\Game.Core.Rendering.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <!-- IShapeSubPart, IShapesConfiguration -->
+        <Reference Include="Game.Content.Features">
+            <HintPath>$(SPZ2_PATH)\Game.Content.Features.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <!-- GameSessionOrchestrator, the injection choke point -->
+        <Reference Include="Game.Orchestration">
+            <HintPath>$(SPZ2_PATH)\Game.Orchestration.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="UnityEngine.CoreModule">
+            <HintPath>$(SPZ2_PATH)\UnityEngine.CoreModule.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <!-- GridLayoutGroup / ContentSizeFitter, for the shape code legend that ten extra parts
+             overflow. uGUI, not UIElements: the game's HUD is built on the former. -->
+        <Reference Include="UnityEngine.UI">
+            <HintPath>$(SPZ2_PATH)\UnityEngine.UI.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+    </ItemGroup>
+
+    <PropertyGroup>
+        <PublicizeAll>true</PublicizeAll>
+        <PublicizerClearCacheOnClean>true</PublicizerClearCacheOnClean>
+        <PublicizerLogFilePath>logs/krafs.log</PublicizerLogFilePath>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <DoNotPublicize Include="Game.Core.Coordinates" IncludeCompilerGeneratedMembers="false" IncludeVirtualMembers="false"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- Compile-time only: the game already loads MonoMod. -->
+        <PackageReference Include="MonoMod.RuntimeDetour" Version="25.3.4">
+            <ExcludeAssets>runtime</ExcludeAssets>
+        </PackageReference>
+
+        <PackageReference Include="Krafs.Publicizer" Version="2.3.0">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+
+        <None Update="manifest.json">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+    </ItemGroup>
+
+</Project>
