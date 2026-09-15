@@ -7,15 +7,13 @@
 
     which writes to <persistent>/mods-dev/ExtraShapeParts/ instead of into the mods folder.
     The installed copy is memory-mapped by the running game and cannot be overwritten, so an
-    ordinary build produces nothing new to reload while the game is open. Mod discovery only
-    scans immediate subdirectories of "mods", so a staged build is never picked up as a
-    second mod.
+    ordinary build fails with MSB3027 while the game is open. That is the copy step failing,
+    not a compile error. Staging is how you keep compiling without closing the game.
 
-    Then, in game:  mrl.reload extrashapeparts
-
-    A plain `dotnet build` is unaffected and still installs into the mods folder.
-
-    From Mod Reloader: ../Shapez2-Mod-Reloader
+    Nothing loads a staged build. Mod discovery only scans immediate subdirectories of "mods",
+    so the staged copy is never picked up as a second mod. To actually run the change, close
+    the game and use a plain `dotnet build`, which is unaffected and still installs into the
+    mods folder.
 -->
 <Project>
 

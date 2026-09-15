@@ -3,7 +3,7 @@
 shapez 2 has four shape quadrant types. This adds ten more, puts them on the map so they can
 be mined rather than only built, and gives them thirty-eight side quests to be delivered to.
 
-![The ten new parts](Screenshots/promo-parts-quad.png)
+![Ten new shape parts](Screenshots/showcase-quad.png)
 
 They cut, stack, paint, crystallise, rotate and pin exactly like the vanilla four, because the
 game's shape operations never look at which part they are holding. There is nothing new to learn.
@@ -12,7 +12,7 @@ game's shape operations never look at which part they are holding. There is noth
 
 Every part is built again at 60 degrees, with its own mesh:
 
-![The ten new parts, hexagonal](Screenshots/promo-parts-hex.png)
+![Hexagonal mode](Screenshots/showcase-hex.png)
 
 Not the quad shape stretched. `ShapeItemRenderer` rotates a part but never squashes one, so a
 quadrant dropped into a six-part shape would overlap both its neighbours by 30 degrees. Two of the
@@ -104,6 +104,16 @@ configurations are built once per process and the parts are already in them.
 
 `dotnet build -p:Dev=true` stages to `mods-dev` instead, since the installed copy is memory-mapped
 while the game runs and cannot be overwritten.
+
+### Every part, and every quest shape
+
+The images above are captures. These are drawn, which is the one thing a capture is bad at — showing
+all of something at once:
+
+| | |
+|---|---|
+| [All ten parts](Screenshots/promo-parts-quad.png) | and [in hexagonal mode](Screenshots/promo-parts-hex.png) |
+| [All thirty-eight quest shapes](Screenshots/promo-quests-quad.png) | and [in hexagonal mode](Screenshots/promo-quests-hex.png) |
 
 Adding an eleventh part is a few lines in `ExtraShapePartCatalog` — an outline as a function of its
 sector angle, a code, and a rarity. [DESIGN.md](DESIGN.md) records what was measured rather than
