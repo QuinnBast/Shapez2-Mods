@@ -94,7 +94,40 @@ import sys
 # The values are deliberately somewhere nothing real would land, so a mesh that somehow
 # escapes remapping is visibly wrong in one corner of the atlas rather than subtly off.
 SENTINEL_V = 0.01
-ROLES = ["hull", "accent", "metal", "fluid", "cargo"]
+# Keep in step with CargoPalette.Wanted, which names the colour each role asks the game's
+# material palette for. Order is load-bearing on both sides - Sentinel(n) is ((n+1)/100, 0.01)
+# - so append, never insert.
+#
+# Roles are named for the *job* a colour does, not for the colour itself. Nothing here can
+# know what the atlas holds; the C# side asks it for the nearest thing to a target and takes
+# what it gets. Naming them by job means reassigning a part stays a decision about the machine
+# rather than about which grey was which.
+ROLES = [
+    "hull", "accent", "metal", "fluid", "cargo",
+    "hullDark", "deck", "frame", "rail", "trim",
+    "rubber", "warn", "glass", "light", "copper",
+    "shadow", "pale", "wear",
+]
+
+# One step lighter, for the chamfer a `block` or `tube` puts on its top edge. A shoulder that
+# catches the light is most of what makes a shipped building read as machined rather than as
+# a box, and it costs nothing here: the geometry is already two lofts, they simply shared a
+# role until now.
+LIGHTER = {
+    "frame": "hullDark",
+    "hullDark": "hull",
+    "hull": "pale",
+    "metal": "rail",
+    "deck": "hull",
+    "cargo": "trim",
+    "fluid": "glass",
+    "shadow": "frame",
+}
+
+
+def lighter(uv):
+    """The role a chamfer on `uv` should take."""
+    return LIGHTER.get(uv, uv)
 PALETTE = {role: ((i + 1) / 100.0, SENTINEL_V) for i, role in enumerate(ROLES)}
 
 ATLAS_UV = PALETTE["hull"]
@@ -216,11 +249,14 @@ def loft(mesh, lower, upper, y0, y1, uv="hull", cap_bottom=True, cap_top=True):
                      (upper[i][0], y1, upper[i][1]), uv)
 
 
-def block(mesh, cx, cz, sx, sz, y0, y1, uv="hull", bevel=0.5, cap=0.4):
+def block(mesh, cx, cz, sx, sz, y0, y1, uv="hull", bevel=0.5, cap=0.4, cap_uv=None):
     """The workhorse: a chamfered box.
 
     Straight sides up to `cap` below the top, then a short inward taper, so the top edge
     reads as a chamfer rather than a knife edge. Pass cap=0 for a plain prism.
+
+    The chamfer takes `cap_uv`, defaulting to one step lighter than the body - see LIGHTER.
+    Pass the body's own role to switch that off for a part that should read as one solid.
     """
     profile = octagon(cx, cz, sx, sz, bevel)
     if cap <= 0:
@@ -228,18 +264,20 @@ def block(mesh, cx, cz, sx, sz, y0, y1, uv="hull", bevel=0.5, cap=0.4):
         return
     shoulder = max(y0, y1 - cap)
     loft(mesh, profile, profile, y0, shoulder, uv, cap_top=False)
-    loft(mesh, profile, inset(profile, cap), shoulder, y1, uv, cap_bottom=False)
+    loft(mesh, profile, inset(profile, cap), shoulder, y1,
+         cap_uv or lighter(uv), cap_bottom=False)
 
 
-def tube(mesh, cx, cz, r, y0, y1, uv="fluid", segments=14, cap=0.0):
-    """A vertical cylinder."""
+def tube(mesh, cx, cz, r, y0, y1, uv="fluid", segments=14, cap=0.0, cap_uv=None):
+    """A vertical cylinder, chamfered like a block when `cap` is given."""
     profile = circle(cx, cz, r, segments)
     if cap <= 0:
         loft(mesh, profile, profile, y0, y1, uv)
         return
     shoulder = max(y0, y1 - cap)
     loft(mesh, profile, profile, y0, shoulder, uv, cap_top=False)
-    loft(mesh, profile, inset(profile, cap), shoulder, y1, uv, cap_bottom=False)
+    loft(mesh, profile, inset(profile, cap), shoulder, y1,
+         cap_uv or lighter(uv), cap_bottom=False)
 
 
 def _axis_tube(mesh, axis, along0, along1, cross, y, r, uv, segments):
@@ -288,7 +326,7 @@ def pipe_z(mesh, z0, z1, cx, y, r, uv="fluid", segments=14):
     _axis_tube(mesh, "z", z0, z1, cx, y, r, uv, segments)
 
 
-def hopper(mesh, cx, cz, top_sx, top_sz, bottom_sx, bottom_sz, y0, y1, uv="hull"):
+def hopper(mesh, cx, cz, top_sx, top_sz, bottom_sx, bottom_sz, y0, y1, uv="hullDark"):
     """An open funnel: wide at the top, narrow at the bottom, no lid."""
     loft(mesh,
          octagon(cx, cz, bottom_sx, bottom_sz, 0.4),
@@ -296,7 +334,7 @@ def hopper(mesh, cx, cz, top_sx, top_sz, bottom_sx, bottom_sz, y0, y1, uv="hull"
          y0, y1, uv, cap_bottom=True, cap_top=False)
 
 
-def legs(mesh, xs, zs, y0, y1, size=1.3, uv="metal"):
+def legs(mesh, xs, zs, y0, y1, size=1.3, uv="frame"):
     for x in xs:
         for z in zs:
             block(mesh, x, z, size, size, y0, y1, uv, bevel=0.25, cap=0.2)
@@ -439,12 +477,12 @@ def channel(m, path):
 
     # Deck. Its top is at u = 0, so the drawer can place a tier by the same offset the cargo
     # renderer uses and the containers sit *on* it rather than in it.
-    sweep_box(m, path, -3.7, 3.7, -0.42, 0.0, "hull")
+    sweep_box(m, path, -3.7, 3.7, -0.42, 0.0, "deck")
 
     # Side walls. Tall enough to frame the freight and break the outline, low enough to clear
     # the tier above: three of these stack within one belt, CargoLanes.LayerSpacing_W apart.
     for side in (-1, 1):
-        sweep_box(m, path, side * 3.7, side * 4.45, -0.42, 1.15, "metal")
+        sweep_box(m, path, side * 3.7, side * 4.45, -0.42, 1.15, "hullDark")
 
     # A rail capping each wall, in the accent role so the palette gives it a second colour.
     for side in (-1, 1):
@@ -455,7 +493,7 @@ def channel(m, path):
         rib = [path[i], path[min(i + 1, len(path) - 1)]]
         if rib[0] == rib[1]:
             continue
-        sweep_box(m, rib, -3.4, 3.4, -0.44, -0.18, "metal")
+        sweep_box(m, rib, -3.4, 3.4, -0.44, -0.18, "frame")
 
 
 def cargo_track_straight():
@@ -628,7 +666,7 @@ def cargo_track_right():
 # markers: anything standing off the machine gets read as a connector, or as damage.
 
 
-def flange(mesh, axis, along, cross, y, r, uv="metal", thickness=0.45):
+def flange(mesh, axis, along, cross, y, r, uv="copper", thickness=0.45):
     """A collar around a pipe. Reads as a joint, and breaks up a long bare cylinder."""
     if axis == "x":
         pipe_x(mesh, along - thickness, along + thickness, cross, y, r, uv, segments=14)
@@ -636,7 +674,7 @@ def flange(mesh, axis, along, cross, y, r, uv="metal", thickness=0.45):
         pipe_z(mesh, along - thickness, along + thickness, cross, y, r, uv, segments=14)
 
 
-def ribs(mesh, cx, cz, count, spacing, length, y0, y1, uv="metal", width=0.4, along_x=True):
+def ribs(mesh, cx, cz, count, spacing, length, y0, y1, uv="hullDark", width=0.4, along_x=True):
     """A row of thin raised ribs. The cheapest way to make a flat panel read as panelled."""
     start = -(count - 1) * spacing * 0.5
     for i in range(count):
@@ -647,7 +685,7 @@ def ribs(mesh, cx, cz, count, spacing, length, y0, y1, uv="metal", width=0.4, al
             block(mesh, cx, cz + offset, length, width, y0, y1, uv, bevel=0.1, cap=0.0)
 
 
-def cabin(mesh, cx, cz, y0, uv="hull", scale=1.0):
+def cabin(mesh, cx, cz, y0, uv="glass", scale=1.0):
     """A control cabin on a stalk, with an overhanging roof.
 
     Deliberately tall. A box the height of a handrail is invisible at play distance; one that
@@ -656,7 +694,7 @@ def cabin(mesh, cx, cz, y0, uv="hull", scale=1.0):
     w, d = 3.6 * scale, 3.0 * scale
     h = 4.2 * scale
 
-    block(mesh, cx, cz, w * 0.45, d * 0.45, y0, y0 + h * 0.45, "metal", bevel=0.25, cap=0.0)
+    block(mesh, cx, cz, w * 0.45, d * 0.45, y0, y0 + h * 0.45, "frame", bevel=0.25, cap=0.0)
     block(mesh, cx, cz, w, d, y0 + h * 0.4, y0 + h, uv, bevel=0.45, cap=0.4)
     block(mesh, cx, cz, w * 1.25, d * 1.25, y0 + h - 0.35, y0 + h + 0.45, "metal",
           bevel=0.4, cap=0.25)
@@ -670,11 +708,11 @@ def vent(mesh, cx, cz, y0, height=4.0, r=1.15, uv="metal"):
     hanging in mid-air. Tall enough to break the skyline, which is the point of it.
     """
     tube(mesh, cx, cz, r, y0, y0 + height, uv, segments=12, cap=0.25)
-    tube(mesh, cx, cz, r * 1.45, y0 + height - 0.4, y0 + height + 0.5, "accent",
+    tube(mesh, cx, cz, r * 1.45, y0 + height - 0.4, y0 + height + 0.5, "warn",
          segments=12, cap=0.2)
 
 
-def valve(mesh, cx, cz, y0, uv="accent", r=1.9):
+def valve(mesh, cx, cz, y0, uv="warn", r=1.9):
     """A handwheel on a stem. Says 'fluid' without a drop of it.
 
     Sized to be seen: at the first attempt's radius of 0.95 on a fifteen-unit machine it was a
@@ -685,7 +723,7 @@ def valve(mesh, cx, cz, y0, uv="accent", r=1.9):
     tube(mesh, cx, cz, r * 0.4, y0 + 2.0, y0 + 2.65, "metal", segments=8)
 
 
-def feet(mesh, xs, zs, seat, uv="metal", size=1.5):
+def feet(mesh, xs, zs, seat, uv="frame", size=1.5):
     """Pads where a machine meets the deck, so it sits on the platform rather than floating."""
     for x in xs:
         for z in zs:
@@ -721,17 +759,17 @@ PLINTH_H = 0.7
 
 
 def plinth(mesh, sx=FOOTPRINT, sz=FOOTPRINT, height=PLINTH_H):
-    block(mesh, 0, 0, sx, sz, 0.0, height, "hull", bevel=1.1, cap=0.3)
+    block(mesh, 0, 0, sx, sz, 0.0, height, "frame", bevel=1.1, cap=0.3)
     return height - SEAT
 
 
-def duct(mesh, x0, x1, uv="hull"):
+def duct(mesh, x0, x1, uv="cargo"):
     """A length of cargo duct along the flow axis, with a collar at its outer end."""
     cx = (x0 + x1) * 0.5
     block(mesh, cx, 0.0, abs(x1 - x0), DUCT_SZ, DUCT_Y0, DUCT_Y1, uv, bevel=0.5, cap=0.3)
     collar_x = x1 if x1 > x0 else x0
     block(mesh, collar_x, 0.0, 0.9, DUCT_SZ + 1.4, DUCT_Y0 - 0.3, DUCT_Y1 + 0.5,
-          "metal", bevel=0.3, cap=0.25)
+          "copper", bevel=0.3, cap=0.25)
 
 
 def gantry(mesh, y_top, beam_thickness=1.3, span=7.6):
@@ -742,7 +780,7 @@ def gantry(mesh, y_top, beam_thickness=1.3, span=7.6):
     """
     legs(mesh, [-2.9, 2.9], [-5.0, 5.0], 0.2, y_top)
     block(mesh, 0.0, 0.0, span, 2.6, y_top, y_top + beam_thickness, "metal",
-          bevel=0.4, cap=0.3)
+          bevel=0.4, cap=0.3, cap_uv="warn")
 
 
 # ---------------------------------------------------------------------------
@@ -763,7 +801,7 @@ def cargo_packager():
 
     # Intake, West. Open-topped and flared, so it is obviously where loose stuff goes in.
     hopper(m, -5.6, 0.0, 6.0, 11.4, 3.4, 5.4, seat, 6.4)
-    block(m, -8.8, 0.0, 1.5, 7.4, seat, 3.0, "metal", bevel=0.3, cap=0.25)
+    block(m, -8.8, 0.0, 1.5, 7.4, seat, 3.0, "frame", bevel=0.3, cap=0.25)
 
     # Press body and die.
     block(m, 0.0, 0.0, 7.6, 11.4, seat, 4.0, "hull", bevel=0.8, cap=0.4)
@@ -809,12 +847,12 @@ def cargo_unpackager():
     block(m, 0.0, 0.0, 5.4, 7.0, 6.7, 8.4, "accent", bevel=0.5, cap=0.35)
 
     # Outfeed spreader: three chutes fanning East, open on top like the packager's hopper.
-    block(m, 4.3, 0.0, 1.3, 11.0, seat, 4.0, "metal", bevel=0.3, cap=0.25)
+    block(m, 4.3, 0.0, 1.3, 11.0, seat, 4.0, "frame", bevel=0.3, cap=0.25)
     for z in (-3.9, 0.0, 3.9):
         loft(m,
              octagon(5.0, z, 2.2, 3.0, 0.35),
              octagon(8.6, z, 1.5, 2.4, 0.3),
-             1.5, 3.6, "accent")
+             1.5, 3.6, "hullDark")
 
     # Detail, mirroring the packager's so the pair still reads as a pair: ribbed flanks, a
     # control box, a stack, deck pads.
@@ -861,7 +899,7 @@ def rack(mesh, seat):
     # corners read as bracing from any angle and cost four blocks.
     for height in (SHELF_HEIGHTS[0] - 0.9, SHELF_HEIGHTS[-1] + 1.4):
         for z in (-corner, corner):
-            block(mesh, 0.0, z, corner * 1.6, 0.55, height, height + 0.5, "metal",
+            block(mesh, 0.0, z, corner * 1.6, 0.55, height, height + 0.5, "shadow",
                   bevel=0.15, cap=0.0)
 
     pitch = RACK_INNER / RACK_SLOTS
@@ -870,7 +908,7 @@ def rack(mesh, seat):
     for top in SHELF_HEIGHTS:
         # Side rails along the flow, tying the runners together and the posts in.
         for across in (-RACK_INNER * 0.5 - 0.4, RACK_INNER * 0.5 + 0.4):
-            block(mesh, 0.0, across, RACK_INNER + 1.6, 0.8, top - 0.55, top, "metal",
+            block(mesh, 0.0, across, RACK_INNER + 1.6, 0.8, top - 0.55, top, "rail",
                   bevel=0.2, cap=0.0)
 
         # One runner per row of cargo.
@@ -939,11 +977,11 @@ def fluid_cargo_packager():
     pipe_x(m, -9.6, -3.4, 0.0, 2.3, 1.9)
     pipe_x(m, 3.4, 9.6, 0.0, 2.3, 1.9)
     for x in (-3.6, 3.6):
-        block(m, x, 0.0, 0.9, 5.4, seat, 4.4, "metal", bevel=0.3, cap=0.25)
+        block(m, x, 0.0, 0.9, 5.4, seat, 4.4, "frame", bevel=0.3, cap=0.25)
 
     # Saddles, then the tank across the flow.
     for z in (-4.3, 4.3):
-        block(m, 0.0, z, 6.4, 1.4, seat, 4.6, "metal", bevel=0.3, cap=0.25)
+        block(m, 0.0, z, 6.4, 1.4, seat, 4.6, "hullDark", bevel=0.3, cap=0.25)
     pipe_z(m, -5.8, 5.8, 0.0, 6.2, 3.2, "fluid", segments=16)
 
     # Compressor stack on top - the bit that does the packing.
@@ -953,7 +991,7 @@ def fluid_cargo_packager():
     # box and deck pads.
     flange(m, "x", -3.9, 0.0, 2.3, 2.2)
     flange(m, "x", 3.9, 0.0, 2.3, 2.2)
-    ribs(m, 0.0, 0.0, 3, 2.6, 7.0, 8.9, 9.3, "metal", width=0.5, along_x=True)
+    ribs(m, 0.0, 0.0, 3, 2.6, 7.0, 8.9, 9.3, "rail", width=0.5, along_x=True)
     valve(m, 4.4, -4.4, seat)
     cabin(m, -4.6, -4.4, seat)
     feet(m, [-6.2, 6.2], [-4.6, 4.6], seat)
@@ -969,19 +1007,19 @@ def fluid_cargo_unpackager():
     pipe_x(m, 2.4, 9.6, 0.0, 2.3, 1.9)
 
     # Standing tank, straddling the pipe run.
-    block(m, 0.0, 0.0, 8.6, 8.6, seat, 1.3, "metal", bevel=0.7, cap=0.3)
+    block(m, 0.0, 0.0, 8.6, 8.6, seat, 1.3, "hullDark", bevel=0.7, cap=0.3)
     tube(m, 0.0, 0.0, 3.5, 1.1, 9.6, "fluid", segments=16, cap=0.5)
 
     # Relief manifold off the top, the counterpart to the shape unpackager's chutes.
     for z in (-4.2, 4.2):
-        tube(m, 0.0, z, 0.75, 5.4, 8.6, "accent", segments=10)
-    pipe_z(m, -4.2, 4.2, 0.0, 8.6, 0.75, "accent", segments=10)
+        tube(m, 0.0, z, 0.75, 5.4, 8.6, "copper", segments=10)
+    pipe_z(m, -4.2, 4.2, 0.0, 8.6, 0.75, "copper", segments=10)
 
     # Detail: pipe collars, banding around the standing tank, a handwheel, a box and pads.
     flange(m, "x", -2.9, 0.0, 2.3, 2.2)
     flange(m, "x", 2.9, 0.0, 2.3, 2.2)
     for height in (3.4, 6.4):
-        tube(m, 0.0, 0.0, 3.75, height, height + 0.4, "metal", segments=16)
+        tube(m, 0.0, 0.0, 3.75, height, height + 0.4, "rail", segments=16)
     valve(m, 5.2, -4.2, seat)
     cabin(m, -5.0, -4.2, seat)
     feet(m, [-5.4, 5.4], [-4.6, 4.6], seat)

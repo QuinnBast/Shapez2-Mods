@@ -164,11 +164,23 @@ namespace QuinnBast.Shapez2.TrainCargoTools
                 return;
             }
 
+            // Which path resolved it is the first thing worth knowing: the material palette
+            // gives every role its own colour, and the vanilla-mesh fallback folds most of them
+            // onto five. A machine that looks flat when it should not is usually this line.
+            Report(output, $"resolved from {Appearance.Palette.Source}");
+
+            HashSet<Vector2> seen = new HashSet<Vector2>();
+
             foreach (KeyValuePair<string, Vector2> entry in Appearance.Palette.All)
             {
+                seen.Add(entry.Value);
+
                 Report(output, string.Format(
-                    "{0,-8} u={1:F4} v={2:F4}", entry.Key, entry.Value.x, entry.Value.y));
+                    "{0,-9} u={1:F4} v={2:F4}", entry.Key, entry.Value.x, entry.Value.y));
             }
+
+            Report(output, $"{seen.Count} distinct coordinate(s) across "
+                + $"{CargoPalette.Roles.Length} role(s).");
         }
 
         /// Moves one role's atlas coordinate and repaints the meshes immediately.

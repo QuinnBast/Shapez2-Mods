@@ -27,6 +27,16 @@ namespace QuinnBast.Shapez2.TrainCargoTools
         /// load - see ApplyPalette.
         private readonly Dictionary<string, Mesh> RawByName = new Dictionary<string, Mesh>();
 
+        /// Each mesh's UVs exactly as the file held them, kept because ApplyPalette edits the
+        /// live mesh in place and so destroys the sentinels it matches on.
+        ///
+        /// It got away without this while a resolved coordinate could never look like a
+        /// sentinel: the five roles sat in the bottom-left corner of UV space and the sampled
+        /// coordinates did not. Resolving against the material palette removes that guarantee -
+        /// the search window is wherever the art is - and a second pass, which `cargotools.uv`
+        /// makes on every change, would then re-map a coordinate that had already been resolved.
+        private readonly Dictionary<string, Vector2[]> PristineUVs = new Dictionary<string, Vector2[]>();
+
         /// One mesh stands in for all six levels of detail.
         ///
         /// These are ~400-600 triangle single-chunk platforms, so the LOD ladder buys little, and
@@ -45,6 +55,7 @@ namespace QuinnBast.Shapez2.TrainCargoTools
                     Mesh mesh = FileMeshLoader.LoadSingleMeshFromFile(path);
                     mesh.name = name;
                     RawByName[name] = mesh;
+                    PristineUVs[name] = mesh.uv;
                     ByName[name] = MeshLod.Create().AddLod0Mesh(mesh).BuildLod6Mesh();
                 }
                 catch (Exception exception)
@@ -65,10 +76,10 @@ namespace QuinnBast.Shapez2.TrainCargoTools
 
         /// Rewrites every sentinel UV to the coordinate the palette resolved for that role.
         ///
-        /// Safe to call repeatedly - it matches against the sentinels, which are still what the
-        /// file on disk holds, not against whatever was written last time. That matters because
-        /// cargotools.uv re-applies the whole palette after changing one role, and because the
-        /// theme is resolved once per session while the meshes are loaded once per process.
+        /// Safe to call repeatedly, because it matches against a copy of the UVs taken at load
+        /// and never against whatever was written last time. That matters because cargotools.uv
+        /// re-applies the whole palette after changing one role, and because the theme is
+        /// resolved once per session while the meshes are loaded once per process.
         ///
         /// The LOD6Mesh wrappers do not need rebuilding: they hold references to these same Mesh
         /// objects, so editing the mesh in place is seen by everything already drawing it.
@@ -83,18 +94,23 @@ namespace QuinnBast.Shapez2.TrainCargoTools
             {
                 try
                 {
-                    Vector2[] uvs = entry.Value.uv;
-                    if (uvs == null || uvs.Length == 0)
+                    if (!PristineUVs.TryGetValue(entry.Key, out Vector2[] authored)
+                        || authored == null || authored.Length == 0)
                     {
                         continue;
                     }
 
-                    for (int i = 0; i < uvs.Length; i++)
+                    // A fresh array each time. Writing into the cached one would turn it into
+                    // whatever the last palette resolved to, which is the very thing it exists
+                    // to avoid.
+                    Vector2[] uvs = new Vector2[authored.Length];
+
+                    for (int i = 0; i < authored.Length; i++)
                     {
-                        if (TryRole(uvs[i], out string role) && palette.TryGet(role, out Vector2 resolved))
-                        {
-                            uvs[i] = resolved;
-                        }
+                        uvs[i] = TryRole(authored[i], out string role)
+                            && palette.TryGet(role, out Vector2 resolved)
+                                ? resolved
+                                : authored[i];
                     }
 
                     entry.Value.uv = uvs;
