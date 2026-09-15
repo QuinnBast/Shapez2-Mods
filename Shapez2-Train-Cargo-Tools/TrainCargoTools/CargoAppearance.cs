@@ -65,7 +65,43 @@ namespace QuinnBast.Shapez2.TrainCargoTools
             "CargoBelt_YSplitter", "CargoBelt_TripleSplitter",
             "CargoBelt_LeftFwdMerger", "CargoBelt_RightFwdMerger",
             "CargoBelt_YMerger", "CargoBelt_TripleMerger",
+
+            // The lifts. Same reason as the junctions: left out of this list a path-track island
+            // places and simulates while drawing nothing at all.
+            "CargoBelt_Lift1UpForward", "CargoBelt_Lift1UpRight",
+            "CargoBelt_Lift1UpBackward", "CargoBelt_Lift1UpLeft",
+            "CargoBelt_Lift1DownForward", "CargoBelt_Lift1DownRight",
+            "CargoBelt_Lift1DownBackward", "CargoBelt_Lift1DownLeft",
+            "CargoBelt_Lift2UpForward", "CargoBelt_Lift2UpRight",
+            "CargoBelt_Lift2UpBackward", "CargoBelt_Lift2UpLeft",
+            "CargoBelt_Lift2DownForward", "CargoBelt_Lift2DownRight",
+            "CargoBelt_Lift2DownBackward", "CargoBelt_Lift2DownLeft",
         };
+
+        /// Lift id -> its ramp mesh. A lift cannot be classified - its ends sit on different
+        /// layers, which `PathNodeClassification` has no value for - so it is looked up by name
+        /// rather than by shape, and the two lists are kept in step by construction: both are
+        /// built from the same four exits and four rises.
+        private static readonly Dictionary<string, string> LiftMeshes = BuildLiftMeshes();
+
+        private static Dictionary<string, string> BuildLiftMeshes()
+        {
+            Dictionary<string, string> meshes = new();
+
+            foreach (string exit in new[] { "Forward", "Right", "Backward", "Left" })
+            {
+                foreach (int layers in new[] { 1, 2 })
+                {
+                    foreach (string climb in new[] { "Up", "Down" })
+                    {
+                        meshes[$"CargoBelt_Lift{layers}{climb}{exit}"] =
+                            $"CargoTrackLift{layers}{climb}{exit}";
+                    }
+                }
+            }
+
+            return meshes;
+        }
 
         /// Island id -> mesh file, because the two are no longer the same string.
         ///
@@ -115,6 +151,12 @@ namespace QuinnBast.Shapez2.TrainCargoTools
             get
             {
                 List<string> names = new();
+
+                foreach (string mesh in LiftMeshes.Values)
+                {
+                    names.Add(mesh);
+                }
+
                 foreach ((PathNodeClassification _, string mesh) in TrackMeshes)
                 {
                     names.Add(mesh);
@@ -224,6 +266,21 @@ namespace QuinnBast.Shapez2.TrainCargoTools
         /// Points the belt family at vanilla's space path drawer.
         /// The mod's own track mesh for a classification, paired with the theme's island
         /// material so it shades like everything else on the map.
+        /// A mesh by file name, for the pieces that have no classification to look one up by.
+        private bool TryNamedMesh(
+            string name, LODMaterialAsset islandMaterial, out ILODMeshMaterial mesh)
+        {
+            mesh = null;
+
+            if (islandMaterial == null || !Meshes.TryGet(name, out LOD6Mesh lod))
+            {
+                return false;
+            }
+
+            mesh = new CargoMeshes.ThemeMeshMaterial(lod, islandMaterial);
+            return true;
+        }
+
         private bool TryTrackMesh(
             PathNodeClassification run, LODMaterialAsset islandMaterial, out ILODMeshMaterial mesh)
         {
@@ -277,8 +334,23 @@ namespace QuinnBast.Shapez2.TrainCargoTools
                 // So the directions are deduped here and handed to the game's own TryClassifyNode,
                 // which is public. The classification logic stays vanilla's; only the double
                 // counting is removed.
-                if (!definition.CustomData.TryGet(out IIslandConnectorData connectors)
-                    || !TryClassify(connectors, out PathNodeClassification classification))
+                // A lift spans layers, and is not a flat node at all: its ends differ in z, so
+                // the game's own classifier rejects it outright (`TryClassifySpacePathNode`
+                // returns None the moment an output's z differs from an input's), and the
+                // direction-only test here would call a Backward lift - West in, West out -
+                // unclassifiable too. So layers are read off the layout and a lift is simply
+                // drawn as straight track, one deck per layer it spans.
+                // A lift is drawn as one ramp climbing the whole way, not as a deck per layer.
+                // It has no classification to look up - its ends are on different layers, which
+                // the game's own classifier rejects outright and the direction-only test here
+                // cannot make sense of either, a Backward lift going West in and West out.
+                bool isLift = LiftMeshes.TryGetValue(id, out string liftMesh);
+
+                PathNodeClassification classification = PathNodeClassification.Forward;
+
+                if (!isLift
+                    && (!definition.CustomData.TryGet(out IIslandConnectorData connectors)
+                        || !TryClassify(connectors, out classification)))
                 {
                     Log.Warning?.Log($"Could not classify {id} as a space path node; it stays plain");
                     continue;
@@ -287,7 +359,17 @@ namespace QuinnBast.Shapez2.TrainCargoTools
                 // Indexer, not Add. Vanilla's loops use Add and would throw on a repeat; nothing
                 // else should claim these ids, but a reloaded mod could, and a duplicate key here
                 // takes the whole session's drawer setup with it.
-                if (!TryTrackMesh(classification, islandMaterial, out ILODMeshMaterial custom))
+                ILODMeshMaterial custom;
+
+                if (isLift)
+                {
+                    if (!TryNamedMesh(liftMesh, islandMaterial, out custom))
+                    {
+                        Log.Warning?.Log($"No ramp mesh '{liftMesh}'; {id} stays plain");
+                        continue;
+                    }
+                }
+                else if (!TryTrackMesh(classification, islandMaterial, out custom))
                 {
                     Log.Warning?.Log($"No cargo track mesh for {classification}; {id} stays plain");
                     continue;
@@ -302,6 +384,24 @@ namespace QuinnBast.Shapez2.TrainCargoTools
         ///
         /// See the call site: the game's own TryClassifySpacePathNode double-counts an island
         /// that carries two connector types at one pivot.
+        /// The distinct chunk layers an island occupies, lowest first.
+        ///
+        /// One entry for everything but a lift. Read from the layout rather than from the id,
+        /// so a lift that is ever reshaped keeps drawing correctly.
+        private static int[] Layers(IIslandDefinition definition)
+        {
+            SortedSet<int> layers = new();
+
+            foreach (ChunkVector chunk in definition.Layout.GetChunkPositions())
+            {
+                layers.Add(chunk.z);
+            }
+
+            int[] ordered = new int[layers.Count];
+            layers.CopyTo(ordered);
+            return ordered;
+        }
+
         private static bool TryClassify(
             IIslandConnectorData connectors, out PathNodeClassification classification)
         {

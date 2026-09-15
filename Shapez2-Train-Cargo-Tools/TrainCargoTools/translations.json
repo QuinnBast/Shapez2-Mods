@@ -30,7 +30,7 @@
     "wiki.WKCargo_Packager.title": "Cargo Packagers",
     "wiki.WKCargo_Unpackager.title": "Cargo Unpackagers",
     "wiki.WKCargo_Store.title": "Cargo Stores",
-    "wiki.WKCargo_Intro.text-intro-1": "<gll:WKTrains_TrainStations>Train Stations</gll> load <gl>Cargo</gl> for transportation, and with these new buildings, you can now pack, transport, store, and unpack cargo on your own accord. \n\nThe <gll:WKCargo_Belt>Cargo Belt</gll> allows you to move items 4x faster than a <gll:WKIslands_SpaceBelts>Space Belt</gll> of the same length.\n\nA <gll:WKTrains_TrainStations>Train Station</gll> only holds a few cargo containers, and once it fills, everything feeding it backs up until a train arrives to accept more cargo.",
+    "wiki.WKCargo_Intro.text-intro-1": "<gll:WKTrains_TrainStations>Train Stations</gll> load <gl>Cargo</gl> for transportation, and with these new buildings, you can now pack, transport, store, and unpack cargo on your own accord. \n\nThe <gll:WKCargo_Belt>Cargo Belt</gll> moves around <b>18x</b> as much as a <gll:WKIslands_SpaceBelts>Space Belt</gll> of the same length: every slot on it holds a whole package of <gl>360 shapes</gl> rather than a single shape.\n\nA <gll:WKTrains_TrainStations>Train Station</gll> only holds a few cargo containers, and once it fills, everything feeding it backs up until a train arrives to accept more cargo.",
     "wiki.WKCargo_Intro.text-intro-2": "Train Loaders and unloaders will accept and unload <gl>Cargo</gl> to and from <gll:WKCargo_Packager>Cargo Packagers</gll>, <gll:WKCargo_Unpackager>Cargo Unpackagers</gll>, <gll:WKCargo_Store>Cargo Stores</gll>, or <gll:WKCargo_Belt>Cargo Belts</gll> <b>directly</b>.",
     "wiki.WKCargo_Intro.text-robot": "We're going to need a crane to move all these boxes...",
     "wiki.WKCargo_Belt.text-intro-1": "<gl>Cargo Belts</gl> carry <gl>Cargo</gl> containers, and will transport them to the next location. <gl>Cargo Belts</gl> may hold up to 4 <gl>Cargo</gl> at a time. <gl>Cargo Belts</gl> are created in paths just like any other belt - corners are placed automatically for you.",
@@ -42,6 +42,8 @@
     "wiki.WKCargo_Store.text-intro-1": "<gl>Cargo Stores</gl> can buffer up to <b>75 containers</b>, 25 on each floor.\n\nPlace one between a <gll:WKCargo_Packager>Cargo Packager</gll> and a <gll:WKTrains_TrainStations>Train Station</gll> to ensure production factories run at maximum capacity, and to ensure that Trains on long routes will have items to come back to without needing to wait for production. Or, use them at the end of track to buffer cargo in a holding store for future trains or factories to receive when they need it.",
     "wiki.WKCargo_Store.text-robot": "Seventy-five containers?! What are you hoarding in there!!",
     "cargo-tools.group.cargo-splitter.title": "Cargo Belt Junction",
-    "cargo-tools.group.cargo-splitter.description": "Placed automatically when a dragged cargo belt branches. Splits cargo evenly between the routes leading away from it."
+    "cargo-tools.group.cargo-splitter.description": "Placed automatically when a dragged cargo belt branches. Splits cargo evenly between the routes leading away from it.",
+    "cargo-tools.group.cargo-lift.title": "Cargo Belt Lift",
+    "cargo-tools.group.cargo-lift.description": "Placed automatically when a dragged cargo belt has to climb over something in its way."
   }
 }

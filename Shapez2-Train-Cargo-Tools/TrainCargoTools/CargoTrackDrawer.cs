@@ -38,15 +38,31 @@ namespace QuinnBast.Shapez2.TrainCargoTools
         private readonly PathNodeClassification Run;
         private readonly ILODMeshMaterial Mesh;
 
+        /// The island's chunk layers, lowest first. One entry for everything but a lift, which
+        /// is a stack of two or three - see TrainCargoToolsMod.ChunkData.
+        ///
+        /// A platform drawer is called **once per island**, not once per chunk
+        /// (`CustomPlatformsDrawer.Draw` passes the island's own transform), so an island that
+        /// spans layers has to draw every one of them itself. A lift left to draw a single deck
+        /// shows track at its foot and nothing above.
+        private readonly int[] Layers;
+
         /// The mesh is the whole deck. It was one of three stacked tiers until the lane layers
         /// were moved to ride abreast on a single deck - see CargoLanes.Across_W.
         public CargoTrackDrawer(
-            ISpacePathResources track, PathNodeClassification run, ILODMeshMaterial mesh)
+            ISpacePathResources track, PathNodeClassification run, ILODMeshMaterial mesh,
+            int[] layers = null)
         {
             Track = track;
             Run = run;
             Mesh = mesh;
+            Layers = layers ?? OneLayer;
         }
+
+        private static readonly int[] OneLayer = { 0 };
+
+        /// A chunk is twenty world units tall, so a layer of a lift sits twenty above the last.
+        private const float LayerHeight_W = 20f;
 
         public void Draw(
             FrameDrawOptions drawOptions, in GlobalChunkTransform transform,
@@ -67,8 +83,12 @@ namespace QuinnBast.Shapez2.TrainCargoTools
             // high a space path floats is authored data.
             SpacePathItemRenderingConfig config = Track.ItemRenderingConfig;
 
-            drawOptions.Renderers.SpacePaths.Add(
-                mesh, material, Trs(transform, scale, CargoLanes.DeckHeight_W(config)));
+            foreach (int layer in Layers)
+            {
+                drawOptions.Renderers.SpacePaths.Add(
+                    mesh, material,
+                    Trs(transform, scale, CargoLanes.DeckHeight_W(config) + layer * LayerHeight_W));
+            }
         }
 
         private static Matrix4x4 Trs(in GlobalChunkTransform transform, float3 scale, float height)

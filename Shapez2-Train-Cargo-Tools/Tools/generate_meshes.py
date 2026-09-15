@@ -349,7 +349,14 @@ def _ring(frame, a0, a1, u0, u1):
     because how far apart the layers sit is authored theme data (`SpacePathItemRenderingConfig`)
     and cannot be baked into a file generated offline.
     """
-    x, z, heading = frame
+    x, z, heading = frame[0], frame[1], frame[2]
+
+    # A fourth entry lifts the whole cross-section. Flat track leaves it off; a lift ramp carries
+    # one per frame so the deck climbs as it goes, which is the only difference between a ramp
+    # and the straight piece it is otherwise built from.
+    y = frame[3] if len(frame) > 3 else 0.0
+    u0, u1 = u0 + y, u1 + y
+
     # The normal of the heading in the XZ plane, not the heading itself. Getting this wrong
     # sweeps the cross-section *along* the path instead of across it, which produces a flat
     # ribbon with no width at all - the generator's Z extent read 0.0 to 0.0.
@@ -462,6 +469,73 @@ ARMS = {
     "S": (0.0, -10.0, -math.pi * 0.5),
     "W": (-10.0, 0.0, 0.0),
 }
+
+
+# A chunk is twenty units tall, so one layer of climb is twenty units of rise.
+LAYER_RISE = 20.0
+
+
+def _rising(frames, rise):
+    """Adds an evenly climbing height to frames that already carry their headings.
+
+    Evenly by *index*: every path here is sampled uniformly, so index and arc length agree,
+    and taking the headings as given rather than re-deriving them from neighbours is what
+    keeps a ramp's end frames square to the chunk edge. Deriving them cost half a unit of
+    overshoot the first time, the same way it did on the junction arcs.
+    """
+    last = len(frames) - 1
+    return [(x, z, heading, rise * (i / last if last else 0.0))
+            for i, (x, z, heading) in enumerate(frames)]
+
+
+def lift_path(name, rise):
+    """The path a lift ramp follows: in at the West edge, out at `name`, climbing by `rise`.
+
+    The four exits are the game's own, read off it with `cargotools.dumplift`:
+
+        Forward -> East      Right -> South      Backward -> West      Left -> North
+
+    Forward and the two sides reuse the very paths the flat pieces are built from, so a ramp
+    meets the corner or junction beside it without a kink.
+
+    Backward is the odd one: both its ends are on the West edge, a layer apart, so it cannot be
+    a through-run. It is a hairpin - out along one side of the centre line, around a half circle,
+    and back along the other. The two legs sit 7 apart and are 9.2 wide, so they overlap a little
+    in the middle, which is the same thing junction arms do where they meet.
+    """
+    if name == "E":
+        return _rising(straight_path(-10.0, 10.0, 9), rise)
+
+    if name in ("N", "S"):
+        return _rising(corner_path(1 if name == "N" else -1, steps=9), rise)
+
+    # The hairpin, built analytically so the end frames are square to the edge.
+    # apex = leg + radius, and the channel is 4.6 either side, so leg + radius must stay under
+    # 5.4 for the turn to fit inside the chunk. 3 was the first try and pushed 0.9 past the edge.
+    radius, leg = 3.5, 1.8
+    frames = [(-10.0 + (leg + 10.0) * i / 4.0, -radius, 0.0) for i in range(5)]
+
+    for i in range(1, 8):
+        a = -math.pi * 0.5 + math.pi * i / 7.0
+        frames.append((
+            leg + radius * math.cos(a),
+            radius * math.sin(a),
+            math.atan2(math.cos(a), -math.sin(a)),
+        ))
+
+    frames += [(leg - (leg + 10.0) * i / 4.0, radius, math.pi) for i in range(1, 5)]
+    return _rising(frames, rise)
+
+
+def cargo_lift(name, layers):
+    """One lift ramp, climbing `layers` chunk layers - signed, so -1 descends."""
+    m = Mesh()
+    channel(m, lift_path(name, layers * LAYER_RISE))
+
+    if signed_volume(m.tris) < 0:
+        m.tris = [(c, b, a, uv) for a, b, c, uv in m.tris]
+
+    return m
 
 
 def splitter_arm(name):
@@ -928,6 +1002,14 @@ MACHINES = {
     "CargoTrackMergeRightFwd": lambda: merger(("E", "S")),
     "CargoTrackMergeY": lambda: merger(("N", "S")),
     "CargoTrackMergeTriple": lambda: merger(("E", "N", "S")),
+
+    # Lifts. Sixteen, one per definition: four exits by two climb heights by up and down.
+    **{
+        f"CargoTrackLift{abs(layers)}{'Up' if layers > 0 else 'Down'}{word}":
+            (lambda n=name, l=layers: cargo_lift(n, l))
+        for word, name in (("Forward", "E"), ("Right", "S"), ("Backward", "W"), ("Left", "N"))
+        for layers in (1, 2, -1, -2)
+    },
     "CargoPackager": cargo_packager,
     "CargoUnpackager": cargo_unpackager,
     "CargoStore": cargo_store,

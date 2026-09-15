@@ -13,7 +13,13 @@ namespace QuinnBast.Shapez2.TrainCargoTools
     /// provider serve both.
     public interface ICargoPackagerView
     {
-        /// Items to a package. Not a constant - wagon capacity research raises it.
+        /// Items to a package - `ICargoContainerCapacityConfigProvider.PackageSize`.
+        ///
+        /// Read rather than hardcoded so a packager always agrees with whatever a station is
+        /// making, but it is a **constant** in practice: `ShapePackageSize` is 360 and nothing
+        /// buffs it. Wagon-capacity research carries `[BuffInteger("_MaxPackagesPerContainer")]`,
+        /// which is how many *packages* fit in a wagon's container - not how many shapes fit in
+        /// a package.
         int PackageSize { get; }
 
         /// Items already in this layer's part-packed package.

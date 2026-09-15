@@ -40,6 +40,9 @@ namespace QuinnBast.Shapez2.TrainCargoTools
         /// Wagon unloaders, taught to hand a whole package to a cargo belt.
         private readonly PackagedCargoUnloaders Unloaders;
 
+        /// Keeps a duplicate island-module registration from killing the session.
+        private readonly CargoModuleGuard ModuleGuard;
+
         /// The two research nodes every island hangs off. Built before the islands because each
         /// one is handed to AddIsland as it is registered.
         private readonly CargoResearch Research;
@@ -108,9 +111,6 @@ namespace QuinnBast.Shapez2.TrainCargoTools
             Wiki = new CargoWiki(LoadIcon, Images.IconsInstalled, logger);
             Research = new CargoResearch(logger, Wiki.Register, Images.Installed);
 
-            // Diagnostics only: what a junction did, and what the handover guard refused.
-            CargoHandover.Log = logger;
-            CargoJunctionDiagnostics.Log = logger;
 
             // One belt family for both lines, hidden behind a single drag entry.
             //
@@ -227,6 +227,39 @@ namespace QuinnBast.Shapez2.TrainCargoTools
                 },
                 hidden: true, pathTrack: true);
 
+            // Lifts. A dragged run that meets something in its way climbs over it instead of
+            // stopping - `PathLiftingProcessor` raises the segments in between and upgrades the
+            // piece either side into a ramp.
+            //
+            // The shape is vanilla's, read off the game with `cargotools.dumplift` rather than
+            // guessed: a stack of two or three chunks, input on the first facing West, output on
+            // the last facing one of the four directions. Backward outputs West - the same side
+            // it came in on, a layer away.
+            //
+            // All sixteen, because the processor picks by matching connector pivots and a
+            // missing one is not an error, just a lift that never happens.
+            foreach ((string name, ChunkDirection exit) in new[]
+                     {
+                         ("Forward", ChunkDirection.East),
+                         ("Right", ChunkDirection.South),
+                         ("Backward", ChunkDirection.West),
+                         ("Left", ChunkDirection.North),
+                     })
+            {
+                foreach ((string climb, int rise) in new[] { ("Up", 1), ("Down", -1) })
+                {
+                    AddIsland($"CargoBelt_Lift1{climb}{name}", "cargo-lift", "CargoBelt.png",
+                        new CargoBeltSimulationFactory(), Research.Machines,
+                        outputDirections: new[] { exit },
+                        hidden: true, pathTrack: true, rise: rise);
+
+                    AddIsland($"CargoBelt_Lift2{climb}{name}", "cargo-lift", "CargoBelt.png",
+                        new CargoBeltSimulationFactory(), Research.Machines,
+                        outputDirections: new[] { exit },
+                        hidden: true, pathTrack: true, rise: rise * 2);
+                }
+            }
+
             // The packager is the one machine whose work is invisible from outside, so it gets
             // a fill gauge per layer. See CargoPackagerModules.
             AddIsland("CargoPackager", "cargo-packager", "CargoPackager.png",
@@ -271,6 +304,7 @@ namespace QuinnBast.Shapez2.TrainCargoTools
 
             Stations = new PackagedCargoStations(logger);
             Unloaders = new PackagedCargoUnloaders(logger);
+            ModuleGuard = new CargoModuleGuard(logger);
 
             // Drag placement. One placer now, over the one belt family.
             //
@@ -287,6 +321,15 @@ namespace QuinnBast.Shapez2.TrainCargoTools
                         "CargoBelt_YSplitter", "CargoBelt_TripleSplitter",
                         "CargoBelt_LeftFwdMerger", "CargoBelt_RightFwdMerger",
                         "CargoBelt_YMerger", "CargoBelt_TripleMerger",
+
+                        "CargoBelt_Lift1UpForward", "CargoBelt_Lift1UpRight",
+                        "CargoBelt_Lift1UpBackward", "CargoBelt_Lift1UpLeft",
+                        "CargoBelt_Lift1DownForward", "CargoBelt_Lift1DownRight",
+                        "CargoBelt_Lift1DownBackward", "CargoBelt_Lift1DownLeft",
+                        "CargoBelt_Lift2UpForward", "CargoBelt_Lift2UpRight",
+                        "CargoBelt_Lift2UpBackward", "CargoBelt_Lift2UpLeft",
+                        "CargoBelt_Lift2DownForward", "CargoBelt_Lift2DownRight",
+                        "CargoBelt_Lift2DownBackward", "CargoBelt_Lift2DownLeft",
                     },
                     "cargo-tools.group.cargo-belt.title", "cargo-tools.group.cargo-belt.description",
                     () => LoadIcon("CargoBelt.png"),
@@ -307,6 +350,7 @@ namespace QuinnBast.Shapez2.TrainCargoTools
             Appearance.Dispose();
             Stations.Dispose();
             Unloaders.Dispose();
+            ModuleGuard.Dispose();
             Wiki.Dispose();
             Images.Dispose();
         }
@@ -323,6 +367,7 @@ namespace QuinnBast.Shapez2.TrainCargoTools
             ChunkDirection? outputDirection = null,
             ChunkDirection[] outputDirections = null,
             ChunkDirection[] inputDirections = null,
+            int rise = 0,
             bool inputIsPipe = false, bool outputIsPipe = false, bool hidden = false,
             bool fluidLine = false, bool pathTrack = false, bool dualConnectors = false,
             IIslandModuleDataProvider modules = null)
@@ -342,7 +387,7 @@ namespace QuinnBast.Shapez2.TrainCargoTools
                .AsNonTransportableIsland()
                .WithPreferredPlacement(DefaultPreferredPlacementMode.Area);
 
-            ChunkLayoutLookup<ChunkVector, IslandChunkData> layout = SingleChunkLayout();
+            ChunkLayoutLookup<ChunkVector, IslandChunkData> layout = ChunkLayout(rise);
 
             IIslandBuilder islandBuilder = Island.Create(definitionId)
                .WithLayout(layout)
@@ -356,7 +401,7 @@ namespace QuinnBast.Shapez2.TrainCargoTools
                     layout,
                     inputDirections ?? new[] { ChunkDirection.West },
                     outputDirections ?? new[] { outputDirection ?? ChunkDirection.East },
-                    inputIsPipe, outputIsPipe, dualConnectors))
+                    inputIsPipe, outputIsPipe, dualConnectors, rise))
                .WithInteraction(flippable: false, canHoldBuildings: false)
                .WithDefaultChunkCost()
                // Two different things are being drawn here, so two different contexts.
@@ -431,29 +476,47 @@ namespace QuinnBast.Shapez2.TrainCargoTools
         }
 
         /// One chunk, no buildable tiles - the shape of a space path segment.
-        private ChunkLayoutLookup<ChunkVector, IslandChunkData> SingleChunkLayout()
+        /// A stack of chunks from z = 0 to z = `rise`, which is zero for everything but a lift.
+        ///
+        /// `rise` is signed: +2 is a lift climbing two layers, -1 one descending. Vanilla's own
+        /// lifts are shaped exactly this way - `cargotools.dumplift` prints
+        /// `SpaceBelt_Lift2UpForward` as chunks (0,0,0), (0,0,1), (0,0,2) with its input on the
+        /// first and its output on the last - which is worth knowing because none of it can be
+        /// read out of `decompiled/`: island definitions are authored.
+        private ChunkLayoutLookup<ChunkVector, IslandChunkData> ChunkLayout(int rise = 0)
         {
-            return new ChunkLayoutLookup<ChunkVector, IslandChunkData>(ChunkData());
+            return new ChunkLayoutLookup<ChunkVector, IslandChunkData>(ChunkData(rise));
         }
 
-        private IEnumerable<KeyValuePair<ChunkVector, IslandChunkData>> ChunkData()
+        private IEnumerable<KeyValuePair<ChunkVector, IslandChunkData>> ChunkData(int rise)
         {
-            ChunkVector origin = new(0, 0, 0);
+            List<ChunkVector> stack = new();
+            int step = rise >= 0 ? 1 : -1;
 
-            IslandChunkData chunkData = IslandLayoutFactory.CreateIslandChunkData(
-                chunkTile: origin,
-                notchDirections: Array.Empty<ChunkDirection>(),
-                neighborChunks: origin.AsEnumerable(),
-                isBuildable: true,
-                flipped: false,
-                out _);
-
-            for (int i = 0; i < chunkData.TileVoidFlags_L.Length; i++)
+            for (int z = 0; z != rise + step; z += step)
             {
-                chunkData.TileVoidFlags_L[i] = true;
+                stack.Add(new ChunkVector(0, 0, (short)z));
             }
 
-            yield return new KeyValuePair<ChunkVector, IslandChunkData>(origin, chunkData);
+            foreach (ChunkVector chunk in stack)
+            {
+                // Every chunk of the stack is named as a neighbour, not just this one. A lift is
+                // one island spanning layers, and the layout is what says so.
+                IslandChunkData chunkData = IslandLayoutFactory.CreateIslandChunkData(
+                    chunkTile: chunk,
+                    notchDirections: Array.Empty<ChunkDirection>(),
+                    neighborChunks: stack,
+                    isBuildable: true,
+                    flipped: false,
+                    out _);
+
+                for (int i = 0; i < chunkData.TileVoidFlags_L.Length; i++)
+                {
+                    chunkData.TileVoidFlags_L[i] = true;
+                }
+
+                yield return new KeyValuePair<ChunkVector, IslandChunkData>(chunk, chunkData);
+            }
         }
 
         /// West in, East out.
@@ -483,7 +546,7 @@ namespace QuinnBast.Shapez2.TrainCargoTools
         private IIslandConnectorData Connectors(
             ChunkLayoutLookup<ChunkVector, IslandChunkData> layout,
             ChunkDirection[] inputDirections, ChunkDirection[] outputDirections,
-            bool inputIsPipe, bool outputIsPipe, bool dualConnectors)
+            bool inputIsPipe, bool outputIsPipe, bool dualConnectors, int rise)
         {
             List<EntityIO<LocalChunkPivot, IIslandConnector>> connectors = new();
             ChunkDirection outputDirection = outputDirections[0];
@@ -511,17 +574,20 @@ namespace QuinnBast.Shapez2.TrainCargoTools
 
                 foreach (ChunkDirection direction in outputDirections)
                 {
+                    // On the *far* chunk for a lift, on this one otherwise. What makes a lift a
+                    // lift is that its two ends sit on different layers of the same island.
                     connectors.Add(Connector(direction, outputIsPipe
                         ? new SpacePipeOutputConnector()
-                        : (IIslandConnector)new SpaceBeltOutputConnector()));
+                        : (IIslandConnector)new SpaceBeltOutputConnector(), rise));
                 }
             }
 
             return new IslandConnectorData(connectors, layout.ChunkPositions);
 
-            EntityIO<LocalChunkPivot, IIslandConnector> Connector(ChunkDirection dir, IIslandConnector connector)
+            EntityIO<LocalChunkPivot, IIslandConnector> Connector(
+                ChunkDirection dir, IIslandConnector connector, int z = 0)
             {
-                LocalChunkPivot pivot = new(ChunkVector.Zero, dir);
+                LocalChunkPivot pivot = new(new ChunkVector(0, 0, (short)z), dir);
                 return new EntityIO<LocalChunkPivot, IIslandConnector>(pivot, connector);
             }
         }

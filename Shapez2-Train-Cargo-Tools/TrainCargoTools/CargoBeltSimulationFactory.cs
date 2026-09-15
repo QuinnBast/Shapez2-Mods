@@ -21,7 +21,7 @@ namespace QuinnBast.Shapez2.TrainCargoTools
             config = dependencies.Mode.Islands.SpaceBelts.First().ConfigAs<SpacePathConfiguration>();
 
             // Same source as the packagers': GameMode.TrainCargoExchangeConfiguration, so a belt
-            // packs to exactly the size a station would and wagon-capacity research applies.
+            // packs to exactly the size a station would.
             return new Factory(
                 new CargoBeltSpeed(config.SpaceConveyorSpeed),
                 new ShapeCargoContainerCapacityConfigProvider(

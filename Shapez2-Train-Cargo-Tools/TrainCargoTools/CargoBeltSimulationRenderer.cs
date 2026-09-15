@@ -7,7 +7,6 @@ using Game.Core.Map.Simulation;
 using Game.Core.Map.Transport;
 using Game.Core.Simulation;
 using JetBrains.Annotations;
-using Unity.Mathematics;
 using UnityEngine;
 
 // FrameDrawOptions.Theme is obsolete in favour of injection, but the theme is not bound
@@ -75,17 +74,24 @@ namespace QuinnBast.Shapez2.TrainCargoTools
                 return;
             }
 
-            // ConnectableIslandSimulation adds every input in bundle order and then every output
-            // in bundle order, so output n is connector (receiverBundles + n). Not simply
-            // connector 1: a cargo belt claims two receiver bundles so it can carry both a belt
-            // tag and a pipe tag at each pivot, which makes connector 1 the *second input*.
+            // Found by asking each connector what it is, rather than by index arithmetic.
+            //
+            // This used to be `GetConnector(NumItemReceiverBundles)`, on the reasoning that
+            // ConnectableIslandSimulation adds every input before every output, so output n sits
+            // at receiverBundles + n. That holds only while an island declares as many input
+            // connectors as the simulation claims bundles. `CargoBeltSimulation` claims two - a
+            // belt tag and a pipe tag at one pivot - and a lift declares a single belt input, so
+            // the loop adds one input and the output lands at index 1 while this asked for 2.
+            //
+            // The lookup then failed and the renderer returned before drawing anything: cargo
+            // crossed a lift correctly and simply appeared on the far side, which reads as
+            // teleporting rather than as a missing renderer.
             //
             // Only the pivots are wanted, and both connectors at a pivot share one, so which tag
-            // this picks up does not matter. IChunkSimulationConnector has the pivot without any
-            // of the item-type generics that make the vanilla renderer unusable here.
-            int outputIndex = entity.Simulation.NumItemReceiverBundles;
-            if (!(entity.LocalizedSimulation.GetConnector(0) is IChunkSimulationConnector input)
-                || !(entity.LocalizedSimulation.GetConnector(outputIndex) is IChunkSimulationConnector output))
+            // this finds does not matter. IChunkSimulationConnector has the pivot without any of
+            // the item-type generics that make the vanilla renderer unusable here.
+            if (!TryEnds(entity, out IChunkSimulationConnector input,
+                    out IChunkSimulationConnector output))
             {
                 return;
             }
@@ -118,44 +124,15 @@ namespace QuinnBast.Shapez2.TrainCargoTools
                 PackagesResolved = true;
             }
 
-            GlobalChunkPivot inPivot = input.Pivot;
-            GlobalChunkPivot outPivot = output.Pivot;
-
-            // The visible run is the half-chunk either side of the centre; the neighbouring
-            // segment draws its own half.
-            WorldCoordinate beforeIn = (inPivot.Position + inPivot.Direction).ToCenter_W();
-            WorldCoordinate centre = inPivot.Position.ToCenter_W();
-            WorldCoordinate afterOut = (outPivot.Position + outPivot.Direction).ToCenter_W();
-
-            WorldCoordinate entry = WorldCoordinate.Lerp(beforeIn, centre, 0.5f);
-            WorldCoordinate exit = WorldCoordinate.Lerp(centre, afterOut, 0.5f);
-
-            WorldVector inLateral = WorldVector.ByDirection(
-                inPivot.Direction.Opposite.ToTileDirection().Rotate(GridRotation.RotateCW));
-            WorldVector outLateral = WorldVector.ByDirection(
-                outPivot.Direction.ToTileDirection().Rotate(GridRotation.RotateCW));
-
-            // A turn, as opposed to a straight run, is exactly "the output is not opposite the
-            // input" - the same test the vanilla renderer makes.
-            bool turning = inPivot.Direction.Opposite != outPivot.Direction;
-
-            // Containers ride *lengthways* along the belt, the way they sit on a flatbed wagon,
-            // so each one covers as much of its slot as it can. The quarter turn is applied only
-            // when the mesh's long axis does not already point along the flow - see
-            // CargoPackageMeshes.LongAxisIsX. The drawer's rotation maps mesh local X to the
-            // direction of travel, so a mesh whose long axis is X already lies right.
+            // One shared arm for belts, lifts and junction arms alike - see CargoPathArm.
             //
-            // Two rotations, not one, because a container has to *turn* through a corner. The
-            // first version used the entry direction for every item on the segment, which is
-            // fine for a shape - shapes are drawn axis-aligned and vanilla never rotates them -
-            // and badly wrong for a long box: halfway round a bend it still pointed the way it
-            // came in, so it lay across the track and hung off the outside of the curve.
-            GridRotation flowIn = inPivot.Direction.Opposite.GlobalRotationTo().ZRotation;
-            GridRotation flowOut = outPivot.Direction.GlobalRotationTo().ZRotation;
-
-            GridRotation lie = Packages.LongAxisIsX ? GridRotation.NoRotate : GridRotation.RotateCW;
-            Quaternion entryRotation = FastMatrix.RotateY(flowIn + lie);
-            Quaternion exitRotation = FastMatrix.RotateY(flowOut + lie);
+            // This renderer carried its own copy of the placement maths until now, and that copy
+            // is why two fixes written for junctions never reached lifts: the full-layer climb,
+            // and pitching a container to lie along the ramp. A lift *is* a `CargoBeltSimulation`,
+            // so it drew through the copy, where the rise was measured off `Exit` - the midpoint
+            // of this chunk's centre and the neighbour past the output, which is half a layer, so
+            // freight climbed at half the deck's gradient and stayed level while doing it.
+            CargoPathArm arm = new(input.Pivot, output.Pivot, Packages.LongAxisIsX);
 
             // The package drawers ask their LOD meshes for options.LOD.IslandLOD, and a
             // LOD6Mesh returns nothing above the levels it was given - one mesh supplied means
@@ -202,23 +179,12 @@ namespace QuinnBast.Shapez2.TrainCargoTools
                     WorldVector up = new(0f, 0f,
                         CargoLanes.DeckHeight_W(config) - Packages.Bottom);
 
-                    WorldCoordinate from = entry + across * inLateral + up;
-                    WorldCoordinate to = exit + across * outLateral + up;
-
                     for (int i = 0; i < items.Count; i++)
                     {
                         SpacePathTravellingItemData item = items[i];
 
-                        WorldCoordinate at = turning
-                            ? OnCurve(from, beforeIn, afterOut, up, inPivot, outPivot, item.Progress)
-                            : math.lerp(from, to, item.Progress);
-
-                        // Slerp rather than working out which way the corner goes: the two
-                        // ends are a quarter turn apart at most, so the shortest path is the
-                        // way the belt actually bends, and a straight run has both the same.
-                        Quaternion facing = turning
-                            ? Quaternion.Slerp(entryRotation, exitRotation, item.Progress)
-                            : entryRotation;
+                        arm.At(item.Progress, across, in up,
+                            out WorldCoordinate at, out Quaternion facing);
 
                         Drawers.TryDraw(drawing, item.BeltItem, Matrix4x4.TRS(
                             (Vector3)at, facing, Vector3.one * Packages.Scale));
@@ -227,25 +193,32 @@ namespace QuinnBast.Shapez2.TrainCargoTools
             }
         }
 
-        /// A quarter circle through the corner, as the vanilla renderer draws one.
-        ///
-        /// The centre of the arc is the midpoint of the two neighbouring chunk centres, and the
-        /// item swings from one axis to the other as sin and cos of a quarter turn. Lerping
-        /// straight from entry to exit instead would cut the corner visibly, and on a dragged run
-        /// of turns it reads as the belt being bent rather than curved.
-        private static WorldCoordinate OnCurve(
-            WorldCoordinate from, WorldCoordinate beforeIn, WorldCoordinate afterOut,
-            WorldVector up, GlobalChunkPivot inPivot, GlobalChunkPivot outPivot, float progress)
+        /// The first input connector and the first output connector, whatever order they sit in.
+        private static bool TryEnds(
+            in Entity entity, out IChunkSimulationConnector input,
+            out IChunkSimulationConnector output)
         {
-            WorldCoordinate pivot = WorldCoordinate.Lerp(beforeIn, afterOut, 0.5f) + up;
-            float radius = math.distance(from, pivot);
+            input = null;
+            output = null;
 
-            math.sincos(progress * MathF.PI * 0.5f, out float s, out float c);
+            for (int i = 0; i < entity.LocalizedSimulation.NumConnectors; i++)
+            {
+                ISimulationConnector connector = entity.LocalizedSimulation.GetConnector(i);
 
-            WorldCoordinate at = pivot;
-            at += TileVector.ByDirection(inPivot.Direction.Opposite.ToTileDirection()).ToWorld() * (s * radius);
-            at += TileVector.ByDirection(outPivot.Direction.Opposite.ToTileDirection()).ToWorld() * (c * radius);
-            return at;
+                if (input == null && connector is IItemInputChunkConnector
+                    && connector is IChunkSimulationConnector asInput)
+                {
+                    input = asInput;
+                }
+                else if (output == null && connector is IItemOutputChunkConnector
+                    && connector is IChunkSimulationConnector asOutput)
+                {
+                    output = asOutput;
+                }
+            }
+
+            return input != null && output != null;
         }
+
     }
 }

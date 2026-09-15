@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using Game.Content.Features.Belts;
 using Game.Content.Features.Fluids;
@@ -6,7 +5,6 @@ using Game.Content.Features.SpacePaths;
 using Game.Core.Belts.BeltPath;
 using Game.Core.Simulation;
 using Game.Core.Trains;
-using ILogger = Core.Logging.ILogger;
 
 namespace QuinnBast.Shapez2.TrainCargoTools
 {
@@ -67,12 +65,6 @@ namespace QuinnBast.Shapez2.TrainCargoTools
         ///
         /// Only cargo is restricted. Loose items pass unchanged, which matters for the
         /// unpackager: emitting shapes onto an ordinary belt is its whole job.
-        /// Set by the mod so a refusal can say what it refused. Diagnostics only - the guard
-        /// works without it.
-        public static ILogger Log;
-
-        private static readonly HashSet<string> Reported = new();
-
         public static bool Allows(IItemReceiver next, IBeltItem item)
         {
             if (!CargoBeltSimulation.IsCargoPackage(item))
@@ -88,7 +80,7 @@ namespace QuinnBast.Shapez2.TrainCargoTools
                 next = dummy.NextLane;
             }
 
-            bool allowed = next is CargoBeltLane
+            return next is CargoBeltLane
 
                 // A cargo splitter's junction. Its outputs refuse loose items, so admitting the
                 // distributor here does not admit anything a cargo belt would refuse - see
@@ -103,33 +95,8 @@ namespace QuinnBast.Shapez2.TrainCargoTools
                 // converter they ask; without that detour neither would.
                 || next is TrainBeltToCargoFillingContainer<ShapeId>
                 || next is TrainBeltToCargoFillingContainer<FluidId>;
-
-            if (!allowed)
-            {
-                Refused(next);
-            }
-
-            return allowed;
         }
 
-        /// Names each kind of receiver that has been refused a package, once each.
-        ///
-        /// A refusal is not an error - it is how a cargo belt backs up against an ordinary one -
-        /// but when cargo will not enter something it *should*, this says what the guard actually
-        /// saw, which is the one fact the symptom does not tell you.
-        private static void Refused(IItemReceiver next)
-        {
-            string name = next?.GetType().Name ?? "null";
-            lock (Reported)
-            {
-                if (!Reported.Add(name))
-                {
-                    return;
-                }
-            }
-
-            Log?.Info?.Log($"Handover: refused a cargo package to {name}.");
-        }
 
         /// Wraps a provider bundle so everything it sends is checked.
         ///

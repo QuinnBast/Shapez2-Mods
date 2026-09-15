@@ -8,7 +8,6 @@ using Game.Content.Features.SpacePaths;
 using Game.Core.Simulation;
 using ShapezShifter.Flow.Atomic;
 using ShapezShifter.Hijack;
-using ILogger = Core.Logging.ILogger;
 
 namespace QuinnBast.Shapez2.TrainCargoTools
 {
@@ -57,11 +56,10 @@ namespace QuinnBast.Shapez2.TrainCargoTools
                     foreach (BeltPathLane output in splitter.OutputLanes)
                     {
                         output.PreAcceptHook = CargoBeltSimulation.IsCargoPackage;
+                        JunctionCapacity.Shrink(output.State);
                     }
                 }
             }
-
-            CargoJunctionDiagnostics.Built("splitter", NumItemProviderBundles);
 
             Outgoing = new CargoHandover.GuardedProviderBundle[NumItemProviderBundles];
             for (int output = 0; output < Outgoing.Length; output++)
@@ -160,6 +158,8 @@ namespace QuinnBast.Shapez2.TrainCargoTools
                     State.InputLaneBundleStates[input],
                     (FastBeltPathLaneState laneState) =>
                     {
+                        JunctionCapacity.Shrink(laneState);
+
                         CargoBeltLane lane = new(configuration.BeltSpeed, laneState);
                         lane.PreAcceptHook = CargoBeltSimulation.IsCargoPackage;
                         return (FastBeltPathLane)lane;
@@ -167,8 +167,6 @@ namespace QuinnBast.Shapez2.TrainCargoTools
 
                 InputPathBundles[input].NextBundle = MergerBundle.GetInputBundle(input);
             }
-
-            CargoJunctionDiagnostics.Built("merger", InputPathBundles.Length);
 
             Outgoing = new CargoHandover.GuardedProviderBundle(base.GetItemProviderBundle(0));
         }
@@ -218,29 +216,50 @@ namespace QuinnBast.Shapez2.TrainCargoTools
         }
     }
 
-    /// One line per junction kind, the first time one is built.
+    /// Cuts a junction arm down to the same number of slots a cargo belt holds.
     ///
-    /// A junction that is placed, drawn and connected but passes nothing looks the same whether
-    /// the simulation was never constructed, or was constructed and then refused the cargo. This
-    /// separates those two, which is otherwise guesswork.
-    internal static class CargoJunctionDiagnostics
+    /// Vanilla sizes these for loose shapes and they are much larger than a cargo belt's four:
+    /// a splitter's output lane is sixteen (`PathSplitterSimulation.NumItemsPerLane`) and a
+    /// merger's input twelve (`SpaceMergerSimulationState.NumItemsPerInputLane`). Left alone, a
+    /// junction quietly buffers several belts' worth of freight, which is both a balance hole
+    /// and reads as cargo disappearing into the junction and trickling out.
+    ///
+    /// Both counts are baked into vanilla's own state constructors, so there is nothing to
+    /// configure - the states are resized after the base constructor has built them instead.
+    /// That is safe because both lanes read their length from the state every time rather than
+    /// caching it: `BeltPathLane.Length_S` is `SlotLength_S * State.Slots.Count`, and
+    /// `FastBeltPathLaneState.Length_S` is `ItemCapacity * ItemSpacing`.
+    ///
+    /// **A junction in an existing save keeps the size it was built with.** Both states write
+    /// their own capacity into the blob and rebuild from it on load, so deserialisation
+    /// overwrites what happens here. Only junctions placed from now on are four.
+    internal static class JunctionCapacity
     {
-        private static readonly System.Collections.Generic.HashSet<string> Seen = new();
-
-        public static ILogger Log;
-
-        public static void Built(string kind, int arms)
+        /// One `BeltPathLane`'s worth of slots - a splitter output.
+        public static void Shrink(BeltPathLaneState state)
         {
-            string key = kind + arms;
-            lock (Seen)
+            while (state.Slots.Count > CargoLanes.SlotsPerLane)
             {
-                if (!Seen.Add(key))
-                {
-                    return;
-                }
+                state.Slots.RemoveAt(state.Slots.Count - 1);
             }
 
-            Log?.Info?.Log($"Junction: built a cargo {kind} with {arms} arm(s).");
+            while (state.Slots.Count < CargoLanes.SlotsPerLane)
+            {
+                state.Slots.Add(new BeltSlotState());
+            }
+
+            // The lane caches its max step and only recomputes when told the state moved under
+            // it, so without this the first item is measured against the old length.
+            state.HasBeenModifiedExternally = true;
+        }
+
+        /// One `FastBeltPathLane`'s worth - a merger input. Capacity is a field here rather
+        /// than a list of slots, and `Clear` is what re-derives the distances from it.
+        public static void Shrink(FastBeltPathLaneState state)
+        {
+            state.ItemCapacity = CargoLanes.SlotsPerLane;
+            state.Clear();
         }
     }
+
 }

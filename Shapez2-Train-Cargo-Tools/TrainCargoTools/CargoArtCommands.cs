@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using ShapezShifter.Hijack;
 using UnityEngine;
+using Game.Content.Features.SpacePaths.IslandIO;
+using Game.Core.Content.Islands;
+using Game.Core.Coordinates;
 using Game.Core.Rendering;
 using ILogger = Core.Logging.ILogger;
 
@@ -52,6 +55,9 @@ namespace QuinnBast.Shapez2.TrainCargoTools
             Register(() => console.Register(
                 "cargotools.palette", context => ReportPalette(context.Output)));
 
+            Register(() => console.Register(
+                "cargotools.dumplift", context => DumpLifts(context.Output)));
+
             // The tint and wash commands are gone. They existed to make a cargo belt
             // distinguishable while it still drew as vanilla track; the belt now has its own
             // channel-section model, which does the job at every zoom, so the knobs for tuning a
@@ -82,6 +88,72 @@ namespace QuinnBast.Shapez2.TrainCargoTools
             {
                 Log.Exception?.LogException(exception);
             }
+        }
+
+        /// Prints the chunk layout and connectors of vanilla's own space belt lifts.
+        ///
+        /// A lift is the one piece of this family whose shape cannot be read out of
+        /// `decompiled/`: the island definitions are authored, so how many chunks one occupies
+        /// and where its connectors sit are not knowable statically. `PathLiftingProcessor`
+        /// finds a lift through the same `MatchingDefinitionFinder` the corners and junctions
+        /// go through, matching on connector pivots - so getting those pivots wrong means the
+        /// processor silently never picks the cargo version, which is indistinguishable from
+        /// lifts simply not working.
+        ///
+        /// Prints vanilla's instead of guessing. Temporary: it can go once cargo lifts exist.
+        private void DumpLifts(Action<string> output)
+        {
+            GameIslands islands = Appearance.Islands;
+            if (islands == null)
+            {
+                Report(output, "No islands yet - run this inside a game, not the main menu.");
+                return;
+            }
+
+            int found = 0;
+
+            foreach (IIslandDefinition definition in islands.AllDefinitions)
+            {
+                string id = definition.Id.Name;
+                if (id.IndexOf("Lift", StringComparison.OrdinalIgnoreCase) < 0
+                    || id.IndexOf("SpaceBelt", StringComparison.OrdinalIgnoreCase) < 0)
+                {
+                    continue;
+                }
+
+                found++;
+                Report(output, id);
+
+                foreach (ChunkVector chunk in definition.Layout.GetChunkPositions())
+                {
+                    Report(output, $"    chunk ({chunk.x},{chunk.y},{chunk.z})");
+                }
+
+                if (!definition.CustomData.TryGet(out IIslandConnectorData connectors))
+                {
+                    continue;
+                }
+
+                foreach (EntityIO<LocalChunkPivot, ISpacePathInputConnector> io
+                         in connectors.ConnectorsOfType<ISpacePathInputConnector>())
+                {
+                    LocalChunkPivot p = io.Location;
+                    Report(output, $"    in   ({p.Position.x},{p.Position.y},{p.Position.z}) {p.Direction}"
+                        + $" {io.Connector.GetType().Name}");
+                }
+
+                foreach (EntityIO<LocalChunkPivot, ISpacePathOutputConnector> io
+                         in connectors.ConnectorsOfType<ISpacePathOutputConnector>())
+                {
+                    LocalChunkPivot p = io.Location;
+                    Report(output, $"    out  ({p.Position.x},{p.Position.y},{p.Position.z}) {p.Direction}"
+                        + $" {io.Connector.GetType().Name}");
+                }
+            }
+
+            Report(output, found == 0
+                ? "No SpaceBelt lift definitions found."
+                : $"{found} lift definition(s).");
         }
 
         private void ReportPalette(Action<string> output)

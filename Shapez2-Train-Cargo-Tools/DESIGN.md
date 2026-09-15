@@ -1587,9 +1587,182 @@ throw.
 It also explains the earlier confusion. Splitters appeared to work occasionally: those were the
 ones placed where no cargo belt had been, so there was no stale connection to block them.
 
+## A junction holds what a belt holds
+
+Vanilla sizes its path junctions for loose shapes, and those sizes are much larger than a cargo
+belt's four slots:
+
+| Lane | Vanilla slots | Named in |
+| --- | --- | --- |
+| Splitter output | 16 | `PathSplitterSimulation.NumItemsPerLane` |
+| Merger input | 12 | `SpaceMergerSimulationState.NumItemsPerInputLane` |
+| Cargo belt lane | 4 | `CargoLanes.SlotsPerLane` |
+
+Left alone a junction quietly buffers several belts' worth of freight. That is a balance hole,
+and it reads badly too - cargo appears to vanish into a junction and trickle out of it.
+
+Both counts are baked into vanilla's own state constructors, so there is nothing to configure.
+`JunctionCapacity.Shrink` resizes the states after the base constructor has built them, which
+works because **both lanes read their length from the state every time rather than caching it**:
+`BeltPathLane.Length_S` is `SlotLength_S * State.Slots.Count`, and `FastBeltPathLaneState.Length_S`
+is `ItemCapacity * ItemSpacing`. The two states differ in shape - one holds a list of slots, the
+other a capacity field - so there are two overloads.
+
+Each also needs its "the state moved under you" flag set, or the lane measures its first item
+against the length it was built with: `HasBeenModifiedExternally` for the splitter's, and `Clear()`
+for the merger's, which re-derives `FirstItemDistance_S` from the new capacity.
+
+**A junction already in a save keeps the size it was built with.** Both states write their own
+capacity into the blob and rebuild from it on load - `BeltPathLaneState.Deserialize` clears
+`Slots` and reads the count back - so deserialisation overwrites this. Only junctions placed
+after the change are four. That is also what makes the change save-safe rather than a blob
+format break.
+
+## What a cargo belt is actually worth
+
+The wiki said "4x faster than a Space Belt". That was the slots-per-lane number wearing a
+throughput hat. The real figure, derived rather than guessed:
+
+| | Space belt | Cargo belt |
+| --- | --- | --- |
+| Carrying lanes per chunk | 4 lanes x 3 layers = **12** | 1 lane x 3 layers = **3** (`CargoLanes.Travel`) |
+| Speed | R | R / 5 (`CargoBeltSpeed.Divisor`) |
+| Payload per slot | 1 shape | 360 (`MetaTrainSimulationConfiguration.ShapePackageSize`) |
+| Shapes past a point | 12R | 3 x (R/5) x 360 = **216R** |
+
+So **about 18x** for shapes. Throughput is `speed / LaneConstants.ItemSpacing` on both, and
+`SlotsPerLane` does not enter it - the shorter lane changes buffering and latency only.
+
+Buffering per chunk is a different ratio: 12 x 16 = 192 shapes against 3 x 4 x 360 = 4,320, so
+**22.5x**.
+
+**Fluid is not the same number.** `FluidPackageSize` is 60, not 360, so a fluid cargo belt is
+3 x (R/5) x 60 = 36R against a space pipe's 12R - about **3x**. Worth knowing before anyone
+repeats the shape figure for fluid.
+
+### Wagon-capacity research does not change any of this
+
+Several comments in this repo claimed a package grows with wagon-capacity research. They were
+wrong, and are corrected. The buff is declared on the *container*:
+
+```csharp
+[BuffInteger("_MaxPackagesPerContainer")]
+private ResearchSpeedId TrainWagonCapacityResearch;
+```
+
+and fullness is `package.Amount == capacityProvider.PackageSize` - `ShapePackageSize`, which
+nothing buffs. Research changes how many packages a wagon's container holds, not how many shapes
+a package holds. The multiplier above is therefore constant for the whole game.
+
+Reading `PackageSize` from the provider rather than hardcoding 360 is still right - it keeps a
+packager agreeing with whatever a station is making - but it is a constant in practice, and the
+packager's gauge maximum never moves.
+
+## Cargo climbing a lift
+
+Two separate faults, and only the first is obvious.
+
+**Nothing was drawn on a lift at all.** `CargoBeltSimulationRenderer` found its output connector
+by index:
+
+```csharp
+int outputIndex = entity.Simulation.NumItemReceiverBundles;   // 2 for a cargo belt
+```
+
+which holds only while an island declares as many input connectors as the simulation claims
+bundles. `CargoBeltSimulation` claims two - a belt tag and a pipe tag at one pivot - but a lift
+declares a single belt input, so `ConnectableIslandSimulation` adds one input and the output
+lands at index 1 while the renderer asked for 2. The lookup failed and it returned before
+drawing. Cargo crossed the lift correctly and simply appeared on the far side, which reads as
+teleporting rather than as a missing renderer.
+
+Both ends are now found by asking each connector whether it is an `IItemInputChunkConnector` or
+an `IItemOutputChunkConnector`, which cannot drift as pieces are added.
+
+**Then the path itself.** `CargoPathArm` had the climb where it could not survive a corner:
+
+- A **Forward** lift was already right. It is not a turn, so the position is a straight lerp
+  between two pivots that differ in height, and the lerp climbs.
+- A **Left or Right** lift was not. `OnCurve` adds two horizontal tile vectors to a fixed pivot,
+  so every item on the arc takes that pivot's height - the midpoint of the two neighbours. A
+  container jumped to half way up, slid round flat, and jumped again.
+- A **Backward** lift could not be drawn by that method at all. Its input and output face the
+  same way, so the arc's two terms collapse onto one line and the container would slide in and
+  back out through the wall it entered by.
+
+So horizontal shape and vertical climb are now computed separately: the curve runs flat at the
+entry height and the climb is applied afterwards in proportion to progress. Flat track has a
+climb of zero and is untouched.
+
+Backward gets its own hairpin, traced with the same `HairpinRadius` and `HairpinLeg` that
+`lift_path` uses in Tools/generate_meshes.py so the freight follows the deck it is riding on.
+**Those two numbers now exist in two languages**, which is a seam: change the mesh hairpin and
+the item path has to move with it. They are named constants on both sides rather than bare
+figures for that reason.
+
+## The climb was half what the ramp was - resolved
+
+Cargo on a lift rose at the wrong angle and appeared to leave the deck. The climb was being
+measured from the wrong pair of points:
+
+```csharp
+Exit = WorldCoordinate.Lerp(centre, afterOut, 0.5f);   // centre is the *input* chunk
+```
+
+`centre` is the input pivot's chunk, which is at the input's layer, so `Exit` sits half way up.
+The freight climbed ten units while its deck climbed twenty, and the gap widened the further
+along the ramp it got.
+
+The climb is now taken between the two pivots' own chunks - `outPivot.Position.ToCenter_W().z`
+less the input's - so it is the full layer, and a flat piece measures zero and is untouched.
+
+## Containers lie along the ramp
+
+A crate drawn upright on a forty-five degree ramp reads as hovering, so the yaw is followed by a
+pitch about the lateral axis.
+
+The angle is **measured off the path** rather than worked out per shape: sample a short step
+either side of the container and take the angle between the horizontal distance covered and the
+height gained. That one calculation is right for a straight ramp, a turning one and the hairpin
+alike - a quarter circle covers about 15.7 units while climbing 20, so it is steeper than the
+straight ramp's 45 degrees, and neither figure has to be written down.
+
+It also cannot drift from where the container actually is, because the same `Point` that draws
+it is the one being sampled.
+
+The rotation is applied in world space rather than in the container's own frame, which would
+depend on `CargoPackageMeshes.LongAxisIsX` - whether the crate mesh was authored long-ways along
+X or Z.
+
+The axis is **the sampled heading crossed with world up**, not the arm's lateral vector. Both
+name the same line; only the cross product fixes which way along it points, and the sign is the
+whole difference between nose-up and nose-down. The lateral vector is a tile direction rotated
+clockwise in the *game's* frame, and `WorldVector`'s cast to Unity is `(x, z, -y)`, so East
+rotated clockwise is `South = (0, 1, 0)`, which reaches Unity as `-Z` - the opposite of the `+Z`
+that tilts an East-bound crate nose-up. Deriving the axis from the two points already sampled
+for the slope cannot disagree with them.
+
+## Both lift fixes reached only junctions - resolved
+
+The two sections above were written, shipped, and changed nothing on a lift, because
+`CargoBeltSimulationRenderer` still held **its own copy** of the placement maths. `CargoPathArm`
+was extracted for junctions and only the junction renderers were moved onto it; a lift is a
+`CargoBeltSimulation`, so it kept drawing through the copy, at half the deck's gradient and with
+no pitch at all.
+
+The renderer now builds one `CargoPathArm` and calls `At`. There is a single copy of the maths
+again, which is what makes the two fixes above true of lifts as well.
+
+The deck mesh was right the whole time: `lift_path` carries the full `layers * LAYER_RISE` across
+a twenty-unit run, so a one-layer lift is exactly forty-five degrees and a two-layer one about
+sixty-three. The item path now matches it rather than being measured separately.
+
 ## Open questions
 
 - **Do buildings accept containers?** Deliberately dodged: an unpackager sits in front of
   ordinary machinery. Train stations were the case worth solving properly, and they are solved.
-- **Balance.** A cargo belt moves `PackageSize` times more per slot than a shape belt. That is
-  the point, but it needs a cost and a research gate.
+- **Balance.** Settled. A cargo belt carries `PackageSize` shapes per slot against a shape
+  belt's one, which works out at 18x the throughput for shapes and 3x for fluid; both lines are
+  gated behind the Cargo Machines and Cargo Stores research nodes at 4.8k each.
+- **Publishing.** The only mod repo here with neither a `README.md` nor a screenshots folder,
+  and it is the largest. Nothing blocks a release but nothing is prepared for one either.

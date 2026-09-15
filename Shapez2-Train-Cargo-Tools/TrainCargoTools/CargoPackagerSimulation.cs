@@ -50,9 +50,13 @@ namespace QuinnBast.Shapez2.TrainCargoTools
 
         public int NumItemProviderBundles => 1;
 
-        /// How many items make one package. Read from the capacity provider rather than stated,
-        /// because wagon-capacity research changes it mid-game - a gauge showing a fixed maximum
-        /// would start lying the moment that unlocks. See ICargoPackagerView.
+        /// How many items make one package.
+        ///
+        /// Read from the same capacity provider a station uses rather than stated here, so the
+        /// gauge cannot disagree with what the machine is actually filling. It does not change
+        /// at runtime: `ShapePackageSize` is 360 and nothing buffs it - wagon-capacity research
+        /// carries `[BuffInteger("_MaxPackagesPerContainer")]`, which is how many *packages* a
+        /// wagon's container holds, not how many shapes a package holds. See ICargoPackagerView.
         public int PackageSize => Capacity.PackageSize;
 
         /// How far through the current package this layer is.

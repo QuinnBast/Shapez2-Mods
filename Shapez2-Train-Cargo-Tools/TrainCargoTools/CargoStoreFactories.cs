@@ -64,7 +64,7 @@ namespace QuinnBast.Shapez2.TrainCargoTools
     /// store now packs loose items itself so a train unloader can dock straight against it, and
     /// packing needs to know how big a package is. Same source as everything else in the mod -
     /// GameMode.TrainCargoExchangeConfiguration - so a store packs to exactly the size a station
-    /// would and wagon-capacity research applies.
+    /// would.
     internal sealed class AnyCargoStoreFactory
         : IIslandSimulationFactoryBuilder<AnyCargoStoreSimulation, AnyCargoStoreState, SpacePathConfiguration>
     {
