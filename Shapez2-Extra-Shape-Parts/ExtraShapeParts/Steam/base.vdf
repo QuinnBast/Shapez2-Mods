@@ -1,7 +1,7 @@
 "workshopitem"
 {
     "appid" "2162800"
-    "publishedfileid" "0"
+    "publishedfileid" "3801945322"
     "contentfolder" "${CONTENT_PATH}"
     "previewfile" "${PREVIEW_IMG}"
     "visibility" "2"
@@ -23,18 +23,16 @@ shapez 2 has four shape quadrant types: circle, square, windmill and star. This 
 [*][b]Dot[/b] - a whole circle floating in its quadrant
 [/list]
 
-They cut, stack, paint, crystallise and rotate exactly like the vanilla four, because the game's shape operations never look at which part they are holding. Nothing new to learn.
+They cut, stack, paint and rotate exactly like the vanilla four shapes.
 
 [h2]Side quests[/h2]
-Ten new chains in the research screen's Side Quests tab, thirty-eight goals in all. Each chain starts with one production line and every step adds one thing to the factory that built the step before it - a colour, a stacker, a pin pusher, a crystal generator - so no step asks you to start again.
+Ten new Jobs are avaliable to make using these new shapes including thirty-eight goals in all, can you make them all??
 
 [h2]Hexagonal mode[/h2]
-Every shape is built for the mode it is used in: a 90 degree quadrant in the standard game and a 60 degree sector in hexagonal mode, with its own mesh. The side quests adapt too. Both are supported.
+All of these shapes are also supposed in Hexagonal mode!
+Every shape has it's own custom mesh for both modes, and side quests adapt too. Both modes are supported!
 
-[h2]Where they come from[/h2]
-Gear, Cross, Diamond, Dome and Wedge are [b]rare[/b]; Bar, Dot, Sawblade, Flower and Leaf are [b]very rare[/b]. They turn up in shape patches on the map, in the map resource filter, and in randomly generated research goals - anywhere the game asks for a shape.
-
-Every shape is designed around one constraint: a stacked layer covers the inner three quarters of the layer below, so whatever tells two shapes apart has to sit in the outer rim. These do.
+The new shape parts will also appear in the randomly generated operator shapes, adding even more of a challenge to creating a MAM!
 
 [h2]Before you install[/h2]
 [list]
