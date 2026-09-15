@@ -20,6 +20,7 @@ import re
 import render as rq
 import render_dump as rd
 import render_hex as rh
+import thumbnail as tn
 from PIL import Image, ImageDraw
 from render import (ACCENT, EDGE, INK, MUTED, SS, TINT, GAP, LAYER, R, canvas, card, clockwise,
                     finish, font, outset, text, OUTLINE)
@@ -126,51 +127,59 @@ def backdrop(width, height):
     return square.resize((width, height), Image.BICUBIC)
 
 
-def parts_sheet(part_count, sector, filename, heading, note):
+def parts_sheet(part_count, sector, filename, heading, kicker, badge):
     cols, rows = 5, 2
-    cell_w, cell_h, pad = 312, 330, 40
+    cell_w, cell_h, pad = 312, 322, 40
     W = pad * 2 + cols * cell_w
-    H = 168 + rows * cell_h + 10
+    # Room under the last row's labels for the kicker bar, which was sitting on them.
+    H = 120 + rows * cell_h + 44
 
     image = backdrop(W * SS, H * SS)
     draw = ImageDraw.Draw(image)
-    text(draw, (pad, 38), heading, font("arialbd.ttf", 66), INK)
-    text(draw, (pad, 122), note, font("arial.ttf", 21), MUTED)
 
     for i, code in enumerate(ORDER):
         col, row = i % cols, i // cols
-        x, y = pad + col * cell_w, 168 + row * cell_h
+        x, y = pad + col * cell_w, 120 + row * cell_h
         cx = x + cell_w / 2
         colour = PART_COLOUR[code]
-        # No card behind it. The shape is the thing; a rounded rectangle around every shape is what
-        # made the first version of these read as documentation rather than as art.
         draw_shape(draw, (code + colour) * part_count, cx * SS, (y + 124) * SS, 116 * SS,
                    part_count, sector)
-        text(draw, (cx, y + 252), NAMES[code].upper(), font("arialbd.ttf", 22), INK, anchor="ma")
+        text(draw, (cx, y + 250), NAMES[code].upper(), font("arialbd.ttf", 22), INK, anchor="ma")
 
-    finish(image, W, H, os.path.join(OUT, filename))
+    # Furniture last and on top. A heading in its own band above the art is a caption; a headline
+    # lying across the art is a thumbnail.
+    art = image.convert("RGBA")
+    tn.band(art, 0, 150 * SS, (0, 0, 0, 150), soft=True)
+    tn.punch(art, (pad * SS + 12 * SS, 74 * SS), heading, 100 * SS // 1, tn.YELLOW,
+             rotate=-1.5, anchor="lm")
+    tn.band(art, (H - 58) * SS, 58 * SS, (0, 0, 0, 200))
+    tn.punch(art, (W * SS // 2, (H - 29) * SS), kicker, 30, tn.WHITE, stroke=4 * SS // 2,
+             font=tn.black_sans(30 * SS // 2))
+
+    tn.starburst(art, ((W - 118) * SS, 108 * SS), 96 * SS)
+    tn.punch(art, ((W - 118) * SS, 108 * SS), badge, 62 * SS // 1, tn.WHITE, stroke=7 * SS // 2)
+
+    finish(art.convert("RGB"), W, H, os.path.join(OUT, filename))
 
 
-def quests_sheet(part_count, sector, filename, heading, note):
+def quests_sheet(part_count, sector, filename, heading, note, badge):
     data = chains()
     widest = max(len(steps) for _title, steps in data)
 
     # Room for four layers of shape code under the tallest shapes without clipping the card.
     label_w, cell_w, row_h, pad = 250, 268, 262, 40
     W = pad * 2 + label_w + widest * cell_w
-    H = 158 + len(data) * row_h + pad
+    H = 150 + len(data) * row_h + 60
 
     image = backdrop(W * SS, H * SS)
     draw = ImageDraw.Draw(image)
-    text(draw, (pad, 40), heading, font("arialbd.ttf", 66), INK)
-    text(draw, (pad, 126), note, font("arial.ttf", 21), MUTED)
 
     title_font = font("arialbd.ttf", 27)
     count_font = font("arial.ttf", 16)
     step_font = font("arialbd.ttf", 16)
 
     for row, (title, steps) in enumerate(data):
-        y = 158 + row * row_h
+        y = 150 + row * row_h
         # A hairline instead of a card: the rows still need separating, they do not need boxing.
         if row:
             draw.line([(pad * SS, (y - 14) * SS), ((W - pad) * SS, (y - 14) * SS)],
@@ -184,22 +193,29 @@ def quests_sheet(part_count, sector, filename, heading, note):
             draw_shape(draw, code, cx * SS, (y + 104) * SS, 84 * SS, part_count, sector)
             text(draw, (cx, y + 206), name.upper(), step_font, INK, anchor="ma")
 
-    finish(image, W, H, os.path.join(OUT, filename))
+    art = image.convert("RGBA")
+    tn.band(art, 0, 150 * SS, (0, 0, 0, 155), soft=True)
+    tn.punch(art, (pad * SS + 12 * SS, 76 * SS), heading, 96 * SS, tn.YELLOW,
+             rotate=-1.5, anchor="lm")
+    tn.starburst(art, ((W - 120) * SS, 110 * SS), 96 * SS, fill=(46, 150, 226))
+    tn.punch(art, ((W - 120) * SS, 110 * SS), badge, 58 * SS, tn.WHITE, stroke=10)
+
+    tn.band(art, (H - 60) * SS, 60 * SS, (0, 0, 0, 205))
+    tn.punch(art, (W * SS // 2, (H - 30) * SS), note, 15 * SS, tn.WHITE, stroke=7,
+             font=tn.black_sans(15 * SS))
+
+    finish(art.convert("RGB"), W, H, os.path.join(OUT, filename))
 
 
 if __name__ == "__main__":
     if not os.path.isdir(rd.DUMP):
         raise SystemExit(f"No dump at {rd.DUMP}. Run esp.dump in the in-game console first.")
 
-    parts_sheet(4, 90.0, "promo-parts-quad.png", "EVERY NEW SHAPE PART!",
-                "Gear, cross, bar, diamond, dot, dome, wedge, sawblade, flower and leaf - each one "
-                "shown as a whole shape of itself.")
-    parts_sheet(6, 60.0, "promo-parts-hex.png", "ALL TEN, IN HEXAGONAL MODE!",
-                "Not one of them is the quad shape stretched. Every part is built a second time at "
-                "60 degrees, with its own mesh.")
-    quests_sheet(4, 90.0, "promo-quests-quad.png", "38 SIDE QUESTS FOR PROGRESSION!",
-                 "Ten chains in the research screen. Every step adds one thing to the factory that "
-                 "built the step before it - never a line from scratch.")
-    quests_sheet(6, 60.0, "promo-quests-hex.png", "AND EVERY QUEST WORKS IN HEX!",
-                 "Rebuilt for six parts, down to the vanilla shapes underneath - which are not the "
-                 "same shapes in a hexagonal save.")
+    parts_sheet(4, 90.0, "promo-parts-quad.png", "EVERY NEW PART!",
+                "GEAR  CROSS  BAR  DIAMOND  DOT  DOME  WEDGE  SAWBLADE  FLOWER  LEAF", "10")
+    parts_sheet(6, 60.0, "promo-parts-hex.png", "ALL TEN IN HEX!",
+                "ITS OWN MESH - NOT THE QUAD SHAPE STRETCHED", "60\u00b0")
+    quests_sheet(4, 90.0, "promo-quests-quad.png", "38 NEW QUESTS!",
+                 "TEN CHAINS - EVERY STEP ADDS ONE THING TO THE FACTORY BEFORE IT", "38")
+    quests_sheet(6, 60.0, "promo-quests-hex.png", "QUESTS IN HEX TOO!",
+                 "REBUILT FOR SIX PARTS - DOWN TO THE VANILLA SHAPES UNDERNEATH", "38")
