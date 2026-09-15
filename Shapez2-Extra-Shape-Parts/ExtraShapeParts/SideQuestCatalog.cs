@@ -35,15 +35,17 @@ namespace QuinnBast.Shapez2.ExtraShapeParts
         /// the earliest milestone goal and the earliest side quest in which vanilla itself asks for
         /// it. Both agree:
         ///
-        ///     u r b   from the start
-        ///     g       Milestone_ShapeTrains, and CBFluids_Extraction gates a quest using it
-        ///     c m y   the mixer - they are the scheme's SecondaryColors, one tier, one machine
-        ///     w       the mixer as well - TertiaryColors, all three primaries mixed
-        ///     k       Milestone_PostFinal_Tier2 / Milestone_PostFinal_Tier1  - post final, both
+        ///     u r b   from the start          PrimaryColors
+        ///     g       fluid extraction         PrimaryColors
+        ///     c m y   the mixer                SecondaryColors - one mix of two primaries
+        ///     w       the mixer                TertiaryColors - all three mixed
+        ///     k       the mixer                white mixed with white
         ///
-        /// Black being post-final is the one that changed a design: Widow's Web asks for it in its
-        /// first step, so the whole chain is end game content rather than the mid game chain it
-        /// looks like.
+        /// **Every one of those is a mechanism, and two of them started out as a guess from usage
+        /// instead.** Reading availability off where vanilla happens to *ask* for a colour got
+        /// magenta gated behind a space floor, and black gated behind the post final milestones -
+        /// wrong in both directions, because vanilla simply has no early goal that wants either.
+        /// Black is one extra mixing stage past white and needs no unlock that white does not.
         ///
         /// These are ids, not guarantees. Every one is checked against the scenario before use.
         /// A chain names candidates in order and takes the first the scenario has. A chain whose
@@ -54,23 +56,6 @@ namespace QuinnBast.Shapez2.ExtraShapeParts
 
         public static readonly string[] Crystals = { "CBSpecial_Crystals" };
 
-        /// Where black becomes available, which is a different milestone in every family of
-        /// scenario and is the only gate here that had to be worked out per scenario:
-        ///
-        ///     quad        Milestone_PostFinal_Tier1   - post final, and vanilla waits until Tier2
-        ///     converter   ConverterMilestoneTier1     - early, and the converter goals lean on it
-        ///     hexagonal   Milestone_Final             - never asked for there at all, so the last
-        ///                                               milestone is the honest guess
-        ///
-        /// The hexagonal entry is the weak one: black is in that scenario's colour scheme, because
-        /// every scenario shares `DefaultColorSchemeRGBFlex`, but nothing in hexagonal ever asks a
-        /// player to make one. Gating on the final milestone is a guess that it is late rather than
-        /// impossible. If it turns out to be unobtainable there, the chain should name a different
-        /// colour rather than a different gate.
-        public static readonly string[] BlackAvailable =
-        {
-            "Milestone_PostFinal_Tier1", "ConverterMilestoneTier1", "Milestone_Final",
-        };
 
         private static IReadOnlyList<SideQuestChain> Built;
 
@@ -170,7 +155,7 @@ namespace QuinnBast.Shapez2.ExtraShapeParts
             // spends it on `XkXkXkXk` in the quad scenario and never once in the hexagonal one -
             // and both scenarios share `DefaultColorSchemeRGBFlex`, so it resolves in either. In a
             // hexagonal save this is the only black shape a player will be asked for.
-            new SideQuestChain("widows-web", "Widow's Web", BlackAvailable,   // black, from its first step
+            new SideQuestChain("widows-web", "Widow's Web", Mixer,   // black is white mixed with white
                 new SideQuestStep("Black leaf", 250, "Lk"),
                 new SideQuestStep("Beaded", 1000, "LkOw"),
                 new SideQuestStep("Woven", 4000, "LkOw", "OwLk"),

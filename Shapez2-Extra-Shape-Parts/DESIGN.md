@@ -873,7 +873,7 @@ earliest side quest in which *vanilla itself* asks for it. The two sources agree
 | `u` `r` `b` `g` | the start, then fluid extraction | `PrimaryColors` |
 | `c` `m` `y` | `CBFluids_Mixer` | `SecondaryColors` - one mix of two primaries |
 | `w` | `CBFluids_Mixer` | `TertiaryColors` - all three mixed |
-| `k` | post final | no mechanism found; see below |
+| `k` | `CBFluids_Mixer` | white mixed with white |
 
 **That table is mechanical, and the first version of it was not.** Reading availability off *where
 vanilla happens to ask for a colour* put magenta at `CBSpecial_SpaceFloor3`, because that is the
@@ -890,21 +890,25 @@ So nine of the ten chains gate on the mixer, `CBSpecial_SpaceFloor3` or `CBSpeci
 latest thing each needs anywhere, because the game allows one gate per group and a chain gated on
 its *first* step's needs strands the player on its last.
 
-**Black cost a design decision.** Widow's Web asks for it in step one, and black is post-final
-everywhere it appears - so the chain is end game content rather than the mid game chain it looks
-like. It is also the one gate that differs per scenario:
+**Black cost two wrong answers before the right one.** It is `white mixed with white` - one extra
+mixing stage past a colour the mixer already makes, and no unlock that white does not need. So
+Widow's Web gates on the mixer like everything else.
 
-| scenario family | black available from |
-| --- | --- |
-| quad | `Milestone_PostFinal_Tier1` |
-| converter | `ConverterMilestoneTier1` - early, the converter goals lean on black |
-| hexagonal | never asked for, so `Milestone_Final` is a guess that it is late rather than absent |
+The two wrong answers are the point. Vanilla never asks for black before the post final milestones
+in the quad scenarios and never asks for it *at all* in the hexagonal one, so reading availability
+off usage put the chain six milestones late and then needed a per-scenario gate list to paper over
+the fact that hexagonal has no post final milestone to point at. All of that machinery existed to
+support a conclusion that was simply wrong. **Correlation in the content is not the mechanism** -
+the same mistake that had put magenta behind a space floor, in the opposite direction.
 
-A chain therefore names gate *candidates* in order and takes the first the scenario defines. If none
-of them exist the chain is **skipped rather than un-gated**: a scenario with no mixer cannot build a
-white shape either, so showing the chain would only frustrate. That is what happens in onboarding,
-which has no painter, no pin pusher, no mixer and no crystals - it gets none of these chains, which
-is correct.
+A chain still names gate *candidates* in order and takes the first the scenario defines, because
+that costs nothing and scenarios genuinely do differ. If none exist the chain is **skipped rather
+than un-gated**: a scenario with no mixer cannot build a white shape either, so showing the chain
+would only frustrate. That is what happens in onboarding, which has no painter, no pin pusher, no
+mixer and no crystals - it gets none of these chains, which is correct.
+
+What settled it was asking rather than inferring: `PlayerObtainableColors` lists `k`, and the mixing
+rule is white plus white. `esp.report` prints that list now.
 
 ### Quest ids are save state
 
