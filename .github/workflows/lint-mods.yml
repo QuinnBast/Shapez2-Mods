@@ -1,0 +1,40 @@
+name: Check mods for known traps
+
+# Greps the mod sources for calls that compile cleanly and then remove the mod for some
+# players - see .github/scripts/check-traps.sh for what and why.
+#
+# This is deliberately a grep and not an MSBuild target. A target would have to pull C#
+# source text into MSBuild items, where a stray $, @ or ; in a line gets re-evaluated -
+# a worse bug than the ones being guarded against. It also keeps local builds untouched.
+
+on:
+  push:
+    # This is a monorepo: a docs-only commit does not need this.
+    paths:
+      - 'Shapez2-*/**/*.cs'
+      - '.github/scripts/check-traps.sh'
+      - '.github/workflows/lint-mods.yml'
+  pull_request:
+    paths:
+      - 'Shapez2-*/**/*.cs'
+      - '.github/scripts/check-traps.sh'
+      - '.github/workflows/lint-mods.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lint-mods-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check-traps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # No toolchain needed. The check never compiles anything, which is the point:
+      # these mods build against a local shapez 2 install that CI does not have.
+      - name: Check for known traps
+        run: bash .github/scripts/check-traps.sh
