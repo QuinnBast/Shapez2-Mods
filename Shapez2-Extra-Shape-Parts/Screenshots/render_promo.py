@@ -20,6 +20,7 @@ import re
 import render as rq
 import render_dump as rd
 import render_hex as rh
+from PIL import Image, ImageDraw
 from render import (ACCENT, EDGE, INK, MUTED, SS, TINT, GAP, LAYER, R, canvas, card, clockwise,
                     finish, font, outset, text, OUTLINE)
 
@@ -118,28 +119,34 @@ def expand(layers, part_count):
 
 # --- sheets -------------------------------------------------------------------------------------
 
+def backdrop(width, height):
+    """The icon's radial lift, stretched to a sheet. Flat dark reads as a spreadsheet."""
+    import render_icon
+    square = render_icon.backdrop(max(width, height))
+    return square.resize((width, height), Image.BICUBIC)
+
+
 def parts_sheet(part_count, sector, filename, heading, note):
     cols, rows = 5, 2
-    cell_w, cell_h, pad = 300, 330, 34
+    cell_w, cell_h, pad = 312, 330, 40
     W = pad * 2 + cols * cell_w
-    H = 160 + rows * cell_h + pad
+    H = 168 + rows * cell_h + 10
 
-    image, draw = canvas(W, H)
-    text(draw, (pad, 48), heading, font("arialbd.ttf", 46), INK)
-    text(draw, (pad, 104), note, font("arial.ttf", 21), MUTED)
+    image = backdrop(W * SS, H * SS)
+    draw = ImageDraw.Draw(image)
+    text(draw, (pad, 46), heading, font("arialbd.ttf", 52), INK)
+    text(draw, (pad, 112), note, font("arial.ttf", 20), MUTED)
 
     for i, code in enumerate(ORDER):
         col, row = i % cols, i // cols
-        x, y = pad + col * cell_w, 160 + row * cell_h
-        card(draw, x + 8, y + 8, cell_w - 16, cell_h - 22)
-
+        x, y = pad + col * cell_w, 168 + row * cell_h
         cx = x + cell_w / 2
         colour = PART_COLOUR[code]
-        draw_shape(draw, (code + colour) * part_count, cx * SS, (y + 132) * SS, 104 * SS,
+        # No card behind it. The shape is the thing; a rounded rectangle around every shape is what
+        # made the first version of these read as documentation rather than as art.
+        draw_shape(draw, (code + colour) * part_count, cx * SS, (y + 124) * SS, 116 * SS,
                    part_count, sector)
-        text(draw, (cx, y + 242), NAMES[code], font("arialbd.ttf", 26), INK, anchor="ma")
-        text(draw, (cx, y + 278), (code + colour) * part_count, font("consola.ttf", 15),
-             ACCENT, anchor="ma")
+        text(draw, (cx, y + 252), NAMES[code].upper(), font("arialbd.ttf", 22), INK, anchor="ma")
 
     finish(image, W, H, os.path.join(OUT, filename))
 
@@ -149,32 +156,33 @@ def quests_sheet(part_count, sector, filename, heading, note):
     widest = max(len(steps) for _title, steps in data)
 
     # Room for four layers of shape code under the tallest shapes without clipping the card.
-    label_w, cell_w, row_h, pad = 210, 258, 292, 34
+    label_w, cell_w, row_h, pad = 250, 268, 262, 40
     W = pad * 2 + label_w + widest * cell_w
     H = 158 + len(data) * row_h + pad
 
-    image, draw = canvas(W, H)
-    text(draw, (pad, 48), heading, font("arialbd.ttf", 46), INK)
-    text(draw, (pad, 104), note, font("arial.ttf", 21), MUTED)
+    image = backdrop(W * SS, H * SS)
+    draw = ImageDraw.Draw(image)
+    text(draw, (pad, 48), heading, font("arialbd.ttf", 52), INK)
+    text(draw, (pad, 114), note, font("arial.ttf", 20), MUTED)
 
-    title_font = font("arialbd.ttf", 24)
-    step_font = font("arialbd.ttf", 17)
-    mono = font("consola.ttf", 12)
+    title_font = font("arialbd.ttf", 27)
+    count_font = font("arial.ttf", 16)
+    step_font = font("arialbd.ttf", 16)
 
     for row, (title, steps) in enumerate(data):
         y = 158 + row * row_h
-        card(draw, pad, y, W - pad * 2, row_h - 16)
-        text(draw, (pad + 22, y + row_h / 2 - 22), title, title_font, ACCENT)
-        text(draw, (pad + 22, y + row_h / 2 + 8), f"{len(steps)} goals", mono, MUTED)
+        # A hairline instead of a card: the rows still need separating, they do not need boxing.
+        if row:
+            draw.line([(pad * SS, (y - 14) * SS), ((W - pad) * SS, (y - 14) * SS)],
+                      fill=(38, 48, 57), width=SS)
+        text(draw, (pad + 4, y + row_h / 2 - 34), title, title_font, ACCENT)
+        text(draw, (pad + 4, y + row_h / 2 + 2), f"{len(steps)} goals", count_font, MUTED)
 
         for column, (name, layers) in enumerate(steps):
             code = expand(layers, part_count)
             cx = pad + label_w + column * cell_w + cell_w / 2
-            draw_shape(draw, code, cx * SS, (y + 96) * SS, 66 * SS, part_count, sector)
-            text(draw, (cx, y + 176), name, step_font, INK, anchor="ma")
-
-            for line, layer in enumerate(code.split(":")):
-                text(draw, (cx, y + 202 + line * 14), layer, mono, MUTED, anchor="ma")
+            draw_shape(draw, code, cx * SS, (y + 104) * SS, 84 * SS, part_count, sector)
+            text(draw, (cx, y + 206), name.upper(), step_font, INK, anchor="ma")
 
     finish(image, W, H, os.path.join(OUT, filename))
 
