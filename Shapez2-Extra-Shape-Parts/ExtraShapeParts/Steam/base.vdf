@@ -4,7 +4,7 @@
     "publishedfileid" "3801945322"
     "contentfolder" "${CONTENT_PATH}"
     "previewfile" "${PREVIEW_IMG}"
-    "visibility" "2"
+    "visibility" "0"
     "title" "Extra Shape Parts"
     "description" "[h1]Extra Shape Parts[/h1]
 shapez 2 has four shape quadrant types: circle, square, windmill and star. This mod adds ten more, and puts them on the map so they can be mined rather than only built.

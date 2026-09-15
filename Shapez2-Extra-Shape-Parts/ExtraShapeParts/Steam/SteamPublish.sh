@@ -296,6 +296,11 @@ echo "Check $HOME/steamcmd/logs/workshop_log.txt for what was actually uploaded.
 echo "A run that changed the files says 'Uploaded new content ( ManifestID ... )'."
 echo "Without that line only the preview and the text changed."
 
+# visibility, on the other hand, IS one of those keys, and base.vdf carries it - so every
+# publish asserts it. It said "2" (private) up to and including the first release, which is
+# what a first publish wants; it now says "0", because leaving it at "2" would have quietly
+# taken the item back off the store the next time this ran.
+#
 # The category checkboxes are Workshop tags, and workshop_build_item has no key for them -
 # it reads appid, publishedfileid, filetype, title, description, visibility, previewfile,
 # contentfolder, kvtags and changenote, and nothing else. A "tags" block in base.vdf is an
