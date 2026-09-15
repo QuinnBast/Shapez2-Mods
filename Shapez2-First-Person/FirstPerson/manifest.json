@@ -1,0 +1,26 @@
+{
+  "Version": "0.9.0",
+  "Title": "First Person",
+  "Description": "Walk your own factory at eye level: gravity, building at a crosshair, riding belts and trains",
+  "Author": "Quinn Bast",
+  "SavedModVersionCompabilityRangeWithSelf": "*-*",
+  "GameVersionSupportRange": "*-*",
+  "AffectsSaveGames": false,
+  "DisablesAchievements": false,
+  "Conflicts": [],
+  "Assemblies": [
+    "FirstPerson.dll"
+  ],
+  "Dependencies": [
+    {
+      "ModId": "steam:3542611357",
+      "ModTitle": "Shapez Shifter",
+      "Version": "*-*"
+    },
+    {
+      "ModId": "steam:3542712030",
+      "ModTitle": "MonoMod.RuntimeDetour",
+      "Version": "*-*"
+    }
+  ]
+}

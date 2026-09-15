@@ -108,6 +108,8 @@
       href: ports-and-notches.md
     - name: Rendering
       href: rendering.md
+    - name: The Camera and Viewport
+      href: camera-and-viewport.md
     - name: Hooking the Game
       href: hooking.md
     - name: The Publicizer

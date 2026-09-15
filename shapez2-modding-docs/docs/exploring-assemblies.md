@@ -84,6 +84,52 @@ directory **must already exist** — ilspycmd will not create it.
 Roughly 4,000 files and 20 MB for the assemblies above. It does not compile, and it is
 not meant to; it is a searchable answer key.
 
+### That list is not the whole game
+
+The eleven assemblies above cover the simulation, the map and the rendering, which is
+most of what a mod touches. They do **not** cover the interface. Notably absent:
+
+| Assembly | What is in it |
+| --- | --- |
+| `Toolbar` | `ToolbarModel`, `ToolbarQuery`, `IToolbar` — the *runtime* toolbar, as opposed to the `ToolbarData` authoring tree in `Game.Orchestration` |
+| `Game.Hud.View` | `HUDToolbar`, `HUDToolbarView`, `HUDToolbarSlotView` — the bar the player actually clicks |
+| `Game.Hud.View.Model` | `IPlacementToolbarElement`, `ToolbarSlotPresentationData` |
+| `Game.Core.HUD`, `Game.Blueprints`, `Game.Core.Blueprint*`, `Game.Core.Simulation`, `Game.Core.Map`, `Game.Core.Map.Layout`, `Game.Logic`, `Game.Tutorial` | as named |
+
+The failure mode is quiet and misleading: `grep -rn "class ToolbarModel"` returns
+nothing, and the obvious conclusion — that the type does not exist — is wrong. It is used
+all over `Game.Orchestration`, which *is* decompiled. **A type that appears in usages but
+has no definition anywhere in the tree is a missing assembly, not a missing type.**
+
+`DOTNET_ROLL_FORWARD` (above) matters here too, and the framework it rolls forward *from*
+depends on the tool version: 3.1 for `ilspycmd` 7.x, 6.0 for 8.x. Updating to pick up a
+newer target can fail with *"Settings file 'DotnetToolSettings.xml' was not found in the
+package"* — that is a packaging problem in some published versions, not anything local, so
+pin a version instead of taking the latest: `dotnet tool update -g ilspycmd --version 8.2.0.7535`.
+
+Add what you need to the loop. If you only want to know what is on a type, metadata is
+enough and faster than a decompile — `ReflectionOnlyLoadFrom` plus a resolver for the
+Managed folder, then `GetMembers`:
+
+```powershell
+$dir = "$env:SPZ2_PATH"
+[AppDomain]::CurrentDomain.add_ReflectionOnlyAssemblyResolve([ResolveEventHandler]{
+    param($s, $e)
+    $f = Join-Path 'C:\full\path\to\Managed' (($e.Name -split ',')[0] + '.dll')
+    if (Test-Path $f) { [Reflection.Assembly]::ReflectionOnlyLoadFrom($f) } else { $null }
+})
+$a = [Reflection.Assembly]::ReflectionOnlyLoadFrom("$dir\Game.Hud.View.dll")
+$t = try { $a.GetTypes() } catch [Reflection.ReflectionTypeLoadException] { $_.Exception.Types | ? { $_ } }
+($t | ? Name -eq 'HUDToolbarView').GetMembers('Public,NonPublic,Instance,DeclaredOnly') | % { $_.ToString() }
+```
+
+Two things will bite you. The resolver must have the directory **baked in** — `$using:`
+and closure capture do not reach inside a `ResolveEventHandler`, and a resolver that
+silently resolves nothing looks exactly like an assembly with two types in it. And
+`GetTypes` throws `ReflectionTypeLoadException` when anything fails to load; the partial
+list on `.Types` is usually all you need, so catch it rather than letting the count
+mislead you.
+
 ## The questions it answers
 
 Once the tree exists, most API questions become one `grep`:

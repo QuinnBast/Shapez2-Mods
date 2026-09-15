@@ -1,0 +1,25 @@
+<!--
+    Imported automatically by MSBuild because it sits next to the .sln.
+
+    It adds one build mode:
+
+        dotnet build -p:Dev=true
+
+    which writes to <persistent>/mods-dev/FirstPerson/ instead of into the mods folder.
+    The installed copy is memory-mapped by the running game and cannot be overwritten, so an
+    ordinary build fails with MSB3027 while the game is open. That is the copy step failing,
+    not a compile error. Staging is how you keep compiling without closing the game.
+
+    Nothing loads a staged build. Mod discovery only scans immediate subdirectories of "mods",
+    so the staged copy is never picked up as a second mod. To actually run the change, close
+    the game and use a plain `dotnet build`, which is unaffected and still installs into the
+    mods folder.
+-->
+<Project>
+
+    <PropertyGroup Condition="'$(Dev)' == 'true' And '$(SPZ2_PERSISTENT)' != ''">
+        <OutputPath>$(SPZ2_PERSISTENT)\mods-dev\$(MSBuildProjectName)\</OutputPath>
+        <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    </PropertyGroup>
+
+</Project>

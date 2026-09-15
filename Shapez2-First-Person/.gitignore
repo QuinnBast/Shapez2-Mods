@@ -1,0 +1,19 @@
+# Build output
+bin/
+obj/
+
+# Publicizer log
+logs/
+
+# Steam publish scratch. SteamPublish.sh fills the absolute paths into a copy of base.vdf
+# and deletes it afterwards, so this only catches an interrupted run. Unanchored on purpose:
+# the Steam folder sits beside the csproj, not beside this file.
+base.tmp.vdf
+
+# IDE
+.idea/
+.vs/
+*.user
+
+# steamcmd transcript from Steam/SteamPublish.sh
+publish.log

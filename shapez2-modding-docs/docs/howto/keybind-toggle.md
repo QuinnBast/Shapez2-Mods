@@ -83,6 +83,53 @@ You will also want translation entries for `keybinding.<id>` and
 > the [publicizer](../publicizer.md)) and adding to it. That is unverified territory:
 > confirm against the assemblies for your game version before relying on it.
 
+## Pressing a keybinding on the player's behalf
+
+Sometimes the thing you want to drive has no API you can reach. It is worth being sure of
+that first — `Toolbar.dll` and `Game.Hud.View.dll` are not in the usual decompile set, and
+"no API" turned out to mean "not decompiled" for the toolbar: `HUDToolbarView` has a
+perfectly good depth-parameterised `TryCycleChildSlots`, and driving that directly beats
+synthesising `next-toolbar`, which only reaches the one depth it is wired to.
+
+When the technique *is* the right answer, it looks like this. `toolbar.select-slot-0` …
+`select-slot-14` are ordinary keybindings, so you can press one instead of reaching for the
+internals.
+
+The three conditions `ConsumeWasActivated` tests are all writable state on the context:
+
+```csharp
+private static void Press(InputDownstreamContext context, string id)
+{
+    if (!context.AllBindings.TryGetValue(id, out Keybinding binding)) return;
+
+    context.LastBindings.Remove(binding);       // "was not held last frame"
+    context.ConsumedBindings.Remove(binding);   // "nobody has taken it yet"
+    context.ActiveBindings[binding] = KeySet.EMPTY;
+}
+```
+
+All three collections are `protected`, so this needs the [publicizer](../publicizer.md).
+
+**Use `KeySet.EMPTY`, not the binding's real key set.** `TryConsume` de-duplicates
+bindings that share a key:
+
+```csharp
+if (keySet.Code != 0 && activeBinding.Value.Code == keySet.Code) ConsumedBindings.Add(activeBinding.Key);
+```
+
+`KeySet.EMPTY` has `Code == KeyCode.None`, which is `0`, so neither that branch nor the
+controller one fires and consuming your synthetic press cannot swallow an unrelated
+binding that happens to sit on the same key.
+
+**Inject it before whoever reads it.** The context is walked in a fixed order —
+`InputManager` → `DialogStack` → `HUD` (every `HUDPart`) → `PlayerInteractionOrchestrator`
+→ `SystemButtons`. For anything a HUD part consumes, that means a *prefix* on
+`HUD.OnGameUpdate`; from a hook in `PlayerInteractionOrchestrator` you are already too
+late, and nothing will happen.
+
+The virtue of this over calling into the UI is that it keeps working when the UI changes:
+you are using the same entry point the keyboard uses.
+
 ## Gotchas
 
 - Legacy `Input` does not know about UI focus. If the player is typing in a dialog, your

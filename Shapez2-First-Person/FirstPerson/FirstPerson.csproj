@@ -1,0 +1,208 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>netstandard2.1</TargetFramework>
+        <Nullable>disable</Nullable>
+        <LangVersion>10</LangVersion>
+        <RootNamespace>QuinnBast.Shapez2.FirstPerson</RootNamespace>
+        <!-- The publicizer and ShapezShifter each ship a copy of IgnoresAccessChecksTo -->
+        <NoWarn>$(NoWarn);CS0436</NoWarn>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <OutputPath>$(SPZ2_PERSISTENT)\mods\FirstPerson</OutputPath>
+        <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="'$(Dev)' == 'true'">
+        <OutputPath>$(SPZ2_PERSISTENT)\mods-dev\FirstPerson\</OutputPath>
+    </PropertyGroup>
+
+    <!--
+        dotnet build -t:SteamPublish   uploads the built mod folder to the workshop item
+        named in Steam/base.vdf. Build first: the target publishes whatever is already at
+        OutputPath, it does not build it.
+
+        The publish script is bash. MSBuild runs Exec through cmd, which does not have
+        Git's bin folder on its PATH, so a bare `sh` fails with 9009 even when Git Bash is
+        installed. Find the shell ourselves; set ShellExe to override.
+
+        OutputPath ends in a directory separator, and a trailing backslash before a closing
+        quote escapes the quote - which would leave a stray quote inside the content path.
+    -->
+    <Target Name="SteamPublish">
+        <PropertyGroup>
+            <ShellExe Condition="'$(ShellExe)' == '' And Exists('$(ProgramFiles)\Git\bin\sh.exe')">$(ProgramFiles)\Git\bin\sh.exe</ShellExe>
+            <ShellExe Condition="'$(ShellExe)' == '' And Exists('$(ProgramFiles)\Git\usr\bin\sh.exe')">$(ProgramFiles)\Git\usr\bin\sh.exe</ShellExe>
+            <ShellExe Condition="'$(ShellExe)' == '' And Exists('$(LocalAppData)\Programs\Git\bin\sh.exe')">$(LocalAppData)\Programs\Git\bin\sh.exe</ShellExe>
+            <PublishContentPath>$(OutputPath.TrimEnd('\'))</PublishContentPath>
+        </PropertyGroup>
+
+        <Error Condition="'$(ShellExe)' == ''"
+               Text="Could not find sh.exe. Install Git for Windows, or publish by hand: bash Steam/SteamPublish.sh &quot;$(PublishContentPath)&quot;" />
+
+        <Message Importance="high" Text="Publishing $(PublishContentPath) using $(ShellExe)" />
+
+        <Exec Command="&quot;$(ShellExe)&quot; ./Steam/SteamPublish.sh &quot;$(PublishContentPath)&quot;"
+              WorkingDirectory="$(MSBuildProjectDirectory)" />
+    </Target>
+
+    <ItemGroup>
+        <Reference Include="ShapezShifter">
+            <HintPath>$(SPZ2_SHIFTER)</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="SPZGameAssembly">
+            <HintPath>$(SPZ2_PATH)\SPZGameAssembly.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="Core">
+            <HintPath>$(SPZ2_PATH)\Core.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="Game.Core">
+            <HintPath>$(SPZ2_PATH)\Game.Core.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="Game.Core.Modding">
+            <HintPath>$(SPZ2_PATH)\Game.Core.Modding.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="Game.Core.Coordinates">
+            <HintPath>$(SPZ2_PATH)\Game.Core.Coordinates.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="Game.Core.Rendering">
+            <HintPath>$(SPZ2_PATH)\Game.Core.Rendering.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="Game.Orchestration">
+            <HintPath>$(SPZ2_PATH)\Game.Orchestration.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="Unity.Mathematics">
+            <HintPath>$(SPZ2_PATH)\Unity.Mathematics.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="UnityEngine.CoreModule">
+            <HintPath>$(SPZ2_PATH)\UnityEngine.CoreModule.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <!-- Input.GetAxisRaw. The locked cursor freezes Input.mousePosition, which is
+             what the game's own InputDownstreamContext.MouseDelta is derived from, so
+             mouse look has to read the raw device axes instead. -->
+        <Reference Include="UnityEngine.InputLegacyModule">
+            <HintPath>$(SPZ2_PATH)\UnityEngine.InputLegacyModule.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <!-- Canvas and Image for the crosshair. uGUI rather than IMGUI on purpose: IMGUI
+             needs a MonoBehaviour from this assembly, and Unity refuses to add one whose
+             type came from a byte-loaded assembly - which is what a hot reload produces. -->
+        <Reference Include="UnityEngine.UI">
+            <HintPath>$(SPZ2_PATH)\UnityEngine.UI.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="UnityEngine.UIModule">
+            <HintPath>$(SPZ2_PATH)\UnityEngine.UIModule.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <!-- IMapModel, BuildingModel, IslandModel: the ground and wall queries. -->
+        <Reference Include="Game.Core.Map.Model">
+            <HintPath>$(SPZ2_PATH)\Game.Core.Map.Model.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <!-- HUDToolbarView and IToolbarElement: the toolbar tree the wheel walks. These two
+             are not in the workspace's usual decompile set, which is why the mod spent a
+             while synthesising keybindings at it instead of calling it. -->
+        <Reference Include="Game.Hud.View">
+            <HintPath>$(SPZ2_PATH)\Game.Hud.View.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="Toolbar">
+            <HintPath>$(SPZ2_PATH)\Toolbar.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <!-- GameToolbarElementExtensions.IsUnlocked, so a locked entry is skipped rather
+             than selected when stepping into a submenu. -->
+        <Reference Include="Game.Hud.View.Model">
+            <HintPath>$(SPZ2_PATH)\Game.Hud.View.Model.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <!-- IIslandDefinition, for the layer-plane drawer's signature. -->
+        <Reference Include="Game.Core.Map.Simulation">
+            <HintPath>$(SPZ2_PATH)\Game.Core.Map.Simulation.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <!-- Steps, StepRate and Ticks: the unit algebra that turns a belt's StepsPerTick
+             into tiles per second without a constant of our own. -->
+        <Reference Include="Game.Core.Simulation">
+            <HintPath>$(SPZ2_PATH)\Game.Core.Simulation.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <!-- IHubIslandConfiguration: how the vortex is recognised. Game.Content.Features
+             carries the TryConfigAs extension and ICustomSimulationConfiguration it needs. -->
+        <Reference Include="Game.Content">
+            <HintPath>$(SPZ2_PATH)\Game.Content.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="Game.Content.Features">
+            <HintPath>$(SPZ2_PATH)\Game.Content.Features.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <!-- `.T()` for the research node's title and description. -->
+        <Reference Include="Core.Localization">
+            <HintPath>$(SPZ2_PATH)\Core.Localization.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <!-- IGameSessionManagers reaches the research manager through definition group ids. -->
+        <Reference Include="Game.Core.Content">
+            <HintPath>$(SPZ2_PATH)\Game.Core.Content.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="Game.Core.Map.Layout.Model">
+            <HintPath>$(SPZ2_PATH)\Game.Core.Map.Layout.Model.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <!-- IMapModel inherits IMapLayers and ISuperChunkAccessor from these two; without
+             them every member of IMapModel is a CS0012 rather than a missing method. -->
+        <Reference Include="Game.Core.Map">
+            <HintPath>$(SPZ2_PATH)\Game.Core.Map.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="Game.Core.Map.Layout">
+            <HintPath>$(SPZ2_PATH)\Game.Core.Map.Layout.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+    </ItemGroup>
+
+    <PropertyGroup>
+        <PublicizeAll>true</PublicizeAll>
+        <PublicizerClearCacheOnClean>true</PublicizerClearCacheOnClean>
+        <PublicizerLogFilePath>logs/krafs.log</PublicizerLogFilePath>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <DoNotPublicize Include="SPZGameAssembly:BeltLaneRenderingDefinition" IncludeCompilerGeneratedMembers="false" IncludeVirtualMembers="false"/>
+        <DoNotPublicize Include="Game.Core.Coordinates" IncludeCompilerGeneratedMembers="false" IncludeVirtualMembers="false"/>
+        <DoNotPublicize Include="SPZGameAssembly:BuildingDefinition" IncludeCompilerGeneratedMembers="false" IncludeVirtualMembers="false"/>
+        <DoNotPublicize Include="Game.Orchestration:ParentToolbarElementData" IncludeCompilerGeneratedMembers="false" IncludeVirtualMembers="false"/>
+        <DoNotPublicize Include="Game.Orchestration:RootToolbarElementData" IncludeCompilerGeneratedMembers="false" IncludeVirtualMembers="false"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="MonoMod.RuntimeDetour" Version="25.3.4">
+            <ExcludeAssets>runtime</ExcludeAssets>
+        </PackageReference>
+        <PackageReference Include="Krafs.Publicizer" Version="2.3.0">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+        <None Update="manifest.json">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Update="translations.json">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+    </ItemGroup>
+
+</Project>
