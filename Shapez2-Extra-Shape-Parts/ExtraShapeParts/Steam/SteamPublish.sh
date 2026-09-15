@@ -109,12 +109,15 @@ fi
 # Refuse to publish something that is not a built mod. An empty or wrong folder is the one
 # mistake here that looks like success.
 #
-# translations.json and Resources are as load-bearing as the dll for this mod, and neither
-# is a compile output, so a mis-set OutputPath drops them while still producing a dll. A
-# missing translations.json aborts the whole game's mod load in LoadModTranslationAfterResolve,
-# and a missing Resources leaves the three toolbar buttons blank - FileTextureLoader reads
-# the icons off disk at runtime. Resources is a directory, hence -e rather than -f.
-for required in manifest.json ExtraShapeParts.dll translations.json Resources; do
+# This mod is a dll and a manifest and nothing else. Every string it shows is a RawText
+# (SideQuestInjector builds the quest titles that way), so there is no translations.json to
+# ship, and every mesh is generated in ShapePartMeshBuilder, so there is no Resources folder
+# either - a shape sub-part mesh cannot be loaded from a file at all, because ShapezShifter's
+# model importer drops the vertex colour channel that carries its material assignment.
+#
+# This list was copied from Train Cargo Tools, which does ship both, and the copy sat here
+# until the first publish attempt failed on a translations.json that was never going to exist.
+for required in manifest.json ExtraShapeParts.dll; do
   if [ ! -e "$CONTENT_PATH/$required" ]; then
     echo "error: $CONTENT_PATH has no $required, so it is not a built mod folder." >&2
     echo "       Build first, then publish." >&2
@@ -136,8 +139,14 @@ PREVIEW_IMG="${PREVIEW_IMG//\\/\\\\}"
 echo "CONTENT_PATH: $CONTENT_PATH"
 echo "PREVIEW_IMG: $PREVIEW_IMG"
 
+# base.vdf also carries ${CHANGE_NOTE}. envsubst blanks an unset variable rather than leaving
+# the placeholder visible, so nothing breaks without this - the item's change history just ends
+# up empty. Set CHANGE_NOTE before running to say something better than the version.
+CHANGE_NOTE=${CHANGE_NOTE:-"Version ${VERSION:-unknown}"}
+
 export CONTENT_PATH
 export PREVIEW_IMG
+export CHANGE_NOTE
 
 validate_vdf "$BASE_VDF" || exit 1
 
