@@ -22,6 +22,40 @@
         <OutputPath>$(SPZ2_PERSISTENT)\mods-dev\TrainCargoTools\</OutputPath>
     </PropertyGroup>
 
+    <!--
+        dotnet build -t:SteamPublish   uploads the built mod folder to the workshop item
+        named in Steam/base.vdf. Build first: the target publishes whatever is already at
+        OutputPath, it does not build it.
+
+        The publish script is bash. MSBuild runs Exec through cmd, which does not have
+        Git's bin folder on its PATH, so a bare `sh` fails with 9009 even when Git Bash is
+        installed. Find the shell ourselves; set ShellExe to override.
+
+        OutputPath may end in a directory separator, and a trailing backslash before a
+        closing quote escapes the quote - which would leave a stray quote inside the
+        content path.
+
+        Steam/ is not in the output: only manifest.json, translations.json and Resources
+        are marked CopyToOutputDirectory, so the description, the vdf and the promo art
+        stay in the repo rather than shipping inside the mod.
+    -->
+    <Target Name="SteamPublish">
+        <PropertyGroup>
+            <ShellExe Condition="'$(ShellExe)' == '' And Exists('$(ProgramFiles)\Git\bin\sh.exe')">$(ProgramFiles)\Git\bin\sh.exe</ShellExe>
+            <ShellExe Condition="'$(ShellExe)' == '' And Exists('$(ProgramFiles)\Git\usr\bin\sh.exe')">$(ProgramFiles)\Git\usr\bin\sh.exe</ShellExe>
+            <ShellExe Condition="'$(ShellExe)' == '' And Exists('$(LocalAppData)\Programs\Git\bin\sh.exe')">$(LocalAppData)\Programs\Git\bin\sh.exe</ShellExe>
+            <PublishContentPath>$(OutputPath.TrimEnd('\'))</PublishContentPath>
+        </PropertyGroup>
+
+        <Error Condition="'$(ShellExe)' == ''"
+               Text="Could not find sh.exe. Install Git for Windows, or publish by hand: bash Steam/SteamPublish.sh &quot;$(PublishContentPath)&quot;" />
+
+        <Message Importance="high" Text="Publishing $(PublishContentPath) using $(ShellExe)" />
+
+        <Exec Command="&quot;$(ShellExe)&quot; ./Steam/SteamPublish.sh &quot;$(PublishContentPath)&quot;"
+              WorkingDirectory="$(MSBuildProjectDirectory)" />
+    </Target>
+
     <ItemGroup>
         <Reference Include="ShapezShifter">
             <HintPath>$(SPZ2_SHIFTER)</HintPath>
