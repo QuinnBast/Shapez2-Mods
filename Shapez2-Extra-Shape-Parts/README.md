@@ -20,11 +20,19 @@ parts are drawn differently at 60 degrees than at 90 for a second reason: Cross'
 Flower's petals gain teeth, so that neither collides with the hexagonal configuration's own
 `RectHex` and `FlowerHex`.
 
+## Every part, on its own
+
+Each one shown as a whole shape of itself, so you can see what a part actually is:
+
+![Every new shape part](Screenshots/promo-parts-quad.png)
+
+![All ten in hexagonal mode](Screenshots/promo-parts-hex.png)
+
 ## Side quests
 
 Ten chains in the research screen, thirty-eight goals:
 
-![The side quest chains](Screenshots/promo-quests-quad.png)
+![Thirty-eight side quests](Screenshots/promo-quests-quad.png)
 
 One rule shaped all of them — **every step adds one thing to the factory that built the step
 before it.** A colour, a stacker, a pin pusher, a crystal generator. No step asks you to start a
@@ -33,7 +41,7 @@ production line from scratch.
 They adapt to the mode as well, including the vanilla shapes underneath, which are not the same
 shapes in a hexagonal save:
 
-![The side quest chains, hexagonal](Screenshots/promo-quests-hex.png)
+![Side quests in hexagonal mode](Screenshots/promo-quests-hex.png)
 
 Each goal pays research points and platform capacity, on the same scale as the game's own side
 tasks.
@@ -104,16 +112,6 @@ configurations are built once per process and the parts are already in them.
 
 `dotnet build -p:Dev=true` stages to `mods-dev` instead, since the installed copy is memory-mapped
 while the game runs and cannot be overwritten.
-
-### Every part, and every quest shape
-
-The images above are captures. These are drawn, which is the one thing a capture is bad at — showing
-all of something at once:
-
-| | |
-|---|---|
-| [All ten parts](Screenshots/promo-parts-quad.png) | and [in hexagonal mode](Screenshots/promo-parts-hex.png) |
-| [All thirty-eight quest shapes](Screenshots/promo-quests-quad.png) | and [in hexagonal mode](Screenshots/promo-quests-hex.png) |
 
 Adding an eleventh part is a few lines in `ExtraShapePartCatalog` — an outline as a function of its
 sector angle, a code, and a rarity. [DESIGN.md](DESIGN.md) records what was measured rather than

@@ -134,8 +134,8 @@ def parts_sheet(part_count, sector, filename, heading, note):
 
     image = backdrop(W * SS, H * SS)
     draw = ImageDraw.Draw(image)
-    text(draw, (pad, 46), heading, font("arialbd.ttf", 52), INK)
-    text(draw, (pad, 112), note, font("arial.ttf", 20), MUTED)
+    text(draw, (pad, 38), heading, font("arialbd.ttf", 66), INK)
+    text(draw, (pad, 122), note, font("arial.ttf", 21), MUTED)
 
     for i, code in enumerate(ORDER):
         col, row = i % cols, i // cols
@@ -162,8 +162,8 @@ def quests_sheet(part_count, sector, filename, heading, note):
 
     image = backdrop(W * SS, H * SS)
     draw = ImageDraw.Draw(image)
-    text(draw, (pad, 48), heading, font("arialbd.ttf", 52), INK)
-    text(draw, (pad, 114), note, font("arial.ttf", 20), MUTED)
+    text(draw, (pad, 40), heading, font("arialbd.ttf", 66), INK)
+    text(draw, (pad, 126), note, font("arial.ttf", 21), MUTED)
 
     title_font = font("arialbd.ttf", 27)
     count_font = font("arial.ttf", 16)
@@ -191,15 +191,15 @@ if __name__ == "__main__":
     if not os.path.isdir(rd.DUMP):
         raise SystemExit(f"No dump at {rd.DUMP}. Run esp.dump in the in-game console first.")
 
-    parts_sheet(4, 90.0, "promo-parts-quad.png", "Ten new shape parts",
-                "Circle, square, windmill and star, plus these. They cut, stack, paint and "
-                "crystallise like any other shape.")
-    parts_sheet(6, 60.0, "promo-parts-hex.png", "Ten new shape parts, hexagonal",
-                "Every part is built again at 60 degrees for hexagonal mode - its own mesh, not "
-                "the quad one stretched.")
-    quests_sheet(4, 90.0, "promo-quests-quad.png", "Ten side quest chains",
-                 "Thirty-eight goals in the research screen. Every step adds one thing to the factory "
-                 "that built the step before it.")
-    quests_sheet(6, 60.0, "promo-quests-hex.png", "Ten side quest chains, hexagonal",
-                 "The same chains, rebuilt for six parts - including the vanilla shapes underneath, "
-                 "which differ per configuration.")
+    parts_sheet(4, 90.0, "promo-parts-quad.png", "EVERY NEW SHAPE PART!",
+                "Gear, cross, bar, diamond, dot, dome, wedge, sawblade, flower and leaf - each one "
+                "shown as a whole shape of itself.")
+    parts_sheet(6, 60.0, "promo-parts-hex.png", "ALL TEN, IN HEXAGONAL MODE!",
+                "Not one of them is the quad shape stretched. Every part is built a second time at "
+                "60 degrees, with its own mesh.")
+    quests_sheet(4, 90.0, "promo-quests-quad.png", "38 SIDE QUESTS FOR PROGRESSION!",
+                 "Ten chains in the research screen. Every step adds one thing to the factory that "
+                 "built the step before it - never a line from scratch.")
+    quests_sheet(6, 60.0, "promo-quests-hex.png", "AND EVERY QUEST WORKS IN HEX!",
+                 "Rebuilt for six parts, down to the vanilla shapes underneath - which are not the "
+                 "same shapes in a hexagonal save.")

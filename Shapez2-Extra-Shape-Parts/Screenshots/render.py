@@ -278,7 +278,6 @@ def card(draw, x, y, w, h):
 # --- the three images ----------------------------------------------------------------------------
 
 OUT = r"C:\Users\Quinn\Documents\Coding\shapez2-mods\Shapez2-Extra-Shape-Parts\Screenshots"
-STEAM = r"C:\Users\Quinn\Documents\Coding\shapez2-mods\Shapez2-Extra-Shape-Parts\ExtraShapeParts\Steam"
 
 FEATURED = [
     ("Vortex", "MrMrMrMr:MyMyMyMy:MgMgMgMg:MbMbMbMb"),
@@ -315,29 +314,9 @@ PATTERNS = [
 ]
 
 
-def make_preview():
-    W = H = 1024
-    image, draw = canvas(W, H)
-
-    title = font("arialbd.ttf", 54)
-    sub = font("arial.ttf", 23)
-    label = font("arialbd.ttf", 21)
-
-    text(draw, (W / 2, 66), "EXTRA SHAPE PARTS", title, INK, anchor="ma")
-    text(draw, (W / 2, 136), "Ten new quadrant types for shapez 2", sub, ACCENT, anchor="ma")
-
-    for i, (name, code) in enumerate(FEATURED):
-        col, row = i % 2, i // 2
-        cx = 268 + col * 488
-        cy = 330 + row * 350
-        draw_shape(draw, code, cx * SS, cy * SS, 148 * SS)
-        text(draw, (cx, cy + 178), name.upper(), label, MUTED, anchor="ma")
-
-    text(draw, (W / 2, H - 54), "circle  square  windmill  star  +  gear cross bar diamond dot "
-                                "dome wedge sawblade flower leaf", sub, MUTED, anchor="ma")
-
-    finish(image, W, H, os.path.join(STEAM, "preview.png"))
-    finish(image, W, H, os.path.join(OUT, "preview.png"))
+# The Steam preview is not made here any more - render_icon.py owns it. This file used to
+# write it, so running render.py silently replaced the workshop icon with an old title
+# card. Nothing said so; the icon just quietly became the wrong picture.
 
 
 def make_patterns():
@@ -406,6 +385,5 @@ def make_parts():
 
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
-    make_preview()
     make_patterns()
     make_parts()

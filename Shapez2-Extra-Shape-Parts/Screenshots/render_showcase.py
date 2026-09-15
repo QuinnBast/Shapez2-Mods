@@ -81,8 +81,8 @@ def sheet(entries, cols, filename, heading, note, tile_px=420):
     image = Image.new("RGB", (W * SS, H * SS), back)
     draw = ImageDraw.Draw(image)
 
-    text(draw, (pad, 48), heading, font("arialbd.ttf", 52), INK)
-    text(draw, (pad, 116), note, font("arial.ttf", 20), MUTED)
+    text(draw, (pad, 40), heading, font("arialbd.ttf", 66), INK)
+    text(draw, (pad, 124), note, font("arial.ttf", 21), MUTED)
 
     for i, (name, caption) in enumerate(entries):
         col, row = i % cols, i // cols
@@ -96,8 +96,7 @@ def sheet(entries, cols, filename, heading, note, tile_px=420):
 
 
 if __name__ == "__main__":
-    sheet(QUAD, 3, "showcase-quad.png", "Ten new shape parts",
-          "Mined from the map, cut, stacked, painted, pinned and crystallised like any other shape.")
-    sheet(HEX, 3, "showcase-hex.png", "And again in hexagonal mode",
-          "Every part is built a second time at 60 degrees, with its own mesh - not the quad shape "
-          "stretched to fit.")
+    sheet(QUAD, 3, "showcase-quad.png", "10 NEW SHAPES!",
+          "Mined from the map. Cut, stacked, painted, pinned and crystallised like any other shape.")
+    sheet(HEX, 3, "showcase-hex.png", "WORKS IN HEXAGONAL MODE!",
+          "Every part rebuilt at 60 degrees with its own mesh - not the quad shape stretched to fit.")
