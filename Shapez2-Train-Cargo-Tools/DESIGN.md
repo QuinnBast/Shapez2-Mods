@@ -495,6 +495,42 @@ Two consequences worth keeping:
   ScriptableObject data. The global array does read back, so `cargotools.accents` prints what
   each slot currently holds, and `cargotools.accent.<role> <slot>` repaints live.
 
+### Which slot each role takes
+
+Chosen by eye against the live palette, because nothing makes them derivable:
+`MetaAccentColorPalette` is authored data, so which slot is which colour is a thing somebody
+has to look at.
+
+| Role | Paint | Triangles |
+|---|---|---|
+| `accent` | slot 13 | 4,972 |
+| `frame` | slot 10 | 2,960 |
+| `deck` | slot 10 | 2,420 |
+| `metal` | slot 11 | 1,252 |
+| `rail` | slot 0 | 740 |
+| `collar` | slot 10 | 508 |
+| `warn` | slot 4 | 420 |
+| `fluid` | slot 7 | 418 |
+| `glass` | slot 2 | 310 |
+| `shadow` | slot 13 | 224 |
+| `hull` | slot 3 | 154 |
+| `cargo`, `trim`, `pale` | slots 10, 0, 10 | 88 each |
+| **`hullDark`** | **the shade ladder** | **6,032** |
+
+`hullDark` stays neutral deliberately. It is the largest surface in the set by a distance -
+more triangles than any other role, in all 33 meshes - so it is what everything else is read
+against, and accents stop reading as accents when the ground they sit on is one of them.
+
+**`rubber`, `light` and `scuff` are gone.** Counting triangles by role turned up three that
+painted **nothing at all** - they had been named for jobs the models do not have. A role that
+colours nothing is worse than no role: it is a console command that appears to do nothing,
+which is exactly how it was found. Add one back at the *end* of the list when there is geometry
+for it; inserting shifts every later role's sentinel.
+
+That count is worth repeating whenever roles change. The generator writes a sentinel UV per
+vertex, so the .obj files can be read back directly - there is no need to guess whether a role
+is doing any work.
+
 | Command | What it does |
 |---|---|
 | `cargotools.accents` | the 15 live accent colours, with the uv for each |

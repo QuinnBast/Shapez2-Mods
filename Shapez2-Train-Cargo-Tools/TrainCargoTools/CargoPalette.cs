@@ -77,27 +77,30 @@ namespace QuinnBast.Shapez2.TrainCargoTools
 
         private static readonly (string Role, Color Target, Ask Kind)[] Wanted =
         {
-            // The original five keep their positions, so a mesh generated before this change
-            // still resolves to the role it was authored with.
-            ("hull", Grey(0.78f), Ask.Value),       // machine body
-            ("accent", Slot(0), Ask.Accent),        // the belt rail, in the game's own accent
-            ("metal", Grey(0.60f), Ask.Value),      // brushed steel
-            ("fluid", Grey(0.58f), Ask.Value),      // tanks and pipework
-            ("cargo", Grey(0.65f), Ask.Value),      // the duct that carries packed cargo
+            // Slots chosen by eye against the live palette - see cargotools.accents. The
+            // numbers are not derivable from anything: MetaAccentColorPalette is authored data,
+            // so which slot is which colour is a thing somebody has to look at.
+            ("hull", Slot(3), Ask.Accent),          // machine body
+            ("accent", Slot(13), Ask.Accent),       // the belt rail capping
+            ("metal", Slot(11), Ask.Accent),        // brushed steel
+            ("fluid", Slot(7), Ask.Accent),         // tanks and pipework
+            ("cargo", Slot(10), Ask.Accent),        // the duct that carries packed cargo
 
-            ("hullDark", Grey(0.48f), Ask.Value),   // the body in shade, for panel breaks
-            ("deck", Grey(0.70f), Ask.Value),       // walkable surface
-            ("frame", Grey(0.32f), Ask.Value),      // structural members, legs, gantries
-            ("rail", Grey(0.84f), Ask.Value),       // bright metal capping
-            ("trim", Grey(0.55f), Ask.Value),       // banding and edges
-            ("rubber", Grey(0.13f), Ask.Value),     // belts, gaskets, tyres
-            ("warn", Slot(1), Ask.Accent),          // hazard
+            // The one role left on the shade ladder, and deliberately: it is the largest
+            // surface in the set by a distance - 6,032 triangles across all 33 meshes, more
+            // than any other role - so it is what everything else is read against. Accents
+            // stop reading as accents when the ground they sit on is one of them.
+            ("hullDark", Grey(0.48f), Ask.Value),   // the body in shade, panel breaks
+
+            ("deck", Slot(10), Ask.Accent),         // walkable surface
+            ("frame", Slot(10), Ask.Accent),        // legs, gantries, structural members
+            ("rail", Slot(0), Ask.Accent),          // bright metal capping
+            ("trim", Slot(0), Ask.Accent),          // banding and edges
+            ("warn", Slot(4), Ask.Accent),          // hazard
             ("glass", Slot(2), Ask.Accent),         // windows and screens
-            ("light", Slot(3), Ask.Accent),         // lit indicators
-            ("collar", Grey(0.42f), Ask.Value),     // pipe joints and flanges
-            ("shadow", Grey(0.20f), Ask.Value),     // deep recesses and undersides
-            ("pale", Grey(0.97f), Ask.Value),       // highlights
-            ("scuff", Grey(0.27f), Ask.Value),      // worn and dirtied faces
+            ("collar", Slot(10), Ask.Accent),       // pipe joints and flanges
+            ("shadow", Slot(13), Ask.Accent),       // deep recesses and undersides
+            ("pale", Slot(10), Ask.Accent),         // highlights
         };
 
         public static readonly string[] Roles = BuildRoles();
@@ -659,28 +662,24 @@ namespace QuinnBast.Shapez2.TrainCargoTools
             Vector2? crateTrim = Pick(cargo, 1) ?? crate;
             Vector2? liquid = Pick(fluid, 0) ?? second;
 
-            Set("hull", body);
-            Set("metal", second);
-            Set("fluid", liquid);
-            Set("cargo", crate);
-
-            // Everything the atlas would have separated, folded onto the nearest of the five.
-            // Named so the geometry does not have to change between the two paths.
             Set("hullDark", second);
-            Set("deck", body);
-            Set("frame", second);
-            Set("rail", body);
-            Set("trim", crateTrim);
-            Set("rubber", second);
-            // These four do not depend on the LUT at all, so they are right even here.
-            Set("accent", AccentSlot(0));
-            Set("warn", AccentSlot(1));
-            Set("glass", AccentSlot(2));
-            Set("light", AccentSlot(3));
-            Set("collar", crateTrim);
-            Set("shadow", second);
-            Set("pale", body);
-            Set("scuff", second);
+
+            // Every other role is an accent slot, which does not depend on the LUT at all - so
+            // these stay right even on the path that exists because the LUT could not be read.
+            foreach ((string role, Color target, Ask ask) in Wanted)
+            {
+                if (ask == Ask.Accent)
+                {
+                    Set(role, AccentSlot(Mathf.RoundToInt(target.r * 255f)));
+                }
+            }
+
+            // Kept only so the fallback has something to say when even hullDark cannot be
+            // sampled; the ladder is one role deep now.
+            if (!Resolved.ContainsKey("hullDark"))
+            {
+                Set("hullDark", body ?? crate ?? liquid);
+            }
 
             if (Ready)
             {

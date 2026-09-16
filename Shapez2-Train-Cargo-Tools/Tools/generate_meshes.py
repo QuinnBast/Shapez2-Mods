@@ -105,9 +105,13 @@ SENTINEL_V = 0.01
 ROLES = [
     "hull", "accent", "metal", "fluid", "cargo",
     "hullDark", "deck", "frame", "rail", "trim",
-    "rubber", "warn", "glass", "light", "collar",
-    "shadow", "pale", "scuff",
+    "warn", "glass", "collar", "shadow", "pale",
 ]
+
+# `rubber`, `light` and `scuff` were here and are gone: nothing in this file ever painted a
+# triangle with one. A role that colours nothing is worse than no role - it is a knob on the
+# console that appears to do nothing, which is exactly how it was found. Add one back at the
+# END of the list when there is geometry for it; inserting shifts every later role's sentinel.
 
 # One step lighter, for the chamfer a `block` or `tube` puts on its top edge. A shoulder that
 # catches the light is most of what makes a shipped building read as machined rather than as
