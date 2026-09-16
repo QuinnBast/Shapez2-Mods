@@ -446,6 +446,62 @@ A shoulder that catches the light is most of what makes a box read as machined.
 
 The result on disk: the packagers carry 12 roles each and the stores 8 to 9, against 4 before.
 
+### The colours were never in the LUT
+
+Everything above is about shades, and it had to be, because the LUT has nothing else. That was
+the wrong conclusion to stop at: **most buildings in this game are orange**, and none of that
+orange is in `_MaterialLUT`.
+
+The tell was in the shipped sample. Decoding `DiagonalCutter.fbx`'s own UV0 and looking each
+coordinate up in the dumped palette, 497 of its 1,598 vertices land on something with a hue -
+and every one of those hues is a **red**, from `(255, 0, 0)` through `(255, 87, 87)` to
+`(255, 219, 219)`. A cutter is not red. So the red is not what renders.
+
+`AccentColorPalette` is the answer:
+
+```csharp
+private static readonly int GlobalAccentColorPaletteShaderPropId =
+    Shader.PropertyToID("_G_AccentColorPalette");
+...
+Shader.SetGlobalVectorArray(GlobalAccentColorPaletteShaderPropId, AccentColorVectorArray);
+```
+
+Up to **15 live colours** in a global shader array, and a face is painted from it by where its
+UV sits. The palette texture is a 16x16 grid and one column of it is the accent column;
+`AccentColorMeshCreator.TryGenerateUniqueAccentColoredMeshRef` recolours a mesh by sliding UVs
+down that column, which makes its arithmetic the specification:
+
+```csharp
+if ((int)math.floor((vector.x + -0.0625f) * 16f) != 0) { /* not an accent vertex */ }
+int id = (int)((0.9375 - (double)vector.y) * 16.0);
+```
+
+The column test is on `u` alone - `u` in `[0.0625, 0.125)` - and the slot is a row of `v`. Read
+backwards, slot *n* sits at `(0.09375, 0.90625 - n * 0.0625)`; fifteen are addressable, since
+slot 15 would be at `v = -0.03125`, off the texture. Three of the reds this repo found in the
+LUT were at `u = 0.0684`, `0.0840` and `0.1074` - all inside that column. **The LUT paints the
+accent column red as a placeholder.**
+
+So `accent`, `warn`, `glass` and `light` now ask for accent slots 0 to 3 rather than for a cell
+of the LUT, and they need no search at all: the slot names its own coordinate. The other
+fourteen roles stay on the shade ladder, which is still the right answer for a hull.
+
+Two consequences worth keeping:
+
+- **A mod that uses slots follows the game's palette.** Where the game's own colours change -
+  by theme, or by a future update - the machines change with everything around them instead of
+  drifting away from it.
+- **The entries cannot be read statically.** `MetaAccentColorPalette` is authored
+  ScriptableObject data. The global array does read back, so `cargotools.accents` prints what
+  each slot currently holds, and `cargotools.accent.<role> <slot>` repaints live.
+
+| Command | What it does |
+|---|---|
+| `cargotools.accents` | the 15 live accent colours, with the uv for each |
+| `cargotools.accent.<role> <slot>` | paints a role from that list, no restart |
+| `cargotools.palette` | the resolved uv per role, and which path resolved it |
+| `cargotools.uv.<role> <u> <v>` | the raw form, for a coordinate off the LUT itself |
+
 ### A repaint has to work from a copy
 
 `ApplyPalette` used to rewrite the live mesh's UVs in place and match on sentinels the next

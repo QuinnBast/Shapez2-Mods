@@ -56,6 +56,9 @@ namespace QuinnBast.Shapez2.TrainCargoTools
                 "cargotools.palette", context => ReportPalette(context.Output)));
 
             Register(() => console.Register(
+                "cargotools.accents", context => ReportAccents(context.Output)));
+
+            Register(() => console.Register(
                 "cargotools.dumplift", context => DumpLifts(context.Output)));
 
             // The tint and wash commands are gone. They existed to make a cargo belt
@@ -66,6 +69,20 @@ namespace QuinnBast.Shapez2.TrainCargoTools
 
             // One command per role rather than one command taking a role name:
             // IDebugConsole.Register tops out at two options, and u and v use both.
+            // cargotools.accent.<role> <slot> - the colour form of cargotools.uv.<role>.
+            //
+            // Worth its own command rather than making people type the coordinate: the accent
+            // column is two numbers derived from a slot, and a v that lands one row off is a
+            // different colour rather than an error.
+            foreach (string role in CargoPalette.Roles)
+            {
+                string slotRole = role;
+                Register(() => console.Register(
+                    "cargotools.accent." + slotRole,
+                    new DebugConsole.IntOption("slot", 0, 14),
+                    context => SetSlot(context.Output, slotRole, context.GetInt(0))));
+            }
+
             foreach (string role in CargoPalette.Roles)
             {
                 string captured = role;
@@ -181,6 +198,58 @@ namespace QuinnBast.Shapez2.TrainCargoTools
 
             Report(output, $"{seen.Count} distinct coordinate(s) across "
                 + $"{CargoPalette.Roles.Length} role(s).");
+        }
+
+        /// Prints the game's live accent palette - the colours a face in the accent column
+        /// actually renders as.
+        ///
+        /// The entries are authored ScriptableObject data, so they cannot be read statically;
+        /// `AccentColorPalette.Update` pushes them into `_G_AccentColorPalette` as a global
+        /// shader array, and a global array reads back.
+        private void ReportAccents(Action<string> output)
+        {
+            Color[] accents = CargoPalette.LiveAccents();
+
+            if (accents.Length == 0)
+            {
+                Report(output, "_G_AccentColorPalette is not set yet - load a save first.");
+                return;
+            }
+
+            Report(output, "slot  colour               uv for cargotools.uv");
+
+            for (int slot = 0; slot < accents.Length && slot < 15; slot++)
+            {
+                Color colour = accents[slot];
+                Vector2 uv = CargoPalette.AccentSlot(slot);
+
+                Report(output, string.Format(
+                    "{0,4}  {1,3} {2,3} {3,3}  #{4}   {5:F5} {6:F5}",
+                    slot,
+                    Mathf.RoundToInt(colour.r * 255f),
+                    Mathf.RoundToInt(colour.g * 255f),
+                    Mathf.RoundToInt(colour.b * 255f),
+                    ColorUtility.ToHtmlStringRGB(colour),
+                    uv.x, uv.y));
+            }
+
+            Report(output, "cargotools.accent.<role> <slot> paints a role from this list.");
+        }
+
+        /// Points one role at an accent slot, which is the only way to give it a real colour.
+        private void SetSlot(Action<string> output, string role, int slot)
+        {
+            Vector2 uv = CargoPalette.AccentSlot(slot);
+            Appearance.Palette.Override(role, uv);
+            Appearance.RecolourMeshes();
+
+            Color[] accents = CargoPalette.LiveAccents();
+            string colour = slot < accents.Length
+                ? " (#" + ColorUtility.ToHtmlStringRGB(accents[slot]) + ")"
+                : string.Empty;
+
+            Report(output, string.Format(
+                "{0} -> accent slot {1}{2}, u={3:F5} v={4:F5}", role, slot, colour, uv.x, uv.y));
         }
 
         /// Moves one role's atlas coordinate and repaints the meshes immediately.

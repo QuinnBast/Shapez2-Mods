@@ -49,7 +49,10 @@ namespace QuinnBast.Shapez2.TrainCargoTools
         /// generate_meshes.py builds the same sentinels from a list in this same order. Append
         /// rather than insert, or every mesh on disk shifts a role to the left.
         ///
-        /// Most roles ask for a *brightness*, not a colour, and that is what the palette has.
+        /// Most roles ask for a *brightness*, because that is what the palette itself has -
+        /// but the four that want colour ask the **accent palette** instead, which is where the
+        /// game keeps its real colours. See AccentSlot.
+        ///
         /// `_MaterialLUT` dumped out of the shipped build is 256x256, three quarters of it
         /// magenta filler, and of the 32 swatches larger than a few pixels **26 are neutral**:
         /// a ladder from white through to black. The only real colours in it are pure red, a
@@ -64,8 +67,12 @@ namespace QuinnBast.Shapez2.TrainCargoTools
             /// Nearest rung of the neutral ladder to `Target`'s brightness.
             Value,
 
-            /// Nearest of the handful of actually-coloured swatches.
+            /// Nearest of the handful of actually-coloured swatches in the palette itself.
             Colour,
+
+            /// A slot in the game's live accent palette - see AccentSlot. `Target.r * 255`
+            /// carries the slot number, because the table is already a table of colours.
+            Accent,
         }
 
         private static readonly (string Role, Color Target, Ask Kind)[] Wanted =
@@ -73,7 +80,7 @@ namespace QuinnBast.Shapez2.TrainCargoTools
             // The original five keep their positions, so a mesh generated before this change
             // still resolves to the role it was authored with.
             ("hull", Grey(0.78f), Ask.Value),       // machine body
-            ("accent", Grey(0.90f), Ask.Value),     // the bright capping line on a belt rail
+            ("accent", Slot(0), Ask.Accent),        // the belt rail, in the game's own accent
             ("metal", Grey(0.60f), Ask.Value),      // brushed steel
             ("fluid", Grey(0.58f), Ask.Value),      // tanks and pipework
             ("cargo", Grey(0.65f), Ask.Value),      // the duct that carries packed cargo
@@ -84,9 +91,9 @@ namespace QuinnBast.Shapez2.TrainCargoTools
             ("rail", Grey(0.84f), Ask.Value),       // bright metal capping
             ("trim", Grey(0.55f), Ask.Value),       // banding and edges
             ("rubber", Grey(0.13f), Ask.Value),     // belts, gaskets, tyres
-            ("warn", Rgb(255, 0, 0), Ask.Colour),   // hazard
-            ("glass", Rgb(118, 231, 202), Ask.Colour),  // windows and screens
-            ("light", Rgb(105, 115, 182), Ask.Colour),  // lit indicators
+            ("warn", Slot(1), Ask.Accent),          // hazard
+            ("glass", Slot(2), Ask.Accent),         // windows and screens
+            ("light", Slot(3), Ask.Accent),         // lit indicators
             ("collar", Grey(0.42f), Ask.Value),     // pipe joints and flanges
             ("shadow", Grey(0.20f), Ask.Value),     // deep recesses and undersides
             ("pale", Grey(0.97f), Ask.Value),       // highlights
@@ -94,6 +101,63 @@ namespace QuinnBast.Shapez2.TrainCargoTools
         };
 
         public static readonly string[] Roles = BuildRoles();
+
+        /// The UV that paints a face in accent colour `slot`.
+        ///
+        /// **This is where the game keeps its colours, and it is not in the LUT.** The palette
+        /// texture is a 16x16 grid, and one column of it - `u` in `[0.0625, 0.125)` - is the
+        /// accent column: a face whose UV lands there is painted from `_G_AccentColorPalette`,
+        /// a global array of up to 15 live colours that `AccentColorPalette.Update` pushes into
+        /// every shader from `MetaAccentColorPalette`. The LUT paints that column red as a
+        /// placeholder, which is why every hue found in it was a red while the buildings on
+        /// screen are orange - the red is never what renders.
+        ///
+        /// The arithmetic is `AccentColorMeshCreator.TryGenerateUniqueAccentColoredMeshRef`'s,
+        /// read backwards. It recolours a mesh by *sliding UVs down this column*:
+        ///
+        /// ```csharp
+        /// if ((int)math.floor((vector.x + -0.0625f) * 16f) != 0) { /* not accent */ }
+        /// int id = (int)((0.9375 - (double)vector.y) * 16.0);
+        /// ```
+        ///
+        /// So the column test is on `u` alone and the slot is a row of `v`. Fifteen slots are
+        /// addressable: slot 15 would sit at `v = -0.03125`, off the texture.
+        ///
+        /// `cargotools.accents` prints what each slot currently holds, because the entries are
+        /// authored ScriptableObject data and cannot be read statically - only off the live
+        /// shader global.
+        public static Vector2 AccentSlot(int slot)
+        {
+            return new Vector2(0.09375f, 0.90625f - slot * 0.0625f);
+        }
+
+        /// A slot number wearing a `Color`, so the role table stays one shape.
+        private static Color Slot(int slot)
+        {
+            return new Color(slot / 255f, 0f, 0f);
+        }
+
+        /// The live accent palette, or an empty array when the shader global is not set.
+        ///
+        /// A global vector array survives being read back, so this is the only way to find out
+        /// what a slot actually looks like. The colours are pushed as `.linear`, so they are
+        /// converted back for reporting rather than shown as the darker linear figures.
+        public static Color[] LiveAccents()
+        {
+            Vector4[] raw = Shader.GetGlobalVectorArray("_G_AccentColorPalette");
+            if (raw == null)
+            {
+                return Array.Empty<Color>();
+            }
+
+            Color[] colours = new Color[raw.Length];
+            for (int i = 0; i < raw.Length; i++)
+            {
+                colours[i] = new Color(raw[i].x, raw[i].y, raw[i].z, 1f).gamma;
+            }
+
+            return colours;
+        }
 
         /// The colour a `_MaterialLUT` cell carries when nothing is assigned to it.
         ///
@@ -238,8 +302,19 @@ namespace QuinnBast.Shapez2.TrainCargoTools
                 HashSet<int> taken = new HashSet<int>();
                 int matched = 0;
 
-                // Colour asks first: the palette has three coloured swatches against fourteen
-                // neutral ones, so letting a Value role take a coloured cell would cost a
+                // Accent asks are not a search at all - the slot names its own coordinate, and
+                // nothing in the LUT has to be consulted or claimed.
+                foreach ((string role, Color target, Ask ask) in Wanted)
+                {
+                    if (ask == Ask.Accent)
+                    {
+                        Resolved[role] = AccentSlot(Mathf.RoundToInt(target.r * 255f));
+                        matched++;
+                    }
+                }
+
+                // Colour asks before Value ones: the palette has three coloured swatches against
+                // two dozen neutral, so letting a Value role take a coloured cell would cost a
                 // Colour role the only cell that could have served it.
                 foreach (Ask kind in new[] { Ask.Colour, Ask.Value })
                 {
@@ -585,7 +660,6 @@ namespace QuinnBast.Shapez2.TrainCargoTools
             Vector2? liquid = Pick(fluid, 0) ?? second;
 
             Set("hull", body);
-            Set("accent", crateTrim);
             Set("metal", second);
             Set("fluid", liquid);
             Set("cargo", crate);
@@ -598,9 +672,11 @@ namespace QuinnBast.Shapez2.TrainCargoTools
             Set("rail", body);
             Set("trim", crateTrim);
             Set("rubber", second);
-            Set("warn", crateTrim);
-            Set("glass", liquid);
-            Set("light", liquid);
+            // These four do not depend on the LUT at all, so they are right even here.
+            Set("accent", AccentSlot(0));
+            Set("warn", AccentSlot(1));
+            Set("glass", AccentSlot(2));
+            Set("light", AccentSlot(3));
             Set("collar", crateTrim);
             Set("shadow", second);
             Set("pale", body);
