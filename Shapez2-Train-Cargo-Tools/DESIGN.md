@@ -367,11 +367,11 @@ of the atlas. And sampled colours are valid, not art-directed. Either way:
 Live tuning earns its keep because a mod DLL is memory-mapped once loaded, so new code needs
 a restart - and a colour is the definition of something that has to be judged by eye.
 
-### The palette can be read, so a role can ask for a colour
+### The palette can be read - and it is a shade ladder, not a colour palette
 
-Sampling vanilla meshes works and is the wrong ceiling. It yields a handful of coordinates,
-so the five roles were most of what the machines had, and **four flat colours across a whole
-chunk-sized machine is the single thing that makes them read as unfinished** next to shipped
+Sampling vanilla meshes works and is the wrong ceiling. It yields a handful of coordinates, so
+the five roles were most of what the machines had, and **four flat colours across a whole
+chunk-sized machine is the single thing that made them read as unfinished** next to shipped
 art. Measured, rather than asserted:
 
 | | verts | tris | distinct palette entries |
@@ -379,49 +379,55 @@ art. Measured, rather than asserted:
 | `DiagonalCutter.fbx`, the shipped sample - **one tile** | 1,061 | 1,129 | **319** |
 | `FluidCargoStore.obj` before this change - **a whole chunk** | 834 | 1,492 | **4** |
 
-The polygon budget was never the problem. The colour budget was, by two orders of magnitude.
+The polygon budget was never the problem. The colour budget was.
 
 **And the gap is not texture.** `UberBuildingShader` has no `_BaseMap` and no `_MainTex` at
 all. What it has is `_MaterialLUT`, a 256x256 *material palette*, plus procedural metal, noise
-and scratch passes layered over whatever UV0 samples - passes these meshes already get. So
-there is no albedo map missing here; there is a palette being used four cells at a time.
+and scratch passes layered over whatever UV0 samples - passes these meshes already get. There
+is no albedo map missing here.
 
 A palette can be read. `Graphics.Blit` to a `RenderTexture` and `ReadPixels` back works on a
-texture with `Read/Write Enabled` off, which every shipped texture has - it is the same trick
-`cargotools.dumpatlas` uses, moved to load time. So `CargoPalette` now states the colour each
-role *wants* and takes the nearest cell to it, which is a measurement of the game's own art
-rather than a rank off one mesh.
+texture with `Read/Write Enabled` off, which every shipped texture has - the same trick
+`cargotools.dumpatlas` uses, moved to load time.
 
-Two constraints make the search honest rather than lucky:
+**What is actually in it, which changes the plan.** Dumped from the shipped build, the LUT is
+**75.3% unassigned** - the opaque magenta filler, the classic "no texture" pink. Of the 36
+cells left after deduplication, **33 are neutral**: a ladder from white to black. The only real
+colours are pure red, one teal `(118, 231, 202)` and one periwinkle `(105, 115, 182)`. There is
+no orange, no yellow, nothing warm. *The orange on a vanilla platform edge does not come from
+this LUT*, so no amount of searching will find it.
 
-- **It only looks where vanilla art looks.** `DiagonalCutter`'s UVs occupy
-  `U[0.095,0.476] V[0.587,0.919]` and nothing else. A 256x256 palette is mostly unused space,
-  and an unused cell is usually black - so an unconstrained nearest-colour search answers
-  `rubber` and `shadow` with a *hole* in the atlas rather than with a colour somebody chose.
-- **It only takes cells whose four neighbours match.** A palette is blocks of flat colour and
-  the sampler filters bilinearly, so a coordinate on the seam between two blocks renders as a
-  blend of both - a colour that appears nowhere in the game. Interior cells survive filtering.
+So the separation available is **light against dark**, which on inspection is how the shipped
+buildings read anyway. Roles ask for a rung on that ladder; the three that genuinely want a hue
+- `warn`, `glass`, `light` - ask for one of the three that exist. The two roles that had been
+named for a colour the palette does not hold, `copper` and `wear`, are now `collar` and
+`scuff`: a name describing the ask would be a promise the code cannot keep.
+
+Three filters make the search usable rather than lucky, each for a failure that looks
+deliberate rather than broken:
+
+- **The filler is rejected by colour, not by alpha.** It is fully opaque, so an alpha test
+  keeps it and a role asking for something absent is answered with a hole in the atlas.
+- **Only cells whose four neighbours match**, sampled at the texel centre. A palette is blocks
+  of flat colour and the sampler filters bilinearly, so a seam coordinate renders as a blend of
+  two swatches - a colour that appears nowhere in the game. It also discards the antialiased
+  fringe around the filler, a few hundred near-pink cells a warm role would leap at.
+- **Roles claim cells greedily, against what is already taken.** This is the one that matters
+  most and was missing from the first attempt: asking eighteen roles independently for their
+  nearest cell returned **ten** distinct answers, with four sharing one mid grey and every
+  role that wanted a hue landing on a grey. Simulated against the real dump, claiming gives
+  **18 of 18**, spanning luma 0.14 to 1.00 plus the three hues.
 
 Sampling vanilla meshes is kept as the fallback for when the material or the LUT cannot be
 reached, with the extra roles aliased onto the five it can find. `cargotools.palette` reports
 which path ran and how many distinct coordinates came out of it, because "the machine looks
 flat" and "the fallback ran" are the same symptom.
 
-The eighteen roles are named for the **job** a colour does, not for the colour itself -
-`hull`, `hullDark`, `deck`, `frame`, `rail`, `trim`, `rubber`, `warn`, `glass`, `light`,
-`copper`, `shadow`, `pale`, `wear` alongside the original five. Nothing here can know what the
-atlas holds, so a name describing the ask would be a promise the code cannot keep; a name
-describing the job keeps reassigning a part a decision about the machine.
+`block` and `tube` take the chamfer in a **lighter** role than the body (see `LIGHTER` in the
+generator). That is free detail: the geometry was already two lofts, they simply shared a role.
+A shoulder that catches the light is most of what makes a box read as machined.
 
-`block` and `tube` now take the chamfer in a **lighter** role than the body (see `LIGHTER` in
-the generator). That is free detail: the geometry was already two lofts, they simply shared a
-role. It roughly doubles the zone count everywhere it applies, and a shoulder that catches the
-light is most of what makes a box read as machined.
-
-The result on disk, from the same count as the table above: the packagers carry 12 roles each
-and the stores 8 to 9, against 4 before. **Untested in game at the time of writing** - whether
-the nearest-colour search lands on colours that belong together is exactly the thing that has
-to be looked at, and `cargotools.uv.<role>` is how it gets corrected.
+The result on disk: the packagers carry 12 roles each and the stores 8 to 9, against 4 before.
 
 ### A repaint has to work from a copy
 

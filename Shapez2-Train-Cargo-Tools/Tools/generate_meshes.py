@@ -105,8 +105,8 @@ SENTINEL_V = 0.01
 ROLES = [
     "hull", "accent", "metal", "fluid", "cargo",
     "hullDark", "deck", "frame", "rail", "trim",
-    "rubber", "warn", "glass", "light", "copper",
-    "shadow", "pale", "wear",
+    "rubber", "warn", "glass", "light", "collar",
+    "shadow", "pale", "scuff",
 ]
 
 # One step lighter, for the chamfer a `block` or `tube` puts on its top edge. A shoulder that
@@ -666,7 +666,7 @@ def cargo_track_right():
 # markers: anything standing off the machine gets read as a connector, or as damage.
 
 
-def flange(mesh, axis, along, cross, y, r, uv="copper", thickness=0.45):
+def flange(mesh, axis, along, cross, y, r, uv="collar", thickness=0.45):
     """A collar around a pipe. Reads as a joint, and breaks up a long bare cylinder."""
     if axis == "x":
         pipe_x(mesh, along - thickness, along + thickness, cross, y, r, uv, segments=14)
@@ -769,7 +769,7 @@ def duct(mesh, x0, x1, uv="cargo"):
     block(mesh, cx, 0.0, abs(x1 - x0), DUCT_SZ, DUCT_Y0, DUCT_Y1, uv, bevel=0.5, cap=0.3)
     collar_x = x1 if x1 > x0 else x0
     block(mesh, collar_x, 0.0, 0.9, DUCT_SZ + 1.4, DUCT_Y0 - 0.3, DUCT_Y1 + 0.5,
-          "copper", bevel=0.3, cap=0.25)
+          "collar", bevel=0.3, cap=0.25)
 
 
 def gantry(mesh, y_top, beam_thickness=1.3, span=7.6):
@@ -1012,8 +1012,8 @@ def fluid_cargo_unpackager():
 
     # Relief manifold off the top, the counterpart to the shape unpackager's chutes.
     for z in (-4.2, 4.2):
-        tube(m, 0.0, z, 0.75, 5.4, 8.6, "copper", segments=10)
-    pipe_z(m, -4.2, 4.2, 0.0, 8.6, 0.75, "copper", segments=10)
+        tube(m, 0.0, z, 0.75, 5.4, 8.6, "collar", segments=10)
+    pipe_z(m, -4.2, 4.2, 0.0, 8.6, 0.75, "collar", segments=10)
 
     # Detail: pipe collars, banding around the standing tank, a handwheel, a box and pads.
     flange(m, "x", -2.9, 0.0, 2.3, 2.2)

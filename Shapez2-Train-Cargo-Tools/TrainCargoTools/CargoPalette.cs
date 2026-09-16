@@ -43,55 +43,68 @@ namespace QuinnBast.Shapez2.TrainCargoTools
         /// of the atlas rather than looking almost right.
         public const float SentinelV = 0.01f;
 
-        /// The roles a mesh can be authored in, and the colour each one is asking the atlas for.
+        /// What each role asks the palette for.
         ///
         /// **Order is load-bearing**: `Sentinel(n)` is `((n + 1) / 100, SentinelV)` and
         /// generate_meshes.py builds the same sentinels from a list in this same order. Append
         /// rather than insert, or every mesh on disk shifts a role to the left.
         ///
-        /// The targets are asks, not results. Nothing guarantees the atlas holds a yellow, and
-        /// the nearest cell to one is whatever the art actually has - which is the point: a role
-        /// lands in the game's palette even when its ask was optimistic. What the roles are
-        /// *named* for is the job the colour does on a machine, so reassigning geometry stays a
-        /// matter of intent rather than of remembering which grey was which.
-        private static readonly (string Role, Color Target)[] Wanted =
+        /// Most roles ask for a *brightness*, not a colour, and that is what the palette has.
+        /// `_MaterialLUT` dumped out of the shipped build is 256x256, three quarters of it
+        /// magenta filler, and of the 32 swatches larger than a few pixels **26 are neutral**:
+        /// a ladder from white through to black. The only real colours in it are pure red, a
+        /// teal and a periwinkle. There is no orange, no yellow and nothing warm at all - the
+        /// orange on a vanilla platform edge does not come from here.
+        ///
+        /// So the separation available is light against dark, which is also how the shipped
+        /// buildings read once you look for it. Roles ask for a rung on that ladder; the three
+        /// that genuinely want a hue ask for one of the three that exist.
+        private enum Ask
+        {
+            /// Nearest rung of the neutral ladder to `Target`'s brightness.
+            Value,
+
+            /// Nearest of the handful of actually-coloured swatches.
+            Colour,
+        }
+
+        private static readonly (string Role, Color Target, Ask Kind)[] Wanted =
         {
             // The original five keep their positions, so a mesh generated before this change
             // still resolves to the role it was authored with.
-            ("hull", Rgb(196, 198, 196)),      // machine body, light warm grey
-            ("accent", Rgb(244, 158, 36)),     // the orange on a platform edge
-            ("metal", Rgb(140, 146, 154)),     // brushed steel
-            ("fluid", Rgb(110, 140, 168)),     // pipework blue-grey
-            ("cargo", Rgb(176, 168, 148)),     // container sand
+            ("hull", Grey(0.78f), Ask.Value),       // machine body
+            ("accent", Grey(0.90f), Ask.Value),     // the bright capping line on a belt rail
+            ("metal", Grey(0.60f), Ask.Value),      // brushed steel
+            ("fluid", Grey(0.58f), Ask.Value),      // tanks and pipework
+            ("cargo", Grey(0.65f), Ask.Value),      // the duct that carries packed cargo
 
-            ("hullDark", Rgb(120, 124, 130)),  // the body in shade, for panel breaks
-            ("deck", Rgb(158, 160, 162)),      // walkable surface
-            ("frame", Rgb(74, 78, 86)),        // structural members, legs, gantries
-            ("rail", Rgb(214, 218, 224)),      // bright metal capping
-            ("trim", Rgb(150, 130, 106)),      // warm mid, for worn edges and crate banding
-            ("rubber", Rgb(38, 40, 46)),       // belts, gaskets, tyres
-            ("warn", Rgb(238, 206, 62)),       // hazard yellow
-            ("glass", Rgb(96, 190, 214)),      // windows and screens
-            ("light", Rgb(70, 150, 240)),      // lit indicators
-            ("copper", Rgb(186, 122, 74)),     // warm metal, pipe collars
-            ("shadow", Rgb(56, 58, 64)),       // deep recesses and undersides
-            ("pale", Rgb(236, 238, 240)),      // off-white highlights
-            ("wear", Rgb(140, 86, 58)),        // rust and scuffing
+            ("hullDark", Grey(0.48f), Ask.Value),   // the body in shade, for panel breaks
+            ("deck", Grey(0.70f), Ask.Value),       // walkable surface
+            ("frame", Grey(0.32f), Ask.Value),      // structural members, legs, gantries
+            ("rail", Grey(0.84f), Ask.Value),       // bright metal capping
+            ("trim", Grey(0.55f), Ask.Value),       // banding and edges
+            ("rubber", Grey(0.13f), Ask.Value),     // belts, gaskets, tyres
+            ("warn", Rgb(255, 0, 0), Ask.Colour),   // hazard
+            ("glass", Rgb(118, 231, 202), Ask.Colour),  // windows and screens
+            ("light", Rgb(105, 115, 182), Ask.Colour),  // lit indicators
+            ("collar", Grey(0.42f), Ask.Value),     // pipe joints and flanges
+            ("shadow", Grey(0.20f), Ask.Value),     // deep recesses and undersides
+            ("pale", Grey(0.97f), Ask.Value),       // highlights
+            ("scuff", Grey(0.27f), Ask.Value),      // worn and dirtied faces
         };
 
         public static readonly string[] Roles = BuildRoles();
 
-        /// The rectangle of the atlas the art actually uses.
+        /// The colour a `_MaterialLUT` cell carries when nothing is assigned to it.
         ///
-        /// Measured off DiagonalCutter.fbx, the shipped sample building: its 319 UVs occupy
-        /// U[0.095, 0.476] V[0.587, 0.919] and nothing else. A 256x256 palette is mostly unused
-        /// space, and an unused cell is usually black - so an unconstrained nearest-colour search
-        /// answers "rubber" and "shadow" with a hole in the atlas rather than with a colour
-        /// somebody chose. Searching only where a vanilla building sampled cannot do that.
-        private const float WindowMinU = 0.09f;
-        private const float WindowMaxU = 0.48f;
-        private const float WindowMinV = 0.58f;
-        private const float WindowMaxV = 0.93f;
+        /// Three quarters of the palette is this magenta, and it is **fully opaque** - so an
+        /// alpha test does not reject it and a nearest-colour search will happily answer with a
+        /// hole in the atlas. It is the classic "no texture" pink, chosen to be impossible to
+        /// mistake for art, which also makes it safe to reject by value.
+        private static bool IsUnassigned(Color32 cell)
+        {
+            return cell.r > 230 && cell.g < 60 && cell.b > 190;
+        }
 
         private readonly Dictionary<string, Vector2> Resolved = new Dictionary<string, Vector2>();
         private readonly ILogger Log;
@@ -117,6 +130,32 @@ namespace QuinnBast.Shapez2.TrainCargoTools
         private static Color Rgb(int r, int g, int b)
         {
             return new Color(r / 255f, g / 255f, b / 255f);
+        }
+
+        /// A rung on the neutral ladder, given as brightness.
+        private static Color Grey(float value)
+        {
+            return new Color(value, value, value);
+        }
+
+        /// Rec. 601 luma, which is what "one of these is plainly darker" means to the eye.
+        private static float Luma(Color32 cell)
+        {
+            return (0.30f * cell.r + 0.59f * cell.g + 0.11f * cell.b) / 255f;
+        }
+
+        private static float Luma(Color colour)
+        {
+            return 0.30f * colour.r + 0.59f * colour.g + 0.11f * colour.b;
+        }
+
+        /// How far a colour is from grey. The palette's real colours sit far above this and its
+        /// ladder far below, with nothing in between, so the threshold is not delicate.
+        private static float Saturation(Color32 cell)
+        {
+            int max = Mathf.Max(cell.r, Mathf.Max(cell.g, cell.b));
+            int min = Mathf.Min(cell.r, Mathf.Min(cell.g, cell.b));
+            return max == 0 ? 0f : (max - min) / (float)max;
         }
 
         private static string[] BuildRoles()
@@ -154,7 +193,17 @@ namespace QuinnBast.Shapez2.TrainCargoTools
 
         // --------------------------------------------------------------- the material palette
 
-        /// Reads `_MaterialLUT` and gives every role the cell closest to the colour it asked for.
+        /// Reads `_MaterialLUT` and gives every role a cell of its own.
+        ///
+        /// **Of its own** is the whole difference between this and the first attempt. Asking
+        /// eighteen roles independently for their nearest cell gave ten answers: four roles
+        /// shared one mid grey, and the six that wanted a hue all landed on greys, because the
+        /// palette holds no orange for them to find. A machine with ten colours where the model
+        /// names eighteen reads exactly as flat as one with four.
+        ///
+        /// So the roles are assigned greedily against a set of cells already spoken for. The
+        /// ones asking for a hue go first, because only a handful of coloured cells exist while
+        /// the neutral ladder has rungs to spare.
         private bool ResolveFromAtlas(VisualThemeBaseResources theme)
         {
             Texture2D atlas = null;
@@ -167,32 +216,48 @@ namespace QuinnBast.Shapez2.TrainCargoTools
                     return false;
                 }
 
-                Color32[] pixels = atlas.GetPixels32();
-                int width = atlas.width;
-                int height = atlas.height;
+                List<Swatch> swatches = Swatches(atlas);
+                if (swatches.Count == 0)
+                {
+                    Log.Info?.Log(
+                        "The material palette held no usable cell; falling back to sampling "
+                        + "vanilla meshes.");
+                    return false;
+                }
 
+                HashSet<int> taken = new HashSet<int>();
                 int matched = 0;
 
-                foreach ((string role, Color target) in Wanted)
+                // Colour asks first: the palette has three coloured swatches against fourteen
+                // neutral ones, so letting a Value role take a coloured cell would cost a
+                // Colour role the only cell that could have served it.
+                foreach (Ask kind in new[] { Ask.Colour, Ask.Value })
                 {
-                    if (TryNearest(pixels, width, height, target, out Vector2 uv))
+                    foreach ((string role, Color target, Ask ask) in Wanted)
                     {
-                        Resolved[role] = uv;
-                        matched++;
+                        if (ask != kind)
+                        {
+                            continue;
+                        }
+
+                        if (TryClaim(swatches, taken, target, ask, out Vector2 uv))
+                        {
+                            Resolved[role] = uv;
+                            matched++;
+                        }
                     }
                 }
 
                 if (matched == 0)
                 {
-                    Log.Info?.Log(
-                        "The material palette held no usable cell in the window vanilla art "
-                        + "samples from; falling back to sampling vanilla meshes.");
                     return false;
                 }
 
-                Source = $"_MaterialLUT {width}x{height}";
+                Source = $"_MaterialLUT {atlas.width}x{atlas.height}, "
+                    + $"{swatches.Count} usable cell(s)";
                 Log.Info?.Log($"Resolved {matched}/{Wanted.Length} colour roles from the "
-                    + $"{width}x{height} material palette.");
+                    + $"{atlas.width}x{atlas.height} material palette "
+                    + $"({swatches.Count} usable cells).");
                 return true;
             }
             catch (Exception exception)
@@ -210,6 +275,135 @@ namespace QuinnBast.Shapez2.TrainCargoTools
                     UnityEngine.Object.Destroy(atlas);
                 }
             }
+        }
+
+        /// One usable cell of the palette: where it is, and what colour it holds.
+        private readonly struct Swatch
+        {
+            public readonly Vector2 UV;
+            public readonly Color32 Colour;
+            public readonly float Luma;
+            public readonly float Saturation;
+
+            public Swatch(Vector2 uv, Color32 colour, float luma, float saturation)
+            {
+                UV = uv;
+                Colour = colour;
+                Luma = luma;
+                Saturation = saturation;
+            }
+        }
+
+        /// Every distinct colour the palette actually assigns, with a coordinate that samples it
+        /// cleanly.
+        ///
+        /// Three filters, each for a failure that looks deliberate rather than broken:
+        ///
+        /// - **Unassigned cells are rejected by colour, not by alpha.** The filler magenta is
+        ///   fully opaque, so an alpha test keeps it, and a role asking for something the
+        ///   palette does not have gets answered with a hole in the atlas.
+        /// - **Only cells whose four neighbours match.** A palette is blocks of flat colour and
+        ///   the sampler filters bilinearly, so a coordinate on the seam between two blocks
+        ///   renders as a blend of both - a colour that appears nowhere in the game. It also
+        ///   discards the antialiased fringe around the magenta, which is otherwise a few
+        ///   hundred near-pink cells that a warm role would leap at.
+        /// - **One entry per distinct colour.** The ladder repeats across several columns, and
+        ///   without this the greedy assignment above would hand two roles the same grey twice
+        ///   over while believing they differed.
+        private static List<Swatch> Swatches(Texture2D atlas)
+        {
+            Color32[] pixels = atlas.GetPixels32();
+            int width = atlas.width;
+            int height = atlas.height;
+
+            Dictionary<int, Swatch> byColour = new Dictionary<int, Swatch>();
+
+            for (int y = 1; y < height - 1; y++)
+            {
+                for (int x = 1; x < width - 1; x++)
+                {
+                    Color32 here = pixels[y * width + x];
+
+                    if (here.a < 128 || IsUnassigned(here) || !Interior(pixels, width, x, y))
+                    {
+                        continue;
+                    }
+
+                    int key = (here.r << 16) | (here.g << 8) | here.b;
+                    if (byColour.ContainsKey(key))
+                    {
+                        continue;
+                    }
+
+                    // The centre of the texel, not its corner, for the same filtering reason
+                    // the neighbours are checked at all.
+                    byColour[key] = new Swatch(
+                        new Vector2((x + 0.5f) / width, (y + 0.5f) / height),
+                        here, Luma(here), Saturation(here));
+                }
+            }
+
+            return new List<Swatch>(byColour.Values);
+        }
+
+        /// Takes the best unclaimed swatch for one role, or nothing if its pool is empty.
+        ///
+        /// A Value ask is scored on brightness alone. Scoring it on all three channels instead
+        /// would let a role asking for a mid grey take the palette's teal, which is the same
+        /// brightness and emphatically not the same thing.
+        private static bool TryClaim(
+            List<Swatch> swatches, HashSet<int> taken, Color target, Ask ask, out Vector2 uv)
+        {
+            uv = default;
+
+            const float Chromatic = 0.25f;
+
+            float best = float.MaxValue;
+            int bestIndex = -1;
+
+            for (int i = 0; i < swatches.Count; i++)
+            {
+                if (taken.Contains(i))
+                {
+                    continue;
+                }
+
+                Swatch swatch = swatches[i];
+                bool coloured = swatch.Saturation > Chromatic;
+
+                if (coloured != (ask == Ask.Colour))
+                {
+                    continue;
+                }
+
+                float distance;
+                if (ask == Ask.Value)
+                {
+                    distance = Mathf.Abs(swatch.Luma - Luma(target));
+                }
+                else
+                {
+                    float dr = swatch.Colour.r / 255f - target.r;
+                    float dg = swatch.Colour.g / 255f - target.g;
+                    float db = swatch.Colour.b / 255f - target.b;
+                    distance = dr * dr + dg * dg + db * db;
+                }
+
+                if (distance < best)
+                {
+                    best = distance;
+                    bestIndex = i;
+                }
+            }
+
+            if (bestIndex < 0)
+            {
+                return false;
+            }
+
+            taken.Add(bestIndex);
+            uv = swatches[bestIndex].UV;
+            return true;
         }
 
         /// Copies the island material's palette into a texture that can be read.
@@ -287,68 +481,6 @@ namespace QuinnBast.Shapez2.TrainCargoTools
             return null;
         }
 
-        /// The UV of the atlas cell closest to `target`, searched only inside the window vanilla
-        /// art uses.
-        ///
-        /// Cells on the boundary between two swatches are skipped. A palette is blocks of flat
-        /// colour, the sampler filters bilinearly, and a coordinate landing on the seam between
-        /// two blocks reads as a blend of both - which at a distance is a colour that appears
-        /// nowhere in the game. Requiring the four neighbours to match means the coordinate is
-        /// inside a block, so it survives filtering.
-        private static bool TryNearest(
-            Color32[] pixels, int width, int height, Color target, out Vector2 uv)
-        {
-            uv = default;
-
-            int x0 = Mathf.Clamp(Mathf.FloorToInt(WindowMinU * width), 1, width - 2);
-            int x1 = Mathf.Clamp(Mathf.CeilToInt(WindowMaxU * width), 1, width - 2);
-            int y0 = Mathf.Clamp(Mathf.FloorToInt(WindowMinV * height), 1, height - 2);
-            int y1 = Mathf.Clamp(Mathf.CeilToInt(WindowMaxV * height), 1, height - 2);
-
-            // Two passes over the same window: interior cells first, and if the palette turns
-            // out to be finer than one cell per swatch, anything opaque on the second.
-            for (int pass = 0; pass < 2; pass++)
-            {
-                float best = float.MaxValue;
-                int bestX = -1;
-                int bestY = -1;
-
-                for (int y = y0; y <= y1; y++)
-                {
-                    for (int x = x0; x <= x1; x++)
-                    {
-                        Color32 here = pixels[y * width + x];
-                        if (here.a < 128)
-                        {
-                            continue;
-                        }
-
-                        if (pass == 0 && !Interior(pixels, width, x, y))
-                        {
-                            continue;
-                        }
-
-                        float distance = Distance(here, target);
-                        if (distance < best)
-                        {
-                            best = distance;
-                            bestX = x;
-                            bestY = y;
-                        }
-                    }
-                }
-
-                if (bestX >= 0)
-                {
-                    // The centre of the texel, not its corner, for the same filtering reason.
-                    uv = new Vector2((bestX + 0.5f) / width, (bestY + 0.5f) / height);
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
         /// Whether a cell's four neighbours carry the same colour it does.
         private static bool Interior(Color32[] pixels, int width, int x, int y)
         {
@@ -417,10 +549,10 @@ namespace QuinnBast.Shapez2.TrainCargoTools
             Set("warn", crateTrim);
             Set("glass", liquid);
             Set("light", liquid);
-            Set("copper", crateTrim);
+            Set("collar", crateTrim);
             Set("shadow", second);
             Set("pale", body);
-            Set("wear", crateTrim);
+            Set("scuff", second);
 
             if (Ready)
             {
