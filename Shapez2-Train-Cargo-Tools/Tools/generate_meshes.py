@@ -330,12 +330,50 @@ def pipe_z(mesh, z0, z1, cx, y, r, uv="fluid", segments=14):
     _axis_tube(mesh, "z", z0, z1, cx, y, r, uv, segments)
 
 
-def hopper(mesh, cx, cz, top_sx, top_sz, bottom_sx, bottom_sz, y0, y1, uv="hullDark"):
-    """An open funnel: wide at the top, narrow at the bottom, no lid."""
-    loft(mesh,
-         octagon(cx, cz, bottom_sx, bottom_sz, 0.4),
-         octagon(cx, cz, top_sx, top_sz, 0.8),
-         y0, y1, uv, cap_bottom=True, cap_top=False)
+def hopper(mesh, cx, cz, top_sx, top_sz, bottom_sx, bottom_sz, y0, y1, uv="hullDark",
+           wall=0.7):
+    """A funnel with a mouth you can see into: wide at the top, narrow at the bottom.
+
+    **Double-skinned, not an open shell.** The first version was one cone of triangles with no
+    lid, which is what a funnel looks like on paper and is invisible in this game: the camera
+    looks down into the mouth, the inside of a single-skinned cone is backfaces, backfaces are
+    culled, and you see straight through the machine to the platform behind it. It read as the
+    hopper not rendering at all, with a bit of it clipping at the edges where the outer skin
+    was still turned towards the camera.
+
+    So the funnel is a solid with a hollow in it: an outer skin, a rim across the top, and an
+    inner skin going back down that faces *up and inwards*, which is what makes the cavity
+    something you can actually look into. `wall` is how thick the lip reads from above.
+    """
+    outer_bottom = octagon(cx, cz, bottom_sx, bottom_sz, 0.4)
+    outer_top = octagon(cx, cz, top_sx, top_sz, 0.8)
+    inner_top = inset(outer_top, wall)
+    inner_bottom = inset(outer_bottom, wall * 0.5)
+
+    # The cavity floor sits a wall's thickness above the outfeed, so the funnel has a bottom
+    # rather than a hole through to the plinth.
+    floor = y0 + wall
+
+    # Outer skin, closed underneath, open at the rim.
+    loft(mesh, outer_bottom, outer_top, y0, y1, uv, cap_bottom=True, cap_top=False)
+
+    # The rim. Wound the way `loft`'s top cap is - against the profile's own direction - so it
+    # faces up; the boundary-edge check catches this immediately if it is the other way round.
+    n = len(outer_top)
+    for i in range(n):
+        j = (i + 1) % n
+        mesh.quad((outer_top[j][0], y1, outer_top[j][1]),
+                  (outer_top[i][0], y1, outer_top[i][1]),
+                  (inner_top[i][0], y1, inner_top[i][1]),
+                  (inner_top[j][0], y1, inner_top[j][1]), uv)
+
+    # The cavity: the same funnel again, turned inside out so its faces point back at the
+    # camera. Built into a scratch mesh and flipped, which is how _axis_tube does it too -
+    # reversing a loft in place would mean reimplementing it.
+    bowl = Mesh()
+    loft(bowl, inner_bottom, inner_top, floor, y1, uv, cap_bottom=True, cap_top=False)
+    bowl.tris = [(c, b, a, u) for a, b, c, u in bowl.tris]
+    mesh.extend(bowl)
 
 
 def legs(mesh, xs, zs, y0, y1, size=1.3, uv="frame"):
@@ -412,24 +450,53 @@ def _ring(frame, a0, a1, u0, u1):
 
 
 def sweep_box(mesh, path, a0, a1, u0, u1, uv="hull", caps=True):
-    """A rectangular beam following a path. `a` is across the path, `u` is up from TRACK_Y."""
+    """A rectangular beam following a path. `a` is across the path, `u` is up from TRACK_Y.
+
+    **`a0` must be the lower bound**, and it is swapped here rather than trusted, because every
+    mirrored call in this file gets it the other way round. `_ring` walks its four corners in
+    the order a0-low, a1-low, a1-high, a0-high; with a0 above a1 that circuit runs the opposite
+    way and every quad in the sweep comes out wound inward.
+
+    The symptom is a part that renders see-through in game and perfectly well in any viewer
+    that does not backface-cull. It went unnoticed because the generator's winding check was
+    whole-mesh: `for side in (-1, 1)` produced one good wall and one inverted one, and the
+    sum of the two is still positive. The check is per-component now.
+    """
+    if a0 > a1:
+        a0, a1 = a1, a0
+
     rings = [_ring(f, a0, a1, u0, u1) for f in path]
+
+    scratch = Mesh()
 
     for i in range(len(rings) - 1):
         lo, hi = rings[i], rings[i + 1]
         for j in range(4):
             k = (j + 1) % 4
-            mesh.quad(lo[j], hi[j], hi[k], lo[k], uv)
+            scratch.quad(lo[j], hi[j], hi[k], lo[k], uv)
 
     if caps:
         # Wound against the side walls, not with them. The first pass had these the same way
         # round and every box reported eight unmatched edges - the generator's boundary-edge
         # check named it immediately, which is exactly what it is for.
         first, last = rings[0], rings[-1]
-        mesh.tri(first[0], first[1], first[2], uv)
-        mesh.tri(first[0], first[2], first[3], uv)
-        mesh.tri(last[0], last[2], last[1], uv)
-        mesh.tri(last[0], last[3], last[2], uv)
+        scratch.tri(first[0], first[1], first[2], uv)
+        scratch.tri(first[0], first[2], first[3], uv)
+        scratch.tri(last[0], last[2], last[1], uv)
+        scratch.tri(last[0], last[3], last[2], uv)
+
+        # Then ask the finished solid which way it is facing, rather than reasoning about it.
+        #
+        # Swapping a0 and a1 above fixes the mirrored calls, and is not enough on its own: a
+        # ramp's sleepers climb 2.5 units across a box 0.26 tall, so the cross-section is
+        # sheared far past its own height and the circuit reverses again. Chasing that case by
+        # case is how the first two were missed. A closed surface's signed volume is
+        # origin-independent, so this is exact rather than a heuristic - and it is the same
+        # flip cargo_track and cargo_junction already apply to themselves.
+        if signed_volume(scratch.tris) < 0:
+            scratch.tris = [(c, b, a, u) for a, b, c, u in scratch.tris]
+
+    mesh.extend(scratch)
 
 
 def cargo_track(path):
@@ -1082,6 +1149,38 @@ def signed_volume(tris):
     return total
 
 
+def components(tris):
+    """Groups triangles that share a vertex position, so each closed solid is checked alone.
+
+    Parts that merely overlap - junction arms, a rail sitting proud of a wall - share no exact
+    vertex and stay separate, which is what makes a per-part winding check possible at all.
+    """
+    parent = {}
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a, b):
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[rb] = ra
+
+    for triangle in tris:
+        for vertex in triangle[:3]:
+            parent.setdefault(vertex, vertex)
+        union(triangle[0], triangle[1])
+        union(triangle[1], triangle[2])
+
+    groups = {}
+    for triangle in tris:
+        groups.setdefault(find(triangle[0]), []).append(triangle)
+
+    return list(groups.values())
+
+
 def boundary_edges(tris):
     """Directed edges with no opposing twin, i.e. the holes.
 
@@ -1148,9 +1247,10 @@ def main():
     if not os.path.isdir(out):
         sys.exit("No Resources folder at %s" % out)
 
-    # Only the two machines with an open funnel should have a rim. Anything else reporting
-    # boundary edges has lost a cap.
-    expected_open = {"CargoPackager", "CargoUnpackager"}
+    # Nothing is open any more. The two packagers used to be, because `hopper` was a
+    # single-skinned cone; it is a closed solid with a hollow in it now, for the reason
+    # written up there.
+    expected_open = set()
     problems = 0
 
     for name, build in sorted(MACHINES.items()):
@@ -1171,6 +1271,22 @@ def main():
             print("   FAIL: signed volume %+.1f - wound inside out, will render hollow"
                   % volume)
             problems += 1
+
+        # Per *component*, because the whole-mesh figure is a sum and hides an inverted part
+        # inside a mesh that is positive overall. That is not hypothetical: every mirrored
+        # `sweep_box` call in this file produced one good side and one inside-out one, on all
+        # 33 track meshes, and this line is the only reason it was ever found.
+        for part in components(mesh.tris):
+            part_volume = signed_volume(part)
+            if part_volume < -1e-6:
+                xs2 = [v[0] for t in part for v in t[:3]]
+                ys2 = [v[1] for t in part for v in t[:3]]
+                zs2 = [v[2] for t in part for v in t[:3]]
+                print("   FAIL: a %d-triangle part is wound inside out (volume %+.1f) "
+                      "at X[%.1f,%.1f] Y[%.1f,%.1f] Z[%.1f,%.1f]"
+                      % (len(part), part_volume, min(xs2), max(xs2),
+                         min(ys2), max(ys2), min(zs2), max(zs2)))
+                problems += 1
         if holes and name not in expected_open:
             print("   FAIL: %d boundary edges - a cap is missing" % holes)
             problems += 1

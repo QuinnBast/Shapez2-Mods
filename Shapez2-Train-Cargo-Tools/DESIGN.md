@@ -1938,6 +1938,42 @@ The deck mesh was right the whole time: `lift_path` carries the full `layers * L
 a twenty-unit run, so a one-layer lift is exactly forty-five degrees and a two-layer one about
 sixty-three. The item path now matches it rather than being measured separately.
 
+## See-through parts: two winding bugs the whole-mesh check could not see
+
+Reported as "the hopper does not render in game - I can kind of see it clipping a bit, but
+it's mostly see-through". That is the exact signature of backface culling, and there were two
+separate causes.
+
+**The generator's check was whole-mesh.** `signed_volume` is a sum over every triangle, so one
+part wound inside out inside a mesh that is positive overall passes silently. It now runs per
+*connected component* - triangles grouped by shared vertex position, which keeps merely
+overlapping parts separate - and that is the only reason either bug was found. Running it
+against the shipped meshes turned up **36 inverted parts across 28 of the 33 files**.
+
+**`sweep_box` inverted on every mirrored call.** `_ring` walks its corners a0-low, a1-low,
+a1-high, a0-high; with `a0` above `a1` that circuit runs the other way and every quad in the
+sweep is wound inward. `channel` builds its walls and rails with `for side in (-1, 1)`, so
+**one side of every cargo belt, corner, junction and lift was see-through** - and the two
+sides summed to a positive volume, which is why nothing complained. Swapping the bounds fixes
+the mirrored calls.
+
+That was still not enough. A ramp's sleepers climb 2.5 units across a box 0.26 tall, so the
+cross-section is sheared far past its own height and the circuit reverses again. Chasing cases
+is how the first two were missed, so `sweep_box` now asks the finished solid which way it is
+facing and flips itself - a closed surface's signed volume is origin-independent, so that is
+exact rather than a heuristic, and it is the same flip `cargo_track` and `cargo_junction`
+already applied to themselves.
+
+**The hopper was a single-skinned cone.** Open at the top by design, which is what a funnel
+looks like on paper and is invisible here: the camera looks down into the mouth, the inside of
+a one-sided cone is backfaces, and you see straight through the machine to the platform behind
+it - with a sliver of the outer skin still catching the light at the edges, which is the
+"clipping a bit". It is now a solid with a hollow in it: outer skin, a rim across the top, and
+an inner skin facing back up out of the cavity. `expected_open` is empty as a result - nothing
+in the set is an open shell any more.
+
+Cost: 38 triangles on each packager. The whole set is still 33 closed, outward-wound meshes.
+
 ## Open questions
 
 - **Do buildings accept containers?** Deliberately dodged: an unpackager sits in front of
