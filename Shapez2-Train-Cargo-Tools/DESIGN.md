@@ -391,11 +391,27 @@ texture with `Read/Write Enabled` off, which every shipped texture has - the sam
 `cargotools.dumpatlas` uses, moved to load time.
 
 **What is actually in it, which changes the plan.** Dumped from the shipped build, the LUT is
-**75.3% unassigned** - the opaque magenta filler, the classic "no texture" pink. Of the 36
-cells left after deduplication, **33 are neutral**: a ladder from white to black. The only real
-colours are pure red, one teal `(118, 231, 202)` and one periwinkle `(105, 115, 182)`. There is
-no orange, no yellow, nothing warm. *The orange on a vanilla platform edge does not come from
-this LUT*, so no amount of searching will find it.
+**75.3% unassigned** - the opaque magenta filler, the classic "no texture" pink. What is left
+is **27 visibly distinct cells, 24 of them neutral**: a ladder from white to black. The only
+real colours are pure red, one teal `(118, 231, 202)` and one periwinkle `(105, 115, 182)`.
+There is no orange, no yellow, nothing warm. *The orange on a vanilla platform edge does not
+come from this LUT*, so no amount of searching will find it.
+
+Two ways of counting that got it wrong first, both caught by looking at the swatches rather
+than at the code:
+
+- **Relative saturation files near-blacks as hues.** `(max - min) / max` divides by almost
+  nothing on a dark cell, so `(19, 19, 30)` scores 0.37 and reads as coloured. The palette has
+  three such blue-blacks; calling them hues took the ladder's darkest rungs away from the roles
+  that wanted them and left them where a role asking for a colour could have claimed one.
+  `(max - min) / 255` asks how far apart the channels are, which is what "is this grey" means.
+  On this palette the three real colours score 0.30 to 1.00 and everything else 0.06 or less,
+  so the threshold sits in a gap rather than on a judgement call.
+- **Exact-RGB deduplication over-counts.** 36 cells by that measure, 27 once colours within six
+  levels of each other are merged: the red block carries four near-identical neighbours a
+  channel or two apart, and several rungs repeat within three levels. Each of those is a cell a
+  role can claim while believing it took a different colour - the exact failure this pass
+  exists to prevent, surviving inside the fix for it.
 
 So the separation available is **light against dark**, which on inspection is how the shipped
 buildings read anyway. Roles ask for a rung on that ladder; the three that genuinely want a hue
@@ -416,7 +432,8 @@ deliberate rather than broken:
   most and was missing from the first attempt: asking eighteen roles independently for their
   nearest cell returned **ten** distinct answers, with four sharing one mid grey and every
   role that wanted a hue landing on a grey. Simulated against the real dump, claiming gives
-  **18 of 18**, spanning luma 0.14 to 1.00 plus the three hues.
+  **18 of 18**, spanning luma 0.14 to 1.00 plus the three hues, with no two within six levels
+  of each other.
 
 Sampling vanilla meshes is kept as the fallback for when the material or the LUT cannot be
 reached, with the extra roles aliased onto the five it can find. `cargotools.palette` reports

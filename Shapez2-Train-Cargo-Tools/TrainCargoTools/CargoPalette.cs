@@ -149,13 +149,23 @@ namespace QuinnBast.Shapez2.TrainCargoTools
             return 0.30f * colour.r + 0.59f * colour.g + 0.11f * colour.b;
         }
 
-        /// How far a colour is from grey. The palette's real colours sit far above this and its
-        /// ladder far below, with nothing in between, so the threshold is not delicate.
-        private static float Saturation(Color32 cell)
+        /// How far a colour is from grey, as an **absolute** spread across the channels.
+        ///
+        /// Not `(max - min) / max`, which is the usual definition and is wrong here: on a
+        /// near-black it divides by almost nothing, so `(19, 19, 30)` scores 0.37 and is filed
+        /// as a hue. The palette has three of those blue-blacks, and calling them coloured both
+        /// took the ladder's three darkest rungs away from the roles that wanted them and left
+        /// them sitting in the pool where a role asking for a hue could have claimed one.
+        ///
+        /// Dividing by the full range instead asks "how far apart are the channels", which is
+        /// what "is this grey" means. Measured on the shipped palette the answer separates
+        /// cleanly: the three real colours score 0.30 to 1.00 and every other cell scores 0.06
+        /// or less, so the threshold sits in a gap rather than on a judgement call.
+        private static float Chroma(Color32 cell)
         {
             int max = Mathf.Max(cell.r, Mathf.Max(cell.g, cell.b));
             int min = Mathf.Min(cell.r, Mathf.Min(cell.g, cell.b));
-            return max == 0 ? 0f : (max - min) / (float)max;
+            return (max - min) / 255f;
         }
 
         private static string[] BuildRoles()
@@ -283,14 +293,14 @@ namespace QuinnBast.Shapez2.TrainCargoTools
             public readonly Vector2 UV;
             public readonly Color32 Colour;
             public readonly float Luma;
-            public readonly float Saturation;
+            public readonly float Chroma;
 
-            public Swatch(Vector2 uv, Color32 colour, float luma, float saturation)
+            public Swatch(Vector2 uv, Color32 colour, float luma, float chroma)
             {
                 UV = uv;
                 Colour = colour;
                 Luma = luma;
-                Saturation = saturation;
+                Chroma = chroma;
             }
         }
 
@@ -307,16 +317,18 @@ namespace QuinnBast.Shapez2.TrainCargoTools
         ///   renders as a blend of both - a colour that appears nowhere in the game. It also
         ///   discards the antialiased fringe around the magenta, which is otherwise a few
         ///   hundred near-pink cells that a warm role would leap at.
-        /// - **One entry per distinct colour.** The ladder repeats across several columns, and
-        ///   without this the greedy assignment above would hand two roles the same grey twice
-        ///   over while believing they differed.
+        /// - **One entry per *distinguishable* colour.** Exact-RGB deduplication is not enough:
+        ///   the ladder repeats across columns and the red block carries near-identical
+        ///   neighbours a channel or two apart, so the greedy assignment above would hand two
+        ///   roles the same colour twice over while believing they differed.
         private static List<Swatch> Swatches(Texture2D atlas)
         {
             Color32[] pixels = atlas.GetPixels32();
             int width = atlas.width;
             int height = atlas.height;
 
-            Dictionary<int, Swatch> byColour = new Dictionary<int, Swatch>();
+            Dictionary<int, Vector2> where = new Dictionary<int, Vector2>();
+            Dictionary<int, int> area = new Dictionary<int, int>();
 
             for (int y = 1; y < height - 1; y++)
             {
@@ -330,20 +342,59 @@ namespace QuinnBast.Shapez2.TrainCargoTools
                     }
 
                     int key = (here.r << 16) | (here.g << 8) | here.b;
-                    if (byColour.ContainsKey(key))
-                    {
-                        continue;
-                    }
+
+                    area.TryGetValue(key, out int seen);
+                    area[key] = seen + 1;
 
                     // The centre of the texel, not its corner, for the same filtering reason
                     // the neighbours are checked at all.
-                    byColour[key] = new Swatch(
-                        new Vector2((x + 0.5f) / width, (y + 0.5f) / height),
-                        here, Luma(here), Saturation(here));
+                    if (!where.ContainsKey(key))
+                    {
+                        where[key] = new Vector2((x + 0.5f) / width, (y + 0.5f) / height);
+                    }
                 }
             }
 
-            return new List<Swatch>(byColour.Values);
+            // Biggest block first, then keep only cells that differ visibly from one already
+            // kept. Distinct-by-exact-RGB counted 36 cells in the shipped palette and there are
+            // 27: the red block carries four near-identical neighbours a channel or two apart,
+            // and several rungs of the ladder repeat within three levels of each other. Every
+            // one of those is a cell a role can claim while believing it took a different
+            // colour, which is the failure this whole pass exists to stop.
+            const int Indistinguishable = 6;
+
+            List<int> ordered = new List<int>(area.Keys);
+            ordered.Sort((a, b) => area[b].CompareTo(area[a]));
+
+            List<Swatch> kept = new List<Swatch>();
+
+            foreach (int key in ordered)
+            {
+                Color32 colour = new Color32(
+                    (byte)((key >> 16) & 0xFF), (byte)((key >> 8) & 0xFF), (byte)(key & 0xFF), 255);
+
+                bool duplicate = false;
+                foreach (Swatch already in kept)
+                {
+                    if (Mathf.Max(
+                            Mathf.Abs(already.Colour.r - colour.r),
+                            Mathf.Max(
+                                Mathf.Abs(already.Colour.g - colour.g),
+                                Mathf.Abs(already.Colour.b - colour.b)))
+                        <= Indistinguishable)
+                    {
+                        duplicate = true;
+                        break;
+                    }
+                }
+
+                if (!duplicate)
+                {
+                    kept.Add(new Swatch(where[key], colour, Luma(colour), Chroma(colour)));
+                }
+            }
+
+            return kept;
         }
 
         /// Takes the best unclaimed swatch for one role, or nothing if its pool is empty.
@@ -356,7 +407,8 @@ namespace QuinnBast.Shapez2.TrainCargoTools
         {
             uv = default;
 
-            const float Chromatic = 0.25f;
+            // The gap in the shipped palette is 0.06 to 0.30, so anywhere in between does.
+            const float Chromatic = 0.12f;
 
             float best = float.MaxValue;
             int bestIndex = -1;
@@ -369,7 +421,7 @@ namespace QuinnBast.Shapez2.TrainCargoTools
                 }
 
                 Swatch swatch = swatches[i];
-                bool coloured = swatch.Saturation > Chromatic;
+                bool coloured = swatch.Chroma > Chromatic;
 
                 if (coloured != (ask == Ask.Colour))
                 {
