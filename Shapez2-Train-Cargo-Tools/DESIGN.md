@@ -1974,6 +1974,24 @@ in the set is an open shell any more.
 
 Cost: 38 triangles on each packager. The whole set is still 33 closed, outward-wound meshes.
 
+## Which end is the packed one, on a machine with pipes at both ends
+
+The fluid pair read as a length of plumbing: a pipe at each end, no way to tell input from
+output at a glance. The first version leaned on the tank to carry it - lying across the flow on
+the packager, standing upright on the unpackager - and that fails in practice, because a tank
+is not something you compare across two buildings twenty chunks apart.
+
+**A pipe at each end is what the connectors are, not what the machine does.** Both fluid ends
+are declared `inputIsPipe: true, outputIsPipe: true` because the fluid line is pipe-tagged from
+end to end, but what *travels* on the two sides still differs: loose fluid one way, sealed
+containers the other. The shape pair already says that with geometry - an open hopper for loose
+stuff, a sealed `duct` for packages.
+
+So the fluid machines use the same duct. The packager takes a pipe in from the West and a duct
+out to the East; the unpackager is the mirror. Which end is the packed one is then the same
+question on all four machines - **the duct is the packed side** - rather than a different tell
+per pair. The pipe end is now a statement rather than a default.
+
 ## Open questions
 
 - **Do buildings accept containers?** Deliberately dodged: an unpackager sits in front of

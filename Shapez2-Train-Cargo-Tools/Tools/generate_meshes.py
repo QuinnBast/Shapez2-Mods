@@ -1035,18 +1035,25 @@ def fluid_cargo_store():
 
 
 def fluid_cargo_packager():
-    """Fluid in, packaged fluid out - both ends pipes.
+    """Loose fluid in from the West, packaged fluid out to the East.
 
-    Both the fluid packager and the fluid unpackager have a pipe on each side, because the
-    fluid line is pipe-tagged end to end. So the ends cannot carry the distinction the way
-    they do on the shape pair, and the tank has to: lying across the flow here, standing
-    upright on the unpackager.
+    **A pipe at each end is what the connectors are, not what the machine does.** Both ends of
+    the fluid pair sit on the pipe-tagged line, so the first version drew a pipe on both sides
+    and the machine read as a length of plumbing - there was no telling which way it ran
+    without clicking it. The tank was carrying the whole distinction (lying across the flow
+    here, standing upright on the unpackager), and a tank is not something you compare across
+    two buildings twenty chunks apart.
+
+    So the outfeed is the same **duct** the shape packager uses. What leaves here is a
+    container, exactly as it is over there, and the duct is what this mod draws containers
+    travelling in - so the pair reads the same way at a glance even though one line is
+    belt-tagged and the other pipe-tagged. The pipe end stays a pipe, which is now a statement
+    rather than a default: loose material goes in that side.
     """
     m = Mesh()
     seat = plinth(m, FOOTPRINT, 12.0)
 
     pipe_x(m, -9.6, -3.4, 0.0, 2.3, 1.9)
-    pipe_x(m, 3.4, 9.6, 0.0, 2.3, 1.9)
     for x in (-3.6, 3.6):
         block(m, x, 0.0, 0.9, 5.4, seat, 4.4, "frame", bevel=0.3, cap=0.25)
 
@@ -1061,20 +1068,28 @@ def fluid_cargo_packager():
     # Detail: collars where the pipes meet the hull, a handwheel, ribs along the tank, a control
     # box and deck pads.
     flange(m, "x", -3.9, 0.0, 2.3, 2.2)
-    flange(m, "x", 3.9, 0.0, 2.3, 2.2)
     ribs(m, 0.0, 0.0, 3, 2.6, 7.0, 8.9, 9.3, "rail", width=0.5, along_x=True)
     valve(m, 4.4, -4.4, seat)
     cabin(m, -4.6, -4.4, seat)
     feet(m, [-6.2, 6.2], [-4.6, 4.6], seat)
+
+    # Last, so it sits over the saddle rather than under it. Stops short of the valve and the
+    # deck pads on that side, which is why it starts at 4.2 rather than at the hull.
+    duct(m, 4.2, 9.3)
     return m
 
 
 def fluid_cargo_unpackager():
-    """Packaged fluid in, fluid out. The standing-tank half of the fluid pair."""
+    """Packaged fluid in from the West, loose fluid out to the East.
+
+    The packager backwards, and drawn that way on purpose: duct on the infeed, pipe on the
+    outfeed. Which end is which is then the same question on all four machines - the duct is
+    the packed side - rather than something you work out per pair.
+    """
     m = Mesh()
     seat = plinth(m, FOOTPRINT, 12.0)
 
-    pipe_x(m, -9.6, -2.4, 0.0, 2.3, 1.9)
+    duct(m, -9.3, -4.2)
     pipe_x(m, 2.4, 9.6, 0.0, 2.3, 1.9)
 
     # Standing tank, straddling the pipe run.
@@ -1087,7 +1102,6 @@ def fluid_cargo_unpackager():
     pipe_z(m, -4.2, 4.2, 0.0, 8.6, 0.75, "collar", segments=10)
 
     # Detail: pipe collars, banding around the standing tank, a handwheel, a box and pads.
-    flange(m, "x", -2.9, 0.0, 2.3, 2.2)
     flange(m, "x", 2.9, 0.0, 2.3, 2.2)
     for height in (3.4, 6.4):
         tube(m, 0.0, 0.0, 3.75, height, height + 0.4, "rail", segments=16)
