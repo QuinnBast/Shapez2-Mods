@@ -1,44 +1,45 @@
 #!/usr/bin/env python3
-"""
-Builds the Workshop preview and promo images.
+"""Builds the Workshop preview and promo images.
 
     python Steam/make-promo.py
 
-Sources are the captures in the repo's Screenshots folder. Re-run this whenever they are
-replaced: the copy lives here, the pictures do not.
+**Rendered from the shipped .obj files, not from screenshots.** Screenshots were the first
+approach and they rot: the store page showed grey machines with a see-through hopper for two
+days after both were fixed, because the captures were taken before the art work and nobody
+retakes five images per change. Tools/render_meshes.py reads the same meshes the game loads
+and colours them by the role sentinels the generator writes, so this cannot drift from what
+ships - regenerate the meshes, re-run this, and the art is current.
 
-Two different jobs, so two different designs.
+What it is not: the game's own renderer. There are no metal, noise or scratch passes here, and
+the accent slots resolve against a live palette that only exists at runtime, so the colours are
+a likeness taken off real captures rather than a frame grab. In-game captures are still the
+better store images the moment somebody takes fresh ones - drop them in Screenshots/ and point
+`CAPTURES` at them.
 
-**preview.png** is the grid thumbnail, and Steam draws it small - often under 150 pixels wide.
-Unlike the Mod Profiler's, which is a drawn mark because a screenshot of a text panel turns to
-mush, this mod's subject is a chunk-wide crate on a belt. That survives being shrunk, so the
-preview is a square crop of the real thing with the wordmark laid on it rather than a caption
-placed above it.
-
-**promo-*.png** are the screenshots on the item page, where there is room to read. Each one
-leads with an in-game capture and says what you can do with it.
-
-Two of the four buildings have no capture yet - a junction and a lift - so there is no promo
-for either. `build` skips a missing source rather than failing, so adding the file is all it
-takes to get the image.
+Two jobs, two designs. **preview.png** is the grid thumbnail, which Steam often draws under
+150 pixels wide: one machine, big, square, with the wordmark on the art. **promo-*.png** are
+the item page images, where there is room to say what each part of the mod does.
 """
 
 import os
+import sys
 
 from PIL import Image, ImageDraw, ImageFont
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))          # the repo folder
-SHOTS = os.path.join(ROOT, "Screenshots")
+sys.path.insert(0, os.path.join(ROOT, "Tools"))
+
+import render_meshes as rm                              # noqa: E402
 
 WIDTH, HEIGHT = 1280, 720
 PREVIEW = 640
 
-# The orange the game puts on a platform edge and a hotbar selection, which is also what the
-# cargo machines are trimmed with.
-AMBER = (247, 162, 27)
-INK = (240, 245, 252)
-MUTED = (182, 192, 208)
+CHUNK = 20.0                                            # meshes span +-10, so scenes step by 20
+
+AMBER = (232, 150, 40)
+INK = (242, 244, 250)
+MUTED = (186, 192, 206)
 
 BLACK_FONT = r"C:\Windows\Fonts\seguibl.ttf"           # Segoe UI Black
 SEMI_FONT = r"C:\Windows\Fonts\seguisb.ttf"            # Segoe UI Semibold
@@ -62,73 +63,43 @@ def tracked_width(draw, text, face, tracking):
 
 
 def scrim(image, solid_at, clear_at):
-    """
-    Darkens the band the text sits in: fully dark at `solid_at` and everything beyond it, fading
-    to nothing by `clear_at`. Either edge may be the higher one, so the same function serves
-    text at the top and text at the bottom.
-    """
+    """Darkens the band the text sits in, fading to nothing by `clear_at`."""
     width, height = image.size
     layer = Image.new("L", (1, height), 0)
     run = float(clear_at - solid_at)
 
     for y in range(height):
         t = min(1.0, max(0.0, (y - solid_at) / run))
-        layer.putpixel((0, y), int(255 * 0.965 * ((1.0 - t) ** 0.85)))
+        layer.putpixel((0, y), int(255 * 0.94 * ((1.0 - t) ** 0.85)))
 
-    image.paste(Image.new("RGB", (width, height), (6, 9, 18)), (0, 0),
+    image.paste(Image.new("RGB", (width, height), (10, 8, 20)), (0, 0),
                 layer.resize((width, height)))
 
 
-def focus(image, zoom, centre):
-    """
-    Crops into the part of the shot being talked about, keeping the aspect it came with.
-
-    The zoom has a low ceiling on purpose: these captures are already framed on their subject,
-    and cropping hard enough to lose the belt either side of a machine loses the thing that
-    makes the picture legible - you can no longer tell what is feeding what.
-    """
-    zoom = min(zoom, 1.5)
-
-    w, h = image.size
-    cw, ch = int(w / zoom), int(h / zoom)
-
-    x = (w - cw) // 2
-    y = max(0, min(h - ch, int(centre * h - ch / 2)))
-
-    return image.crop((x, y, x + cw, y + ch))
+def row(*names):
+    """Several meshes laid out west to east, one chunk apart, as one scene."""
+    scene = []
+    span = (len(names) - 1) * CHUNK
+    for i, name in enumerate(names):
+        scene += rm.place(rm.load(name), dx=i * CHUNK - span / 2)
+    return scene
 
 
 # --------------------------------------------------------------------------- the preview
 
 
-def build_preview(source="cargo-line.png", centre=0.52, out="preview.png"):
-    path = os.path.join(SHOTS, source)
+def build_preview(out="preview.png"):
+    # One machine, as large as the frame allows. Steam draws this under 150 pixels wide in a
+    # grid, so a belt stub either side just costs the subject the room it needs to survive
+    # being shrunk.
+    image = rm.render(row("CargoPackager"), PREVIEW, PREVIEW, margin=0.96, bias=-0.07)
 
-    if not os.path.exists(path):
-        print("  skipped %-26s (no Screenshots/%s)" % (out, source))
-        return
-
-    image = Image.open(path).convert("RGB")
-
-    # A square crop, taken about the tallest thing worth keeping rather than the middle: these
-    # are landscape captures, so a centred square is mostly empty space either side of the line.
-    w, h = image.size
-    side = min(w, h)
-    left = max(0, min(w - side, int(w * 0.46 - side / 2)))
-    top = max(0, min(h - side, int(centre * h - side / 2)))
-
-    image = image.crop((left, top, left + side, top + side)).resize(
-        (PREVIEW, PREVIEW), Image.LANCZOS)
-
-    scrim(image, PREVIEW - 152, PREVIEW - 330)
-
+    scrim(image, PREVIEW - 150, PREVIEW - 330)
     draw = ImageDraw.Draw(image)
 
     mark = font(BLACK_FONT, 52)
-    lines = ["TRAIN CARGO", "TOOLS"]
     y = PREVIEW - 176
-
-    for line in lines:
+    for line in ("TRAIN CARGO", "TOOLS"):
         width = tracked_width(draw, line, mark, 2.4)
         tracked(draw, ((PREVIEW - width) / 2, y), line, mark, INK, 2.4)
         y += 58
@@ -140,39 +111,30 @@ def build_preview(source="cargo-line.png", centre=0.52, out="preview.png"):
     image.save(os.path.join(HERE, out), optimize=True)
     print("  wrote   %-26s %.0f KB" % (out, os.path.getsize(os.path.join(HERE, out)) / 1024))
 
-    # A thumbnail beside it, so the "does this survive being small" question is answered here
-    # rather than after uploading.
+    # Answer "does it survive being small" here rather than after uploading.
     image.resize((96, 96), Image.LANCZOS).save(os.path.join(HERE, "preview-96.png"))
 
 
 # --------------------------------------------------------------------------- the promos
 
 
-def build(source, headline, subline, out, zoom=1.0, centre=0.5, place="bottom"):
-    path = os.path.join(SHOTS, source)
-
-    if not os.path.exists(path):
-        print("  skipped %-26s (no Screenshots/%s)" % (out, source))
-        return False
-
-    image = focus(Image.open(path).convert("RGB"), zoom, centre)
-    image = image.resize((WIDTH, HEIGHT), Image.LANCZOS)
+def build(scene, headline, subline, out, margin=0.80, place="bottom", bias=0.0):
+    image = rm.render(scene, WIDTH, HEIGHT, margin=margin, bias=bias)
 
     head = font(BLACK_FONT, 52)
     sub = font(SEMI_FONT, 24)
     brow = font(SEMI_FONT, 19)
 
     lines = headline.split("\n")
-
     LINE, GAP, MARGIN, LEFT = 60, 18, 52, 60
     block = 48 + len(lines) * LINE + GAP + 30
 
     if place == "top":
         top = MARGIN
-        scrim(image, top + block + 10, top + block + 210)
+        scrim(image, top + block + 10, top + block + 230)
     else:
         top = HEIGHT - MARGIN - block
-        scrim(image, top - 14, top - 214)
+        scrim(image, top - 14, top - 234)
 
     draw = ImageDraw.Draw(image)
 
@@ -189,33 +151,60 @@ def build(source, headline, subline, out, zoom=1.0, centre=0.5, place="bottom"):
 
     image.save(os.path.join(HERE, out), optimize=True)
     print("  wrote   %-26s %.0f KB" % (out, os.path.getsize(os.path.join(HERE, out)) / 1024))
-    return True
 
 
-# The copy leads with what a player can do, and every figure in it is one this repo can show
+# Each image is one part of the mod, and every figure in the copy is one this repo can show
 # its working for - see the throughput table in DESIGN.md.
 IMAGES = [
-    ("cargo-line.png",
-     "Move cargo without\nputting it on a train",
-     "Pack 360 shapes into one container, belt it anywhere, unpack it there.",
-     "promo-line.png", 1.0, 0.5, "bottom"),
+    # One subject per image, framed big. Laying three pieces side by side was the first try and
+    # the auto-fit then scales the whole row down to fit the width - a junction ends up a ribbon
+    # forty pixels tall, which says nothing.
+    (lambda: row("CargoPackager", "CargoUnpackager"),
+     "Pack it, belt it,\nunpack it there",
+     "360 shapes into one container, or 60 fluid. The duct end is always the packed side.",
+     "promo-machines.png", 0.78, "bottom", -0.02),
 
-    ("cargo-stores.png",
+    (lambda: row("CargoTrackSplitTriple"),
+     "Drag it like a\nspace belt",
+     "About 18x a space belt for shapes. Corners and junctions place themselves.",
+     "promo-belts.png", 0.90, "top", 0.10),
+
+    # A flat piece feeding the ramp, so the ramp reads as a climb rather than as a plank. A
+    # Lift2 alone is forty units tall against twenty wide and the auto-fit shrinks it to
+    # nothing; the one-layer piece is roughly square in projection and fills the frame.
+    (lambda: row("CargoTrack", "CargoTrackLift1UpForward"),
+     "Climb over what\nis in the way",
+     "Lifts of one or two layers, in any direction, chosen for you as you drag.",
+     "promo-lifts.png", 0.84, "top", 0.06),
+
+    (lambda: row("CargoStore", "FluidCargoStore"),
      "Buffer 75 containers\nnext to the station",
      "25 on each floor, shapes and fluid in the same store.",
-     "promo-stores.png", 1.0, 0.5, "top"),
-
-    ("cargo-belt-corners.png",
-     "Drag it like a\nspace belt",
-     "About 18x a space belt for shapes. Corners, junctions and lifts place themselves.",
-     "promo-belts.png", 1.15, 0.42, "top"),
+     "promo-stores.png", 0.80, "bottom", -0.02),
 ]
 
 
+# The same scenes with no copy on them, for the README. Kept separate from the in-game
+# captures rather than replacing them: a real screenshot is the better image the moment
+# somebody takes a fresh one, and overwriting them would throw that away.
+def build_plain():
+    shots = os.path.join(ROOT, "Screenshots")
+    os.makedirs(shots, exist_ok=True)
+
+    for scene, _, _, out, margin, _, bias in IMAGES:
+        path = os.path.join(shots, out.replace("promo-", "render-"))
+        rm.render(scene(), WIDTH, HEIGHT, margin=margin * 0.92, bias=0.0).save(
+            path, optimize=True)
+        print("  wrote   %-26s %.0f KB"
+              % (os.path.relpath(path, ROOT), os.path.getsize(path) / 1024))
+
+
 if __name__ == "__main__":
-    print("building promo images into %s" % HERE)
+    print("rendering promo images into %s" % HERE)
 
     build_preview()
 
-    for source, headline, subline, out, zoom, centre, place in IMAGES:
-        build(source, headline, subline, out, zoom, centre, place)
+    for scene, headline, subline, out, margin, place, bias in IMAGES:
+        build(scene(), headline, subline, out, margin, place, bias)
+
+    build_plain()

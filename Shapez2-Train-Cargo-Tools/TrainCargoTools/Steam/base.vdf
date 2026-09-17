@@ -4,7 +4,7 @@
     "publishedfileid" "0"
     "contentfolder" "${CONTENT_PATH}"
     "previewfile" "${PREVIEW_IMG}"
-    "visibility" "0"
+    "visibility" "2"
     "title" "Train Cargo Tools"
     "description" "[h1]Train Cargo Tools[/h1]
 Trains already move shapes and fluids in dense containers. This mod lets you do the same thing off the rails.

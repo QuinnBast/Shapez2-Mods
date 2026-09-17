@@ -1992,6 +1992,34 @@ out to the East; the unpackager is the mirror. Which end is the packed one is th
 question on all four machines - **the duct is the packed side** - rather than a different tell
 per pair. The pipe end is now a statement rather than a default.
 
+## Store art is rendered, not captured
+
+Screenshots rot. The Steam preview and every promo image showed grey machines with a
+see-through hopper for two days after both were fixed, because the captures predated the art
+work and nobody retakes five images per change.
+
+`Tools/render_meshes.py` reads the same `.obj` files the game loads and colours them **by the
+role sentinels the generator writes** - every vertex already carries a per-role marker UV, so
+the renderer knows which triangles are `hull`, which are `frame`, which are `warn`, and paints
+them the way `CargoPalette` does at runtime. Regenerate the meshes, re-run
+`Steam/make-promo.py`, and the art is current by construction.
+
+The figures in `ROLE_COLOURS` are **sampled from the real captures** rather than picked: the
+platform-edge orange is `rgb(189, 111, 1)` out of `cargo-line.png` and the machine body grey is
+`rgb(112, 100, 97)` out of `cargo-stores.png`. So is the lighting - a face turned away from the
+light sits at luma 0.39 against 0.53 for one facing it, a ratio near 1.35, so the model is
+heavy ambient and a light key. The first pass used a hard key at 0.30 ambient and rendered the
+machines nearly black: accurate to the palette, nothing like the game.
+
+It is a likeness, not a frame grab. No metal, noise or scratch passes, and the accent slots
+resolve against a live palette that only exists at runtime. **A fresh in-game capture is still
+the better store image** - this is what to ship until somebody takes one.
+
+Two framing rules learned by looking: one subject per image, because the auto-fit scales a row
+of three down until a junction is a ribbon forty pixels tall; and a `bias` that lifts the
+subject clear of the caption block, because a scrim across the bottom third otherwise lands on
+the thing being captioned.
+
 ## Open questions
 
 - **Do buildings accept containers?** Deliberately dodged: an unpackager sits in front of

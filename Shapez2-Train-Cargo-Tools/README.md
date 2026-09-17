@@ -3,7 +3,7 @@
 Trains already move shapes and fluids in dense containers. This mod lets you do the same
 thing off the rails.
 
-![A cargo line feeding a train](Screenshots/cargo-line.png)
+![A cargo packager and unpackager](Screenshots/render-machines.png)
 
 Pack shapes or fluids into the game's own cargo containers, carry them on a cargo belt,
 buffer them in a cargo store, and unpack them where you need them. Train stations take the
@@ -42,7 +42,7 @@ is about **3×** a space pipe. Worth knowing before repeating the shape figure.
 
 ## Belts
 
-![Cargo belts turning corners](Screenshots/cargo-belt-corners.png)
+![A cargo belt junction](Screenshots/render-belts.png)
 
 Drag them like a space belt. Corners, junctions and lifts are chosen and placed for you, the
 same way the game places belt corners — none of them is in the hotbar.
@@ -52,12 +52,14 @@ same way the game places belt corners — none of them is in the hotbar.
 - A **lift** appears where a line has to climb: one or two floors, up or down, in any of the
   four directions including a hairpin back the way it came.
 
+![A cargo belt climbing a lift](Screenshots/render-lifts.png)
+
 Cargo belts only talk to other cargo machines. They will **not** accept input from a space
 belt or a space pipe, so a line cannot be fed by accident.
 
 ## Stores
 
-![Two full cargo stores](Screenshots/cargo-stores.png)
+![A shape store and a fluid store](Screenshots/render-stores.png)
 
 75 containers, 25 on each floor, and shapes and fluid can sit in the same store. Put one
 between a packager and a station and the station never waits.
@@ -92,6 +94,11 @@ runs and the copy fails with `MSB3027`.
 
 `dotnet build -p:Dev=true` stages to `mods-dev` instead, which is safe while the game is
 open, though nothing loads from there without the Mod Reloader.
+
+The pictures above are rendered from the shipped meshes by
+`python TrainCargoTools/Steam/make-promo.py`, not captured - screenshots go stale the moment
+the art changes, and these cannot. `Tools/render_meshes.py <MeshName>` renders any one of them
+on its own, which is also the quickest way to check a change by eye.
 
 Track meshes are generated rather than modelled. `python Tools/generate_meshes.py` rebuilds
 every belt, corner, junction and lift in `TrainCargoTools/Resources/`; the lift ramp gradient
