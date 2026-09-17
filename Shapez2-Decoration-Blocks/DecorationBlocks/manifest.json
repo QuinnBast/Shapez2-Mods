@@ -1,0 +1,21 @@
+{
+  "Version": "0.1.0",
+  "Title": "Decoration Blocks",
+  "Description": "21 decorative voxel blocks for the machine layer, plus a sparkstone tab: torches, dust, repeaters, comparators, observers, levers, buttons and lamps running a real signal simulation, and a converter that bridges sparkstone to shapez's own wire layer both ways.",
+  "Author": "Quinn Bast",
+  "SavedModVersionCompabilityRangeWithSelf": "*-*",
+  "GameVersionSupportRange": "*-*",
+  "AffectsSaveGames": true,
+  "DisablesAchievements": false,
+  "Conflicts": [],
+  "Assemblies": [
+    "DecorationBlocks.dll"
+  ],
+  "Dependencies": [
+    {
+      "ModId": "steam:3542611357",
+      "ModTitle": "Shapez Shifter",
+      "Version": "*-*"
+    }
+  ]
+}

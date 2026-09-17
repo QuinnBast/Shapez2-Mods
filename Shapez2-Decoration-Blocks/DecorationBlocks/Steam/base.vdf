@@ -1,0 +1,46 @@
+"workshopitem"
+{
+    "appid" "2162800"
+    "publishedfileid" "0"
+    "contentfolder" "${CONTENT_PATH}"
+    "previewfile" "${PREVIEW_IMG}"
+    "visibility" "2"
+    "title" "Decoration Blocks"
+    "description" "[h1]Decoration Blocks[/h1]
+A platform is all machines and belts. This is the other half: 21 textured voxel blocks you can place on the machine layer for no reason except that it looks like somewhere.
+
+Stone, cobblestone, stone bricks, bricks, oak planks and logs, dirt, grass, sand, gravel, snow, glass, bookshelves, obsidian, neitherrack, and solid blocks of gold, iron, diamond, emerald, lapis lazuli and sparkstone.
+
+One block fills exactly one building layer, so they sit on the same grid as everything else and stack three high. Placement is in area mode, so a wall is dragged out as a rectangle rather than clicked one tile at a time.
+
+[h2]Sparkstone[/h2]
+A second tab, running a real signal simulation on a 0.1 second tick.
+
+[list]
+[*][b]Sparkstone Dust[/b] - carries a strength of 0 to 15 and loses one per tile
+[*][b]Torches[/b] - a power source standing free, an inverter mounted on the side of a block
+[*][b]Levers and Buttons[/b] - the switches you wire everything else to
+[*][b]Repeaters[/b] - refresh a signal to full strength, delay it 1 to 4 ticks, and lock from the side
+[*][b]Comparators[/b] - compare or subtract, with inputs from either side and the back
+[*][b]Observers[/b] - pulse out of the back whenever the tile they face changes
+[*][b]Lamps[/b] - light while powered
+[*][b]Block of Sparkstone[/b] - always on
+[*][b]Sparkstone Converter[/b] - bridges to shapez wires, both directions at once
+[/list]
+
+The converter is the piece that makes this more than decoration. A wire signal that is not Off broadcasts full-strength sparkstone, and sparkstone power puts a true back on the wire - so a lever can gate a belt, and a shape sensor can light a lamp.
+
+Levers, buttons, repeaters and comparators are worked from the side panel: select one and its switch is there. shapez has no click-a-building-in-the-world interaction, so that is where the controls live.
+
+[h2]Before you install[/h2]
+[list]
+[*][b]This mod affects save games.[/b] Once you install it to a save, you cannot play that save without it.
+[*]Requires Shapez Shifter.
+[*]Everything is behind a single cheap research node.
+[*]Signal state does not survive a save and reload - circuits settle again within a tick or two of loading.
+[/list]
+
+Bugs and requests: https://github.com/QuinnBast/Shapez2-Mods/issues
+Licensed under Apache 2.0. Block textures are the property of Mojang Studios and are not covered by that license."
+    "changenote" "First release."
+}
