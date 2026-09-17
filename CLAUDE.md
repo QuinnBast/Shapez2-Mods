@@ -98,7 +98,15 @@ grep -o '"Version": "[^"]*"' "$SPZ2_PERSISTENT/mods/<Mod>/manifest.json"
 
 Publish is only generated for projects that declare the target. Re-run the script after adding
 a mod; it only rewrites the files it owns (`_mod_*.xml`), so anything hand-made beside them
-survives. `.idea/` is gitignored, so these are local-only.
+survives. `.idea/` is gitignored, so these are local-only. `--shell` emits Shell Script
+configurations instead, if the Shell Script plugin is preferred.
+
+**The run configuration type id is `DotNetExecutable`.** Not `DotNetExe`, which Rider rejects
+with "Unknown run configuration" - and the id is not the class name minus `ConfigurationType`.
+It is the string the type was constructed with, readable out of Rider's own jar:
+`lib/modules/intellij.rider.jar`, where `DotNetProjectConfigurationType.class` carries
+`DotNetProject` (the id already known to work) and `DotNetExeConfigurationType.class` carries
+`DotNetExecutable`.
 
 ### Hot reload
 
@@ -198,8 +206,11 @@ Each is written up properly in the docs; this is the index.
 | **Zoom is a drawing budget.** `IslandPlacementHelperHighlightShapeResources.Draw` - the only placement helper that sweeps the whole map, and so the only one that makes *miners* slow while every other island is fine - guards its cost three ways, all camera-derived: `Zoom > 4000` skips it, `InOverviewMode` (`Zoom > 1500`) cuts ten indicator planes per chunk to one, and `CameraPlanes` culls. A mod reporting a small zoom from a level camera removes all three at once. Swap `CameraPlanes` for a box around the player around the call, rather than reimplementing the helper. | `camera-and-viewport.md` |
 | The scenario picker has **no scroll view**: `HUDMenuSelectScenarioState` drops cards straight into a `RectTransform` with a layout group. Seven fit; an eighth, which is what a mod that adds a scenario creates, does not. | `howto/custom-scenarios.md` |
 | A research shop **preview image is 1024 x 709**, not square, and `HUDResearchSideUpgradeDisplay` assigns it to an `Image` with `preserveAspect` off - so a square sprite renders 1.44x too wide and looks like a rendering bug. Read the size out of `resources.assets`: a `Sprite`'s `m_Rect` is four floats after its 4-aligned name. | `howto/add-research-unlock.md` |
+| To make the path placer able to choose a new belt/lift/merger, **register it into the `BuildingDefinitionGroup`** (`AddInternalVariant`) - not by hooking `DefinitionsFinderUtils.BeltPathDefinitionsFinder`. That extension method hooks cleanly and is a **dead seam**: a trace decorator showed it firing hundreds of times a session with **zero** `TryMatchingEntityFromInputsAndOutputs` calls ever reaching the finder it returned, so the live placer builds its finder elsewhere. Group registration reaches every consumer at once. Snapshot `group.Definitions` before looping - `AddInternalVariant` appends to that same list, so using its `Count` as the bound hangs on load. An internal variant is **not** a toolbar entry; the stock lift already has eight nobody cycles. | — |
+| A lift's connectors must be moved **by role, not by height**: every variant has its input at z 0, and the **output**'s sign is what makes it go up or down (`out (0,0,2)` vs `out (0,0,-2)`), with the four Down variants listed *first*. "Move the highest-z connector" silently corrupts every Down variant by moving the input instead. Authored data - dump it at runtime rather than guessing. | — |
 | **`CameraController.OnGameUpdate` stops being called when a session ends** - `PlayerInteractionOrchestrator` calls it, and leaving for the main menu takes the player interaction with it. A mod that cleans up inside that hook never cleans up: nothing throws, nothing is logged, and its UI floats over the menu. Put the stand-down on a tick postfixed onto `GameSessionOrchestrator.Tick`, which keeps running for the menu's background game. | `camera-and-viewport.md` |
 | A drawn wagon's orientation is **readable off its matrix**, so upside-down rails need no access to navigation state: `TrainsDrawer.CalculateWagonTransform` builds `Quaternion.Euler(roll + lean, yaw, pitch)`, where **`pitch` is the Z euler despite the name** and is 180 on an inverted rail - so column 1 of the matrix `DrawHooks.OnDrawTrain` hands over is the wagon's own up. Normalise it: a lift solver writes `scale` by reference. | — |
+| `SuperChunksDrawer.Draw` - which draws **every map resource** - opens by asking `ScreenUtils.TryGetChunkCoordinate` what the *screen centre* is over and **returns outright** if the answer is none. That is the flat-plane intersection, so an eye-level camera aimed above the horizon draws no asteroids at all, anywhere. The coordinate is only a flood-fill seed, so answering with the player's own chunk is both a fix and more correct. Separately, the per-resource bounds it culls against are **cached per resource for the drawer's life** (`GetResourceBounds`), so hooking `ComputeResourceSourceBounds` to depend on camera position freezes the first answer forever. | `camera-and-viewport.md` |
 
 ## Working style the user expects
 

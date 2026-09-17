@@ -14,9 +14,21 @@ than for all of them: a configuration that fails with "target does not exist" th
 somebody tries it is worse than no configuration.
 
 **Why `.NET Executable` and not `Shell Script`.** A shell configuration needs an interpreter,
-and which one Rider picks on Windows depends on what is installed - a config that runs for the
-author and not for anyone else is the failure mode. `.NET Executable` runs a named binary with
-arguments and a working directory, and `dotnet.exe` is a named binary. Nothing else is involved.
+and which one Rider picks on Windows depends on what is installed. `.NET Executable` runs a
+named binary with arguments and a working directory, and `dotnet.exe` is a named binary.
+
+Pass `--shell` to emit Shell Script configurations instead, for a Rider with the Shell Script
+plugin disabled or a machine where dotnet is not where this thinks it is.
+
+**The type id is `DotNetExecutable`, not `DotNetExe`.** Rider answers a wrong one with "Unknown
+run configuration", and the id is not the class name minus `ConfigurationType` - it is whatever
+string that class was constructed with. Read it out of Rider's own jar rather than guessed:
+
+    lib/modules/intellij.rider.jar
+      com/jetbrains/rider/run/configurations/project/DotNetProjectConfigurationType.class -> DotNetProject
+      com/jetbrains/rider/run/configurations/dotNetExe/DotNetExeConfigurationType.class   -> DotNetExecutable
+
+`DotNetProject` is the one id already known to work, which is what makes the other one credible.
 
 Rider reads these from `.idea/.idea.<Solution>/.idea/runConfigurations/`, one file per
 configuration. They are grouped into folders so the dropdown stays legible at thirty entries.
@@ -24,6 +36,7 @@ configuration. They are grouped into folders so the dropdown stays legible at th
 
 import os
 import re
+import sys
 import xml.sax.saxutils as sax
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -33,6 +46,7 @@ OUT = os.path.join(ROOT, ".idea", ".idea." + SOLUTION, ".idea", "runConfiguratio
 # Resolved once rather than left as bare "dotnet": Rider launches the binary itself rather than
 # through a shell, so it does not get the PATH lookup a terminal would.
 DOTNET = os.environ.get("RIDER_DOTNET", r"C:\Program Files\dotnet\dotnet.exe")
+BASH = os.environ.get("RIDER_BASH", r"C:\Program Files\Git\bin\bash.exe")
 
 ACTIONS = [
     ("install", "1 Install to mods", "build",
@@ -46,8 +60,8 @@ ACTIONS = [
      "Build first - this target publishes, it does not compile."),
 ]
 
-TEMPLATE = """<component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="{name}" type="DotNetExe" factoryName=".NET Executable" folderName="{folder}">
+EXE_TEMPLATE = """<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="{name}" type="DotNetExecutable" factoryName=".NET Executable" folderName="{folder}">
     <option name="EXE_PATH" value="{dotnet}" />
     <option name="PROGRAM_PARAMETERS" value="{args}" />
     <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/{workdir}" />
@@ -61,6 +75,25 @@ TEMPLATE = """<component name="ProjectRunConfigurationManager">
     <option name="PROJECT_WORKING_DIRECTORY_TRACKING" value="0" />
     <option name="PROJECT_KIND" value="None" />
     <option name="PROJECT_TFM" value="" />
+    <method v="2" />
+  </configuration>
+</component>
+"""
+
+SH_TEMPLATE = """<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="{name}" type="ShConfigurationType" folderName="{folder}">
+    <option name="SCRIPT_TEXT" value="dotnet {args}" />
+    <option name="INDEPENDENT_SCRIPT_PATH" value="true" />
+    <option name="SCRIPT_PATH" value="" />
+    <option name="SCRIPT_OPTIONS" value="" />
+    <option name="INDEPENDENT_SCRIPT_WORKING_DIRECTORY" value="false" />
+    <option name="SCRIPT_WORKING_DIRECTORY" value="$PROJECT_DIR$/{workdir}" />
+    <option name="INDEPENDENT_INTERPRETER_PATH" value="false" />
+    <option name="INTERPRETER_PATH" value="{bash}" />
+    <option name="INTERPRETER_OPTIONS" value="" />
+    <option name="EXECUTE_IN_TERMINAL" value="true" />
+    <option name="EXECUTE_SCRIPT_FILE" value="false" />
+    <envs />
     <method v="2" />
   </configuration>
 </component>
@@ -92,6 +125,7 @@ def mods():
 
 
 def main():
+    shell = "--shell" in sys.argv
     os.makedirs(OUT, exist_ok=True)
 
     # Clear only what this script wrote, so a hand-made configuration beside them survives.
@@ -107,10 +141,11 @@ def main():
                 continue
 
             name = "%s (%s)" % (project, action)
-            body = TEMPLATE.format(
+            body = (SH_TEMPLATE if shell else EXE_TEMPLATE).format(
                 name=sax.quoteattr(name)[1:-1],
                 folder=sax.quoteattr(folder)[1:-1],
                 dotnet=sax.quoteattr(DOTNET)[1:-1],
+                bash=sax.quoteattr(BASH)[1:-1],
                 args=sax.quoteattr(args)[1:-1],
                 workdir=sax.quoteattr(repo)[1:-1],
             )
@@ -122,7 +157,9 @@ def main():
         print("  %-28s %s" % (project, "install, stage, publish" if publishes
                               else "install, stage"))
 
-    print("\n%d configuration(s) in %s" % (written, os.path.relpath(OUT, ROOT)))
+    print("\n%d %s configuration(s) in %s"
+          % (written, "Shell Script" if shell else ".NET Executable",
+             os.path.relpath(OUT, ROOT)))
     print("Rider picks them up on the next reload of the solution.")
 
 
