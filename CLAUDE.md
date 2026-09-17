@@ -98,15 +98,16 @@ grep -o '"Version": "[^"]*"' "$SPZ2_PERSISTENT/mods/<Mod>/manifest.json"
 
 Publish is only generated for projects that declare the target. Re-run the script after adding
 a mod; it only rewrites the files it owns (`_mod_*.xml`), so anything hand-made beside them
-survives. `.idea/` is gitignored, so these are local-only. `--shell` emits Shell Script
-configurations instead, if the Shell Script plugin is preferred.
+survives. `.idea/` is gitignored, so these are local-only.
 
-**The run configuration type id is `DotNetExecutable`.** Not `DotNetExe`, which Rider rejects
-with "Unknown run configuration" - and the id is not the class name minus `ConfigurationType`.
-It is the string the type was constructed with, readable out of Rider's own jar:
-`lib/modules/intellij.rider.jar`, where `DotNetProjectConfigurationType.class` carries
-`DotNetProject` (the id already known to work) and `DotNetExeConfigurationType.class` carries
-`DotNetExecutable`.
+**Do not guess a Rider run configuration `type`.** A wrong one is rejected outright with
+"Unknown run configuration type", and Rider's .NET config classes are obfuscated - the string
+constants in them are fragmented and the plausible-looking ones turn out to be display names.
+`DotNetExe` and `DotNetExecutable` were both inferred from `intellij.rider.jar` and both
+rejected. These use `ShConfigurationType`, which is IntelliJ platform rather than Rider, has a
+public and long-stable id, and is bundled (`com.intellij.sh.run.ShConfigurationType`). It shells
+out through Git Bash, so `dotnet` must be on PATH - which it already is, or none of the command
+lines above would work either.
 
 ### Hot reload
 
@@ -211,6 +212,8 @@ Each is written up properly in the docs; this is the index.
 | **`CameraController.OnGameUpdate` stops being called when a session ends** - `PlayerInteractionOrchestrator` calls it, and leaving for the main menu takes the player interaction with it. A mod that cleans up inside that hook never cleans up: nothing throws, nothing is logged, and its UI floats over the menu. Put the stand-down on a tick postfixed onto `GameSessionOrchestrator.Tick`, which keeps running for the menu's background game. | `camera-and-viewport.md` |
 | A drawn wagon's orientation is **readable off its matrix**, so upside-down rails need no access to navigation state: `TrainsDrawer.CalculateWagonTransform` builds `Quaternion.Euler(roll + lean, yaw, pitch)`, where **`pitch` is the Z euler despite the name** and is 180 on an inverted rail - so column 1 of the matrix `DrawHooks.OnDrawTrain` hands over is the wagon's own up. Normalise it: a lift solver writes `scale` by reference. | — |
 | `SuperChunksDrawer.Draw` - which draws **every map resource** - opens by asking `ScreenUtils.TryGetChunkCoordinate` what the *screen centre* is over and **returns outright** if the answer is none. That is the flat-plane intersection, so an eye-level camera aimed above the horizon draws no asteroids at all, anywhere. The coordinate is only a flood-fill seed, so answering with the player's own chunk is both a fix and more correct. Separately, the per-resource bounds it culls against are **cached per resource for the drawer's life** (`GetResourceBounds`), so hooking `ComputeResourceSourceBounds` to depend on camera position freezes the first answer forever. | `camera-and-viewport.md` |
+| A simulation renderer is bound to its buildings by **simulation type** and nothing else, so giving one building of a family its own simulation makes it **stop drawing, silently**. `SimulationsDrawer` keys on `(LocalizedSimulationType, SimulationType)` and never dispatches a simulation matching no key - from its side nothing is wrong, so nothing is logged. The tell is that the **placement preview still draws**, since a preview comes off the mesh and never touches the simulation. `DynamicallyRendering`'s `TRenderer` is not the binding and ignoring it is not the bug. | `rendering.md` |
+| The red **conflict cross** on a connector cannot be switched off through the builder chain, and two similarly named methods make it look like it can: `NotRenderingConnectorConflictIndicator()` sets a different field, and `NotRenderingConflictingIndicatorVisualization()` sets the right one but is still dead, because **ShapezShifter never calls `BuildingDefinitionFactory`** - the only thing that turns either field into `SkipConflictingConnectorsDrawingFlag`. Attach the flag to the definition `BuildAndRegister` returns, guarded with `Has<>` because it re-runs per scenario load. | `howto/add-a-building.md` |
 
 ## Working style the user expects
 

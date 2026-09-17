@@ -13,22 +13,18 @@ Three per mod, matching the three things you ever do with one:
 than for all of them: a configuration that fails with "target does not exist" the first time
 somebody tries it is worse than no configuration.
 
-**Why `.NET Executable` and not `Shell Script`.** A shell configuration needs an interpreter,
-and which one Rider picks on Windows depends on what is installed. `.NET Executable` runs a
-named binary with arguments and a working directory, and `dotnet.exe` is a named binary.
+**`ShConfigurationType`, because its id is knowable.** Rider rejects a wrong `type` with
+"Unknown run configuration type", and Rider's own .NET types are a bad thing to guess at: their
+classes are obfuscated, so the string constants in them are fragmented and the plausible-looking
+ones are display names. `DotNetExe` and `DotNetExecutable` were both tried and both rejected.
 
-Pass `--shell` to emit Shell Script configurations instead, for a Rider with the Shell Script
-plugin disabled or a machine where dotnet is not where this thinks it is.
+`ShConfigurationType` is IntelliJ platform rather than Rider, its id is public and long stable,
+and the jar scan confirms Rider bundles it (`com.intellij.sh.run.ShConfigurationType`). It runs
+`dotnet` through bash, which is exactly what a terminal does, so `dotnet` has to be on PATH -
+and it already is, or none of the command lines in CLAUDE.md would work either.
 
-**The type id is `DotNetExecutable`, not `DotNetExe`.** Rider answers a wrong one with "Unknown
-run configuration", and the id is not the class name minus `ConfigurationType` - it is whatever
-string that class was constructed with. Read it out of Rider's own jar rather than guessed:
-
-    lib/modules/intellij.rider.jar
-      com/jetbrains/rider/run/configurations/project/DotNetProjectConfigurationType.class -> DotNetProject
-      com/jetbrains/rider/run/configurations/dotNetExe/DotNetExeConfigurationType.class   -> DotNetExecutable
-
-`DotNetProject` is the one id already known to work, which is what makes the other one credible.
+`--dotnet-exe` emits the Rider-native `.NET Executable` form instead, for anyone who finds the
+right id. It is the nicer configuration if it ever works: no shell, no PATH.
 
 Rider reads these from `.idea/.idea.<Solution>/.idea/runConfigurations/`, one file per
 configuration. They are grouped into folders so the dropdown stays legible at thirty entries.
@@ -125,7 +121,7 @@ def mods():
 
 
 def main():
-    shell = "--shell" in sys.argv
+    shell = "--dotnet-exe" not in sys.argv
     os.makedirs(OUT, exist_ok=True)
 
     # Clear only what this script wrote, so a hand-made configuration beside them survives.
