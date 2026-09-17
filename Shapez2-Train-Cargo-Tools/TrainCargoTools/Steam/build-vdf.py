@@ -58,9 +58,17 @@ def main():
 
     vdf = io.open(VDF, encoding="utf-8").read()
 
-    # The description is the last key and runs to the closing brace, so it is matched rather
-    # than parsed - a real KeyValues parser is a lot of code to change one value.
-    pattern = re.compile(r'("description"\s*")(.*)("\s*\n\})', re.S)
+    # Matched rather than parsed - a real KeyValues parser is a lot of code to change one
+    # value - but matched on the value itself, not on "everything up to the closing brace".
+    #
+    # The earlier pattern was `("description"\s*")(.*)("\s*\n\})` with DOTALL, on the assumption
+    # that description is the last key. It is not: `changenote` follows it, and the greedy `.*`
+    # swallowed the whole of it, so every run of this script **silently deleted the changenote**.
+    #
+    # A VDF value cannot contain a double quote at all - `check` above refuses one, because
+    # Valve's parser has escape sequences off - so `[^"]*` is not a heuristic here. It is
+    # exactly the value and nothing after it.
+    pattern = re.compile(r'("description"\s*")([^"]*)(")')
 
     if not pattern.search(vdf):
         raise SystemExit("base.vdf has no description block in the expected shape.")
