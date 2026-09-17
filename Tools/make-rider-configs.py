@@ -26,6 +26,12 @@ and it already is, or none of the command lines in CLAUDE.md would work either.
 `--dotnet-exe` emits the Rider-native `.NET Executable` form instead, for anyone who finds the
 right id. It is the nicer configuration if it ever works: no shell, no PATH.
 
+**The working directory is the project folder, not the mod repo.** Two of the twelve repos -
+Decoration Blocks and Extra Shape Parts - have no solution file at their root, and a bare
+`dotnet build` there fails with `MSB1003: Specify a project or solution file`. The project
+folder always holds exactly one `.csproj`, so running from there works for every mod whatever
+the repo layout, and builds the project rather than whatever a solution happens to contain.
+
 Rider reads these from `.idea/.idea.<Solution>/.idea/runConfigurations/`, one file per
 configuration. They are grouped into folders so the dropdown stays legible at thirty entries.
 """
@@ -60,7 +66,7 @@ EXE_TEMPLATE = """<component name="ProjectRunConfigurationManager">
   <configuration default="false" name="{name}" type="DotNetExecutable" factoryName=".NET Executable" folderName="{folder}">
     <option name="EXE_PATH" value="{dotnet}" />
     <option name="PROGRAM_PARAMETERS" value="{args}" />
-    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/{workdir}" />
+    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/{workdir}/{project}" />
     <option name="PASS_PARENT_ENVS" value="1" />
     <option name="USE_EXTERNAL_CONSOLE" value="0" />
     <option name="USE_MONO" value="0" />
@@ -83,7 +89,7 @@ SH_TEMPLATE = """<component name="ProjectRunConfigurationManager">
     <option name="SCRIPT_PATH" value="" />
     <option name="SCRIPT_OPTIONS" value="" />
     <option name="INDEPENDENT_SCRIPT_WORKING_DIRECTORY" value="false" />
-    <option name="SCRIPT_WORKING_DIRECTORY" value="$PROJECT_DIR$/{workdir}" />
+    <option name="SCRIPT_WORKING_DIRECTORY" value="$PROJECT_DIR$/{workdir}/{project}" />
     <option name="INDEPENDENT_INTERPRETER_PATH" value="false" />
     <option name="INTERPRETER_PATH" value="{bash}" />
     <option name="INTERPRETER_OPTIONS" value="" />
@@ -144,6 +150,7 @@ def main():
                 bash=sax.quoteattr(BASH)[1:-1],
                 args=sax.quoteattr(args)[1:-1],
                 workdir=sax.quoteattr(repo)[1:-1],
+                project=sax.quoteattr(project)[1:-1],
             )
 
             path = os.path.join(OUT, "_mod_%s_%s.xml" % (project, action))

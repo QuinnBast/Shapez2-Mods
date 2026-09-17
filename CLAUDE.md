@@ -96,7 +96,10 @@ grep -o '"Version": "[^"]*"' "$SPZ2_PERSISTENT/mods/<Mod>/manifest.json"
 | 2 Stage to mods-dev | `dotnet build -p:Dev=true` | `<persistent>/mods-dev/<Mod>` — safe while running |
 | 3 Publish to Steam | `dotnet build -t:SteamPublish` | the workshop item in `Steam/base.vdf` |
 
-Publish is only generated for projects that declare the target. Re-run the script after adding
+The working directory is the **project** folder, not the mod repo: Decoration Blocks and Extra
+Shape Parts have no solution file at their root, so a bare `dotnet build` there fails with
+`MSB1003: Specify a project or solution file`. Publish is only generated for projects that
+declare the target. Re-run the script after adding
 a mod; it only rewrites the files it owns (`_mod_*.xml`), so anything hand-made beside them
 survives. `.idea/` is gitignored, so these are local-only.
 
