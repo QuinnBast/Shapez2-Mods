@@ -167,6 +167,76 @@ involved, so they are correct at any camera angle, including level and looking u
 need "what is under the cursor" rather than "which tile does the cursor sit over", prefer
 these.
 
+## Zoom is a performance budget, not just a framing
+
+A lot of the game's drawing decides how much work to do from `Viewport.Zoom` and from the
+camera's own position and frustum. That is sound for an overhead camera, where being zoomed
+out means being far away and seeing a bounded patch of ground. Move the camera to eye level
+and report a small zoom and every one of those guards comes off at once.
+
+`IslandPlacementHelperHighlightShapeResources.Draw` - the helper that marks minable patches
+while a shape miner is on the cursor - is the clearest example. It has three separate cost
+guards and they are all camera-derived:
+
+```csharp
+if (options.Viewport.Zoom > 4000f) return;                   // skip entirely when zoomed out
+…
+foreach (MapSuperChunk superChunk in map.SuperChunks)
+    if (!GeometryUtility.TestPlanesAABB(options.CameraPlanes, superChunkBounds)) continue;
+        …
+        float num2 = math.distancesq(options.CameraPosition_W, bounds.center);
+        int num3 = ((!(num2 < 2250000f) || options.InOverviewMode) ? 1 : 10);  // 10 planes per chunk
+```
+
+`InOverviewMode` is just `Viewport.Zoom > 1500f`. So a mod reporting a working zoom below
+1500 gets ten indicator planes per resource chunk instead of one, a full-detail shape mesh
+per chunk within 2500 units, and no early-out - while its level frustum admits far more of
+the map than the overhead one ever did. The resource bounds make that worse rather than
+better: `SpaceThemeBoundsProvider.ComputeResourceSourceBounds` overwrites their height with
+the constants `-50f`/`-22f`, so they are a flat band that a near-horizontal frustum slices
+through for a very long way.
+
+The symptom is specific and misleading - *one* thing to place is slow and everything else is
+fine - because this is the only placement helper that looks at the whole map rather than at
+the entity being placed.
+
+The cheap fix is not to reimplement the helper but to narrow what it is culled against.
+`FrameDrawOptionsNoLOD.CameraPlanes` is a plain `Plane[6]`, so a hook can swap in six
+inward-facing planes forming a box around the player, call the original, and put the real
+ones back in a `finally`. `GeometryUtility.TestPlanesAABB` then does the culling itself and
+nothing about the drawing changes.
+
+> [!TIP]
+> Bound it to something the player understands. Placement reach is the natural choice: a
+> patch further away than you can place on is scenery, not a hint.
+
+## The camera hook stops without telling anyone
+
+`CameraController.OnGameUpdate` is called once a frame from
+`PlayerInteractionOrchestrator.OnGameUpdate`. That is the whole reason it is the right place
+to take the camera over - and the reason it is the wrong place to give it back.
+
+Leaving a session for the main menu takes the player interaction with it, so the hook simply
+stops firing. Nothing throws, nothing is logged, and a mod holding state behind
+`if (active)` holds it forever: a locked cursor, an overridden field of view, an overlay
+canvas floating over the menu.
+
+Put the stand-down somewhere that outlives a session. A tick postfixed onto
+`GameSessionOrchestrator.Tick` - which is what ShapezShifter's `IMod.OnTick` is - keeps
+running for the **main menu's background game**, so it can notice that the camera hook has
+gone quiet:
+
+```csharp
+private void OnTick(float deltaTime)
+{
+    if (!Active || Time.frameCount - LastUpdateFrame <= 30) { return; }
+    Restore();                       // hide the overlay, unlock the cursor, restore the FOV
+}
+```
+
+Be generous with the threshold. A load legitimately pauses the camera update for a frame or
+two, and ejecting the player for it is a worse bug than the one being guarded against.
+
 ## Mouse input
 
 `InputDownstreamContext.MouseDelta` is not a device delta. `GameInputManager.OnGameUpdate`

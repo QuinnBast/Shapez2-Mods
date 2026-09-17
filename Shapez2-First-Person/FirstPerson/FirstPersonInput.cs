@@ -12,8 +12,9 @@ namespace QuinnBast.Shapez2.FirstPerson;
 /// flipping the interaction scope and Tab from also cycling a building variant. The mod used
 /// to do that with three hand-written suppression calls; the input system does it now.
 ///
-/// When first person is off only <see cref="Toggle"/> is read. Consuming the rest would take
-/// Space and Tab away from a player who is not even in first person.
+/// When first person is off only <see cref="Toggle"/> is read - and only when the toggle is
+/// enabled at all, which it is not by default. Consuming the rest would take Space and Tab
+/// away from a player who is not even in first person.
 /// </summary>
 public struct FirstPersonInput
 {
@@ -21,6 +22,7 @@ public struct FirstPersonInput
     public bool Fly;
     public bool Travel;
     public bool Board;
+    public bool BoardHeld;
     public bool FreeCursor;
     public bool JumpPressed;
     public bool JumpHeld;
@@ -33,11 +35,15 @@ public struct FirstPersonInput
     /// </summary>
     public bool SpawnHere;
 
-    public static FirstPersonInput Read(InputDownstreamContext context, bool active)
+    public static FirstPersonInput Read(InputDownstreamContext context, bool active, bool placing)
     {
         FirstPersonInput input = default;
 
-        input.Toggle = context.ConsumeWasActivated(FirstPersonKeybindings.Toggle);
+        // Guarded like the other optional bindings: when the toggle is off it is never
+        // registered, and looking up an unregistered id is a KeyNotFoundException out of a
+        // frame hook rather than a false.
+        input.Toggle = FirstPersonControl.ToggleEnabled
+                       && context.ConsumeWasActivated(FirstPersonKeybindings.Toggle);
         input.SpawnHere = Input.GetKey(FirstPersonTuning.SpawnHereModifier);
 
         if (!active)
@@ -51,8 +57,16 @@ public struct FirstPersonInput
                     && context.ConsumeWasActivated(FirstPersonKeybindings.Fly);
         input.Travel = FirstPersonControl.TravelEnabled
                        && context.ConsumeWasActivated(FirstPersonKeybindings.Travel);
-        input.Board = FirstPersonControl.TrainRidingEnabled
-                      && context.ConsumeWasActivated(FirstPersonKeybindings.Board);
+        // Not read while placing, which is the whole reason boarding can share `F` with
+        // building-placement.mirror: reading a binding consumes it, and consuming marks
+        // every other active binding on the same key consumed too - so mirror would simply
+        // stop working. Left alone, it keeps the key whenever it has something to mirror.
+        // Held as well as pressed: holding boards the train the moment one arrives in the
+        // crosshair, which beats trying to time a keypress against a moving wagon. The
+        // press is what gets you off again - see FirstPersonCamera.
+        bool board = FirstPersonControl.TrainRidingEnabled && !placing;
+        input.Board = board && context.ConsumeWasActivated(FirstPersonKeybindings.Board);
+        input.BoardHeld = board && context.ConsumeIsActive(FirstPersonKeybindings.Board);
         input.FreeCursor = context.ConsumeIsActive(FirstPersonKeybindings.FreeCursor);
         input.JumpPressed = context.ConsumeWasActivated(FirstPersonKeybindings.Jump);
         input.JumpHeld = context.ConsumeIsActive(FirstPersonKeybindings.Jump);

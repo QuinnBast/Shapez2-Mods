@@ -173,6 +173,12 @@
             <HintPath>$(SPZ2_PATH)\Game.Core.Map.Layout.dll</HintPath>
             <Private>False</Private>
         </Reference>
+        <!-- HUDMenuSelectScenarioState: the scenario picker, which has no scroll view of its
+             own and overflows once a mod adds an eighth scenario. -->
+        <Reference Include="MainMenuAssembly">
+            <HintPath>$(SPZ2_PATH)\MainMenuAssembly.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
     </ItemGroup>
 
     <PropertyGroup>
@@ -200,7 +206,19 @@
         <None Update="manifest.json">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
+        <None Update="Resources\*">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
         <None Update="translations.json">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <!-- ModdedScenarios reads <mod>/scenarios/*.json and <mod>/scenario-presets/*.json
+             straight off disk, so these only have to land beside the dll under their own
+             folder names. -->
+        <None Update="scenarios\*">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Update="scenario-presets\*">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
     </ItemGroup>

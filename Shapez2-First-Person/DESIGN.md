@@ -648,7 +648,9 @@ FirstPersonControl.TravelRequiresResearch = false;   // fast travel from the sta
 | | |
 | --- | --- |
 | `Forced` | lock the player in: they enter on the first frame of a session and the toggle stops working |
+| `LockedIn` | `Forced`, or the mod's own scenario is running - what the camera actually reads |
 | `Active` | whether the player is in first person right now |
+| `ScenarioEnabled` | whether the **First Person** scenario and its preset appear in the new-game menu |
 | `FlightEnabled` / `TravelEnabled` / `TrainRidingEnabled` | whether the feature is *offered* at all |
 | `FlightRequiresResearch` / `TravelRequiresResearch` / `TrainRidingRequiresResearch` | whether it has to be *bought* |
 | `FlightResearchCostPoints` / `TravelResearchCostPoints` / `TrainRidingResearchCostPoints` | what the node costs |
@@ -668,7 +670,7 @@ it.
 
 **`TravelRequiresResearch` defaults to true**, which is a change from fast travel simply
 working. `FlightResearchCostPoints` and its twin are **the stored amount, not the displayed
-one**: the research screen renders `Amount * 100`, so the default 2 appears as "200". That
+one**: the research screen renders `Amount * 100`, so the default 60 appears as "6k". That
 trap is worth restating in the one place a consumer will read.
 
 The surface is deliberately dumb - plain statics, no events, no interfaces, no generics -
@@ -681,6 +683,400 @@ keybindings when they register, so a mod's constructor is early enough for all o
 
 Leaving a session still exits, because the body's position belongs to a map that is gone;
 the next session puts a forced player straight back in.
+
+## The scenario ships in the mod folder
+
+A mod can ship a scenario, and the docs used to say it could not. `ModdedScenarios` walks
+every resolved mod and reads `<mod>/scenarios/*.json` and `<mod>/scenario-presets/*.json`
+straight off disk, concatenating both with the built-in ones in `LoadGameDataBlindStep`.
+Nothing registers, nothing hooks - the files just have to be there.
+
+`scenarios/first-person-scenario.json` is the shipped `default-scenario` asset with three
+strings changed - the unique id and the title and description keys - and nothing else.
+
+### The export is not the scenario
+
+The obvious starting point was `debug.export-game-data`, and it cost a boot. Its
+`default-scenario.json` is 144 KB; the asset the game actually loads is **1.7 KB**, because
+a scenario is almost entirely references:
+
+```json
+"StartingLocation": "#include:Scenarios/Classic/DefaultData/StartingLocation",
+"ToolbarConfig": "#include_raw:Scenarios/Classic/DefaultData/Toolbar/ToolbarConfigWithConverters"
+```
+
+The export is that file with every reference resolved, and it does not load back. Two
+separate reasons, either of which is fatal:
+
+- `ScenarioReader` decides whether a file is a scenario with
+  `text.Contains("\"FormatVersion\": 3,")` - a literal substring with that exact space,
+  while the export is minified to `{"FormatVersion":3,`. **The game's own export fails the
+  game's own format check.**
+- `ToolbarConfig` is a `#include_raw:`, and `ScenarioRawIncludeJsonConverter` loads the
+  referenced asset's text *verbatim into a string field* while declaring
+  `CanWrite => false`. Serialising therefore writes `{"ToolbarDataJson": "…escaped JSON…"}`,
+  and that blob still contains `\"#include:…\"` lines. The pre-processor's pattern is
+  `"\"#include:(?<path>[^\0\"]+)\""` - a plain quote, which happily matches the quote
+  inside `\"` - so the captured path ends in a backslash and the load dies with
+  `Could not resolve path Scenarios/SharedData/Toolbar/Categories/ShapeBuildings\`.
+
+So the file is a copy of the real asset, pulled out of `resources.assets` (plain UTF-8:
+find `"FormatVersion": 3,`, walk back to the `{`, brace-match forward). Keeping the
+`#include:` lines rather than their contents is the better outcome anyway - they resolve
+through `Resources.Load`, which behaves identically for a scenario in a mod folder, so the
+scenario tracks the game's own data across updates instead of freezing a copy of it.
+
+### An unresolvable include stops the game booting
+
+That is worth stating on its own, because the failure is not proportionate:
+
+```csharp
+text = new IncludePreProcessorSolver("#include:").Process(text);   // NOT in the try block
+try { serializedGameScenario = …Deserialize(text); } catch { … return false; }
+```
+
+`IncludePreProcessorSolver` throws for a path it cannot find, and that throw comes out
+through `GameData`'s constructor and `LoadGameDataBlindStep` - the game does not start.
+Our file names about a dozen of the game's own resource paths, every one of them a future
+update away from moving, so `OnReadScenario` wraps the call **for our file only** and
+returns the reader's own false on a throw. A missing menu entry is a bug report; a dead
+install is not.
+
+### The map generation could not be data
+
+The preset names its generation parameters as a whole value:
+
+```json
+"MapGenerationParameters": "#include:Scenarios/SharedData/BaseMapGenerationParameters"
+```
+
+and `IncludePreProcessorSolver` substitutes the entire referenced document. There is no
+merge, so changing one number means inlining all of them - including
+`ShapePatchGenerationLikeliness`, the table of which shape types appear at which distance
+from the origin. That table is a Unity `TextAsset`, and `GameBaseDataExporter` writes the
+unresolved `#include:` line rather than its contents, so there is no readable source for
+it anywhere. Inlining a replacement would have meant inventing game data.
+
+So the include stays, and `FirstPersonScenario.ApplyMapGeneration` overwrites the eleven
+scalars afterwards. The table is untouched because nothing touches it.
+
+The stamp happens in a hook on the `GameData.ScenarioParameterPresets` getter. That is the
+only public route to the preset list, the menu goes through it
+(`HUDMenuSelectScenarioState`, `HUDMenuSelectModeState`), and it is an ordinary method -
+the two obvious seams, `ScenarioCollection` and `ScenarioPresetCollection`, are both
+*constructors*, and no other mod in this workspace has yet established that MonoMod hooks
+one cleanly here. The same hook drops our preset when `ScenarioEnabled` is off, and a
+second hook on `ScenarioReader.TryReadingScenario` returns false for our scenario - which
+is the reader's own "not a scenario" answer, so `ScenarioCollection` simply skips it.
+
+Stamping in a getter means it runs more than once. That is fine because it is assignment
+rather than adjustment, and because the menu copies by value -
+`gameParameters.ScenarioParameters.AssignFrom(preset.Parameters)` - so what the stamp sets
+are *starting* values the player can still change in the scenario config dialog, and a save
+carries its own copy from then on.
+
+### Percentages above 100 loop
+
+```csharp
+int k = Config.FluidPatchLikelinessPercent;
+do { if (rng.TestPercentage(k) && …) yield return result; k -= 100; } while (k > 100);
+```
+
+They do not saturate. The count is `ceil(k / 100) - 1` patches per super chunk, each placed
+outright because `k` is still over 100 when it is tested. The trailing remainder is dropped
+rather than rolled - the loop exits at `k <= 100` without testing it - so 250 and 200 are
+both exactly two patches, not two and a half and two. A super chunk is 64x64 chunks
+(`SuperChunkCoordinate.ToOrigin_GC` multiplies by 64), and the class defaults are 15 and
+30, i.e. well under one patch each.
+
+That is the justification for numbers that look absurd written down: a first-person player
+walks, and at walking pace the vanilla spacing is an expedition per patch.
+
+## Miners were the slow island, and zoom was why
+
+Placing a shape miner stuttered; placing an ordinary platform did not. The asymmetry is the
+clue: `IslandPlacementHelperHighlightShapeResources` is the only placement helper that looks
+at the **whole map** instead of at the thing on the cursor. It is what marks every patch you
+could drop the miner on, and it is switched on by the miner's own definition.
+
+Its cost is guarded three ways, and all three read the camera:
+
+| Guard | Vanilla | First person |
+| --- | --- | --- |
+| `Viewport.Zoom > 4000` returns early | true while hunting for asteroids | never - we report 80 |
+| `InOverviewMode` (`Zoom > 1500`) forces one indicator plane per chunk instead of ten | usually true | never |
+| `CameraPlanes` culls super chunks and resource sources | a short pyramid onto the ground | a level wedge to the far plane |
+
+The frustum is the big one. The bounds it tests against make it worse:
+`SpaceThemeBoundsProvider.ComputeResourceSourceBounds` overwrites a resource source's height
+with the constants `-50f`/`-22f`, so every patch is a thin slab at a fixed altitude and a
+near-horizontal frustum slices through an enormous number of them. Per surviving chunk the
+helper then draws a full-detail shape mesh and up to eleven planes.
+
+The fix is not to reimplement it. `FrameDrawOptionsNoLOD.CameraPlanes` is a plain `Plane[6]`,
+so `FirstPersonPlacementHighlight.WithinRadius` swaps in six inward-facing planes forming a
+box around the player, calls the original, and restores the real ones in a `finally`. The
+game's own `TestPlanesAABB` does the culling and nothing about the drawing changes.
+
+The radius is `ChunkReach x ReachMultiplier x 1.5` - your platform placement reach with a
+margin. That is the bound that means something: a patch further away than you can place on is
+scenery, not a hint. The fluid twin gets the same treatment; its loop is cheaper but sweeps
+the same super chunks.
+
+**This is a diagnosis, not a measurement.** It explains every part of the report - miners
+specifically, first person specifically - and the three defeated guards are in the decompiled
+source. If the stutter survives it, the next suspect is `IslandsPreviewDrawer`.
+
+## The scenario picker had no scroll view
+
+`HUDMenuSelectScenarioState` places its cards straight into a `RectTransform` with a layout
+group. Seven fit. The eighth is this mod's, so the missing scroll view is this mod's problem.
+
+`FirstPersonScenarioMenu.EnsureScrollable` inserts a `ScrollRect` + `RectMask2D` in the
+card row's slot, reparents the row into it as the content, and adds a `ContentSizeFitter`
+along the scrolling axis. It:
+
+- **stands down if anything is already a `ScrollRect` ancestor**, so a later game version or
+  another mod that solves this wins;
+- **does nothing when the row has no `LayoutGroup`**, because the cards are positioned by one
+  (`PlaceAt` only instantiates under the parent) and a `ContentSizeFitter` with no preferred
+  size would collapse the row to zero width;
+- reads the direction off that group rather than assuming a row.
+
+The wheel needs nothing extra - `GameInputManager.RaytraceUIHoverState` already looks for a
+`ScrollRect` under the pointer - but a card off the edge with no visible bar is the bug, so
+it builds a two-rectangle `Scrollbar` from stock `Image`s. No sprite, so nothing to fail to
+load.
+
+## The shop images are 1024 x 709
+
+Not square, and not the 2:1 it looks like by eye. Every preview image the game ships is a
+sprite of exactly **1024 x 709** - an aspect of 1.444:1.
+
+That is read out of `resources.assets` rather than guessed. A Unity `Sprite`'s `m_Rect` is
+four floats immediately after its (4-byte length-prefixed, 4-aligned) name, so finding
+`CBBelts_Core` and reading twelve bytes past the name gives `(0, 0, 1024, 709)`. Eleven
+other `CB*` bundle images answer identically.
+
+`HUDResearchSideUpgradeDisplay.RebuildView` assigns the sprite to a plain `Image`:
+
+```csharp
+UIResearchImage.sprite = GameData.GetImage(_Upgrade.ImageId);
+```
+
+with `preserveAspect` off in the prefab, so the sprite is stretched to whatever box the
+prefab gives it. A 256x256 source therefore renders 1.44x too wide - which is what the
+first three icons did. There is nothing to set in code; the fix is to author at the size
+the game authors at.
+
+`tools/make-icons.py` draws them, at 4x and downsampled because PIL antialiases nothing.
+Keeping the generator rather than the PNGs alone is the point: the reason this went wrong
+was that the aspect was a guess with nothing to re-run when the guess turned out wrong.
+
+## There is no way to turn first person on
+
+The toggle key is gone by default. `FirstPersonControl.ToggleEnabled` is **false**, and when
+it is false the `first-person.toggle` binding is **not registered at all** - no dead row in
+the keybindings screen, no key that silently does nothing, and `FirstPersonInput` skips
+reading it for the same reason it skips the other optional bindings (an unregistered id is a
+`KeyNotFoundException` out of a frame hook, not a false).
+
+That is the mod's shape stated properly: first person is a *game*, entered by playing the
+First Person scenario or by a mod setting `Forced`. Pressing a key to stand up inside a save
+that was not built for it is a novelty that wears off in a minute and leaves the camera
+somewhere strange.
+
+The "already registered by a previous load" probe moved from `toggle` to `free-cursor` at
+the same time - `toggle` is now conditional, so a hot reload with the toggle off would have
+looked like a fresh registration and added a duplicate section.
+
+## The camera hook stops without telling anyone
+
+The crosshair was showing over the main menu and the research shop. Two separate causes.
+
+The shop is the simple one: the per-frame code hid the crosshair only when `CursorFreed`,
+which is the *cursor key* being held. A dialog also takes the pointer back, and
+`OverlayOpen` - `!context.IsTokenAvailable("HUDPart$confine_cursor")` - is how the mod
+already knows. It hides on either now.
+
+The main menu is the interesting one. Everything this class does on the way out - hiding the
+crosshair, giving the cursor back, restoring the field of view - happens inside `Update`, and
+`Update` runs only because `PlayerInteractionOrchestrator` calls
+`CameraController.OnGameUpdate`. Leaving a session for the main menu takes the player
+interaction with it, so **the hook simply stops firing**. Nothing throws, nothing is logged,
+and `Active` stays true forever with a crosshair floating over the menu.
+
+`FirstPersonCamera.Watchdog` runs from the mod's per-frame tick instead, which is a postfix
+on `GameSessionOrchestrator.Tick` and so keeps running for the menu's **background game**.
+If `Update` has not run for `CameraLostFrames` (30, half a second), it calls `Restore()`.
+
+The threshold is generous deliberately. A frame or two with no camera update during a load
+is normal, and being ejected from first person for it would be a worse bug than the one
+this guards against.
+
+## Flight was fast enough to make trains pointless
+
+`FlySpeed` was 180 tiles per second - nine chunks a second - with the sprint key tripling
+it. That is comfortably faster than a train, so riding one stopped being transport and
+became a party trick.
+
+It is 60 now, and the sprint key still reaches the old 180. Trains beat unhurried flight;
+sprinting beats a train. Crossing the map in the air is a decision rather than the default,
+and the jet pack is still worth its 6k because traversal on foot is the thing it removes.
+
+Vertical movement uses the same number, so climbing slowed with it.
+
+## The movement numbers are public
+
+`WalkSpeed`, `FlySpeed`, `SprintMultiplier` and `TrainRideHeight` moved from `const` fields
+in `FirstPersonTuning` to mutable statics on `FirstPersonControl`, read live every frame.
+`FirstPersonTuning` keeps the values as the defaults the statics are initialised from, so
+there is still one place to read what the mod ships with.
+
+`TrainRideHeight` is the one that had to be exposed rather than merely tuned. A wagon's
+dimensions are not readable from anything a mod can reach: the renderer is handed finished
+matrices rather than a size, and the constant that would give it away -
+`VisualizationResources.VisualizationHeight`, which is where the cargo icons float - is
+authored ScriptableObject data and so is not in the decompile. Three guesses (1.6, 2.6, 4.4)
+all left the rider inside the wagon. It is 7 now, and a knob beats a fourth rebuild.
+
+## Upside-down rails, read off the matrix
+
+shapez has rails on the underside of the track - `SidedCoordinate` is a
+`GlobalChunkCoordinate` plus a plain `bool UpsideDown`, and there is a whole family of
+coordinators and prediction systems for them. Riding one used to bury the player in the
+track, because the ride offset was added to world up.
+
+The flag itself is navigation state the mod has no route to. It does not need one. A wagon
+on an inverted rail is drawn with `pitch = 180`
+(`RegularMovingTrainTransformSolver.GetSimpleRailTransform`), and `TrainsDrawer` composes
+that as
+
+```csharp
+wagonTrs = Matrix4x4.TRS(pos, Quaternion.Euler(roll + lean, yaw, pitch), scale);
+```
+
+so **`pitch` is the Z euler despite the name**, and at 180 it sends the wagon's own +Y to
+-Y. Column 1 of a TRS matrix is exactly that transformed local Y, so the up vector falls out
+of the matrices `DrawHooks.OnDrawTrain` already hands over. No second hook, and nothing that
+can drift out of step with the simulation.
+
+The rider is placed at `wagonPosition + up * TrainRideHeight`, using the whole vector rather
+than just its sign. During a flip (`FlippingTrainTransformSolver` lerps pitch through 180)
+or a rail lift (an animation curve does) the up vector swings through horizontal, and a
+sign test would teleport the rider fifteen units the instant it crossed. Carrying them round
+with the wagon is both smoother and what riding a train that inverts actually means.
+
+The column is normalised with a fallback to world up, because a lift's solver writes `scale`
+by reference and the column is therefore not unit length.
+
+### The rider is placed by the eye, not the feet
+
+The first version of this offset the **feet** along the wagon's up, and it clipped into the
+train underneath while being perfect on top. The asymmetry is the body's eye height: the
+camera is `Body.Height + EyeHeight`, and that 1.7 is always along **world** up because the
+player is never rolled over. Hanging below the track it therefore pushes the camera back
+towards the wagon.
+
+Solving for the eye and subtracting the eye height afterwards mirrors the two cases:
+
+```csharp
+Vector3 eye = wagon + up * (TrainRideHeight + EyeHeight);
+Body.Horizontal = new double2(eye.x, eye.z);
+Body.Height = eye.y - EyeHeight;
+```
+
+Right-way-up this is arithmetically identical to what it was - `up` is `(0,1,0)`, so the
+`+EyeHeight` and `-EyeHeight` cancel - which is why the case that was already correct did
+not have to be re-tuned.
+
+## Resource patches are culled against a height band they are not drawn in
+
+Asteroids appeared when the player looked down and vanished when they looked up, while their
+meshes never moved.
+
+`SpaceThemeBoundsProvider.ComputeResourceSourceBounds` computes the patch's real world
+bounds and then throws the height away:
+
+```csharp
+Bounds result = mapResource.Bounds_GC.ToWorldBounds();
+min.y = MapResourceMinHeight;   // -50
+max.y = MapResourceMaxHeight;   // -22
+result.SetMinMax(min, max);
+```
+
+From an overhead camera that is invisible - the frustum points at the ground and the band is
+always inside it. At eye level the band sits a fixed distance below the horizon, so a few
+degrees of pitch is the difference between every asteroid in the map being in frustum and
+none of them being. That is the popping, and it is also part of why arriving in a session is
+expensive: the band is a flat slab that a near-level frustum slices through for a very long
+way.
+
+The hook grows the box to include the patch's own extent. `Bounds.Encapsulate` only ever
+enlarges, so nothing that was visible can become invisible, and the game's band is left in
+place rather than replaced - it is evidently there for a reason, even if that reason is not
+readable from here.
+
+### The bounds were not the mechanism
+
+Widening them did nothing, and the reason is worth recording twice over.
+
+**The bounds are cached.** `SuperChunksDrawer.GetResourceBounds` keeps a
+`Dictionary<IMapResourceSource, Bounds>` for the life of the drawer, so a hook on
+`ComputeResourceSourceBounds` runs once per patch and is served from the dictionary forever
+after. Anything in it that depended on where the player was would be frozen at whatever it
+was the first time that patch came into view - and would outlive first person, because the
+cache belongs to the drawer rather than to the camera. So that hook now only does the one
+thing that is safe to cache: growing the box to the patch's own extent.
+
+**And the drawer was not even reaching the bounds.** `SuperChunksDrawer.Draw` opens with
+
+```csharp
+if (!ScreenUtils.TryGetChunkCoordinate(viewport, in ScreenUtils.ScreenCenter, out var c))
+{
+    return;
+}
+```
+
+That coordinate is only a **seed** - the method floods outward from it through neighbouring
+super chunks - but the lookup is the flat-plane intersection, and from eye level a ray aimed
+above the horizon never meets the plane. So the whole drawer returned having drawn nothing,
+and *every* asteroid in the world vanished the moment the crosshair rose above the horizon.
+Riding the underside of a track mirrored it exactly, which is what gave the game away: the
+plane is overhead there, so looking down was what emptied the sky.
+
+Note this is the same family as `TryGetTileCoordinateAtCursor`, which the mod has always
+hooked - but a different method. The `…AtCursor` pair take the cursor position and delegate
+to these; the drawer calls the inner one directly with the screen centre, and nothing was
+answering for it.
+
+Two hooks, then:
+
+- `ScreenUtils.TryGetChunkCoordinate` falls back to the player's own chunk when the ray
+  misses. That is the right seed regardless - it is where the flood should start from, and
+  unlike the intersection it always exists.
+- `SuperChunksDrawer.Draw` runs with the camera planes swapped for a box of
+  `FirstPersonControl.ResourceRenderRadius` around the player, the same trick the miner
+  highlight uses. Every decision in that drawer is a frustum test, so this is the one lever
+  that covers both the super-chunk walk and the per-patch test. Its own distance gates still
+  apply - 5500 units for a resource, `MaxRenderDistanceSq` for a super chunk - so it widens
+  *what* is considered rather than how far.
+
+`FirstPersonPlacementHighlight.WithinRadius` grew a small stack of saved plane arrays at the
+same time, since two unrelated draw paths use it now and one shared buffer would restore the
+wrong planes if they ever nested.
+
+### LOD is not the cause, and zoom is not involved
+
+Worth writing down because it is the obvious suspect and it is wrong. `LODComputationParameters`
+is built from the graphics settings and a set of **distance** thresholds, and `MapCuller`
+picks a config with `math.distancesq(cameraPosition_W, LODCenter)`. Nothing in the LOD path
+reads `Viewport.Zoom`, so the mod reporting a zoom of 80 does not pin the world to maximum
+detail. What an eye-level camera does change is the **frustum volume** - `TestBounds` has no
+distance cull at all, only `GeometryUtility.TestPlanesAABB` - so far more of the map passes
+and has to be streamed and drawn. That is a cost of the viewpoint rather than a bug in it.
+
+
 
 ## Reach
 
@@ -712,7 +1108,7 @@ back to the body.
 | double-tap `Space` | toggle flight — needs the research. `M` does the same |
 | `Tab` (hold) | release the mouse for the HUD, side panels and menus |
 | `F5` | travel to your next waypoint |
-| `F7` | board the train at the crosshair, or step off |
+| `F` | board the train at the crosshair, or step off — skipped while holding a building, so mirror keeps the key |
 | wheel | previous / next toolbar — free, because nothing zooms in first person |
 | `Ctrl` + wheel | step a level deeper into the toolbar, or back out |
 | mouse | look |

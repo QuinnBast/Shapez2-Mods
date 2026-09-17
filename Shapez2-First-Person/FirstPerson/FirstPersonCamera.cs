@@ -52,6 +52,28 @@ public sealed class FirstPersonCamera
     public bool Active { get; private set; }
 
     /// <summary>
+    /// Where the player's eye is, in Unity world space - the same vector written to the
+    /// camera rig each frame. Read by the resource-bounds hook, which is called from the
+    /// culler and has no other way back to the body.
+    /// </summary>
+    public Vector3 EyePosition => new Vector3(
+        (float)Body.Horizontal.x,
+        Body.Height + FirstPersonTuning.EyeHeight,
+        (float)Body.Horizontal.y);
+
+    /// <summary>
+    /// The chunk the player is standing in, for callers that asked "what is the camera
+    /// looking at" and got no answer because the ray missed the build plane.
+    /// </summary>
+    public GlobalChunkCoordinate PlayerChunk(Viewport viewport)
+    {
+        GlobalChunkCoordinate chunk_GC =
+            ((WorldCoordinate)(float3)EyePosition).ToGlobalChunkCoordinate();
+        chunk_GC.z = viewport.IslandLayer;
+        return chunk_GC;
+    }
+
+    /// <summary>
     /// Whether a dialog owned input on the frame we last ran. Read by the hotbar hook,
     /// which runs earlier in the frame than we do - `HUD.OnGameUpdate` is where the dialogs
     /// consume the token in the first place, so at that point this frame's answer does not
@@ -118,6 +140,11 @@ public sealed class FirstPersonCamera
 
     private CameraController EnteredWith;
 
+    /// <summary>
+    /// The last frame <see cref="Update"/> ran while active. See <see cref="Watchdog"/>.
+    /// </summary>
+    private int LastUpdateFrame = -1;
+
     public FirstPersonCamera(ILogger logger)
     {
         Logger = logger;
@@ -139,15 +166,19 @@ public sealed class FirstPersonCamera
     {
         Viewport viewport = options.Viewport;
 
-        if (FirstPersonControl.Forced && !Active)
+        // Either a downstream mod set the flag, or this is the mod's own scenario, which
+        // is a first-person game by definition.
+        bool lockedIn = FirstPersonControl.LockedIn;
+
+        if (lockedIn && !Active)
         {
-            // A downstream mod has locked the player in. Entering here rather than on a
-            // session hook means it also takes effect the moment the flag is set.
+            // Entering here rather than on a session hook means it also takes effect the
+            // moment the flag is set, and covers a scenario the player loaded into.
             Enter(controller, viewport, options.Player?.CurrentMap);
         }
         else if (Keys.Toggle)
         {
-            if (FirstPersonControl.Forced)
+            if (lockedIn)
             {
                 Notifier.Show("First person cannot be left in this game.", HUDNotificationType.Warning);
             }
@@ -169,6 +200,8 @@ public sealed class FirstPersonCamera
             Restore();
             return false;
         }
+
+        LastUpdateFrame = Time.frameCount;
 
         float deltaTime = math.min(0.2f, Time.unscaledDeltaTime);
         CurrentPlayer = options.Player;
@@ -203,9 +236,23 @@ public sealed class FirstPersonCamera
         Trains.Attach(options.Hooks);
         Trains.Collecting = true;
 
-        if (piloting && Keys.Board)
+        if (piloting)
         {
-            ToggleBoarding(viewport);
+            // Riding is left on a fresh press; boarding happens for as long as the key is
+            // held, so a train only has to pass through the crosshair rather than be caught
+            // on exactly the right frame. The press that boards you cannot also drop you,
+            // because you were not riding when it was read.
+            if (Body.Riding)
+            {
+                if (Keys.Board)
+                {
+                    LeaveTrain("Stepped off the train.");
+                }
+            }
+            else if (Keys.BoardHeld)
+            {
+                TryBoardTrain(viewport, announceFailure: Keys.Board);
+            }
         }
 
         if (!overlayOpen)
@@ -281,7 +328,10 @@ public sealed class FirstPersonCamera
 
         Active = true;
         FirstPersonControl.ReportActive(true);
-        Logger.Info?.Log("First person: on. " + FirstPersonTuning.ToggleKey + " to leave, "
+        Logger.Info?.Log("First person: on. "
+                         + (FirstPersonControl.ToggleEnabled
+                             ? FirstPersonTuning.ToggleKey + " to leave, "
+                             : "no way out - this session is first person, ")
                          + FirstPersonTuning.FlyKey + " to fly.");
     }
 
@@ -488,11 +538,11 @@ public sealed class FirstPersonCamera
             float right = context.ConsumeAsAxis("camera.move-right") - context.ConsumeAsAxis("camera.move-left");
             float forward = context.ConsumeAsAxis("camera.move-up") - context.ConsumeAsAxis("camera.move-down");
 
-            float speed = Body.Flying ? FirstPersonTuning.FlySpeed : FirstPersonTuning.WalkSpeed;
+            float speed = Body.Flying ? FirstPersonControl.FlySpeed : FirstPersonControl.WalkSpeed;
             float sprint = 1f;
             if (controller.Keybindings.TryGet("camera.move-faster", out Keybinding faster) && faster.CurrentlyActive)
             {
-                sprint = FirstPersonTuning.SprintMultiplier;
+                sprint = FirstPersonControl.SprintMultiplier;
                 speed *= sprint;
             }
 
@@ -514,9 +564,7 @@ public sealed class FirstPersonCamera
             if (Body.Riding && jump)
             {
                 // Jumping off is the reflex, so it works as well as the board key does.
-                Body.Riding = false;
-                Trains.Disembark();
-                Notifier.Show("Jumped off the train.");
+                LeaveTrain("Jumped off the train.");
             }
 
             if (Body.Flying)
@@ -550,7 +598,7 @@ public sealed class FirstPersonCamera
 
         if (!FirstPersonResearch.FlightUnlocked)
         {
-            Notifier.Show("Flight needs the Personal Flight Unit research.", HUDNotificationType.Warning);
+            Notifier.Show("Flight needs the Jet Pack research.", HUDNotificationType.Warning);
             return;
         }
 
@@ -559,24 +607,24 @@ public sealed class FirstPersonCamera
     }
 
     /// <summary>
-    /// Boards the train the crosshair is on, or steps off the one being ridden.
+    /// Boards the train under the crosshair.
+    ///
+    /// <paramref name="announceFailure"/> is only set on the frame the key went down: while
+    /// it is held this runs every frame, and saying "no train in reach" sixty times a second
+    /// is worse than saying nothing.
     /// </summary>
-    private void ToggleBoarding(Viewport viewport)
+    private void TryBoardTrain(Viewport viewport, bool announceFailure)
     {
-        if (Body.Riding)
-        {
-            Body.Riding = false;
-            Trains.Disembark();
-            Notifier.Show("Stepped off the train.");
-            return;
-        }
-
         if (!FirstPersonResearch.TrainRidingUnlocked)
         {
-            Notifier.Show(FirstPersonControl.TrainRidingEnabled
-                    ? "Riding trains needs the Rail Pass research."
-                    : "Riding trains is not available in this game.",
-                HUDNotificationType.Warning);
+            if (announceFailure)
+            {
+                Notifier.Show(FirstPersonControl.TrainRidingEnabled
+                        ? "Riding trains needs the Train Riding research."
+                        : "Riding trains is not available in this game.",
+                    HUDNotificationType.Warning);
+            }
+
             return;
         }
 
@@ -585,12 +633,19 @@ public sealed class FirstPersonCamera
         if (Trains.TryBoard(camera.position, camera.forward))
         {
             Body.Riding = true;
-            Notifier.Show("Riding the train. " + FirstPersonTuning.BoardKey + " or jump to get off.");
+            Notifier.Show("Riding the train. Jump to get off.");
         }
-        else
+        else if (announceFailure)
         {
             Notifier.Show("No train in reach of the crosshair.", HUDNotificationType.Warning);
         }
+    }
+
+    private void LeaveTrain(string message)
+    {
+        Body.Riding = false;
+        Trains.Disembark();
+        Notifier.Show(message);
     }
 
     /// <summary>
@@ -606,10 +661,29 @@ public sealed class FirstPersonCamera
             return;
         }
 
-        if (Trains.TryGetRidingPosition(out Vector3 wagon))
+        if (Trains.TryGetRidingPosition(out Vector3 wagon, out Vector3 up))
         {
-            Body.Horizontal = new double2(wagon.x, wagon.z);
-            Body.Height = wagon.y + FirstPersonTuning.TrainRideOffset;
+            // Placed by the **eye**, not by the feet.
+            //
+            // The offset follows the wagon's own up - so an upside-down rail hangs the rider
+            // under the track rather than burying them in it - but the body's eye height is
+            // always along *world* up, because the player is never rolled over. Hanging
+            // below, that 1.7 pushes the camera back towards the wagon, which is why the
+            // first attempt clipped into the train underneath while being perfect on top.
+            //
+            // Solving for the eye and subtracting the eye height afterwards mirrors the two
+            // cases properly, and leaves the right-way-up case arithmetically identical to
+            // what it was.
+            //
+            // The whole vector is used rather than its sign, so a flip
+            // (`FlippingTrainTransformSolver` lerps pitch through 180) or a rail lift carries
+            // the rider round with the wagon instead of teleporting them the moment it
+            // passes horizontal.
+            Vector3 eye = wagon
+                          + up * (FirstPersonControl.TrainRideHeight + FirstPersonTuning.EyeHeight);
+
+            Body.Horizontal = new double2(eye.x, eye.z);
+            Body.Height = eye.y - FirstPersonTuning.EyeHeight;
             return;
         }
 
@@ -654,7 +728,7 @@ public sealed class FirstPersonCamera
         }
 
         Notifier.Show(FirstPersonControl.TravelEnabled
-                ? "Fast travel needs the Waypoint Beacon research."
+                ? "Fast travel needs the Waypoint Travel research."
                 : "Fast travel is not available in this game.",
             HUDNotificationType.Warning);
 
@@ -769,9 +843,11 @@ public sealed class FirstPersonCamera
         // game's own placement code and have no way back to the body.
         Targeting.ReachMultiplier = Body.Flying ? FirstPersonTuning.FlyingReachMultiplier : 1f;
 
-        if (CursorFreed)
+        if (CursorFreed || OverlayOpen)
         {
-            // The real pointer is back; a crosshair beside it would just be a second cursor.
+            // The real pointer is back - either because the cursor key is held, or because a
+            // dialog took it. A crosshair beside it is just a second cursor, and over the
+            // research shop or the pause menu it is a crosshair aiming at a menu.
             Crosshair.Hide();
         }
         else
@@ -783,6 +859,33 @@ public sealed class FirstPersonCamera
             // something the rest of the time too.
             Crosshair.SetTargeted(Targeting.TryGetTile(viewport, out GlobalTileCoordinate _));
         }
+    }
+
+    /// <summary>
+    /// Stands the mod down when the camera hook stops being called.
+    ///
+    /// Everything this class does on the way out - hiding the crosshair, giving the cursor
+    /// back, restoring the field of view - happens inside <see cref="Update"/>, and
+    /// <see cref="Update"/> only runs because <c>PlayerInteractionOrchestrator</c> calls
+    /// <c>CameraController.OnGameUpdate</c>. Leaving a session for the main menu takes the
+    /// player interaction with it, so the hook simply stops firing: nothing throws, nothing
+    /// is logged, and `Active` stays true forever with a crosshair floating over the menu.
+    ///
+    /// This runs from the mod's per-frame tick instead, which is a postfix on
+    /// <c>GameSessionOrchestrator.Tick</c> and so keeps running for the menu's background
+    /// game. A generous threshold, because a frame or two with no camera update during a
+    /// load is normal and being thrown out of first person for it would be worse than the
+    /// symptom.
+    /// </summary>
+    public void Watchdog()
+    {
+        if (!Active || Time.frameCount - LastUpdateFrame <= FirstPersonTuning.CameraLostFrames)
+        {
+            return;
+        }
+
+        Logger.Info?.Log("First person: the camera update stopped, standing down.");
+        Restore();
     }
 
     /// <summary>

@@ -81,7 +81,7 @@ public sealed class FirstPersonBody
         if (Flying || map == null)
         {
             Horizontal += wish;
-            Height += vertical * FirstPersonTuning.FlySpeed * deltaTime;
+            Height += vertical * FirstPersonControl.FlySpeed * deltaTime;
             VerticalSpeed = 0f;
             Grounded = false;
             return;

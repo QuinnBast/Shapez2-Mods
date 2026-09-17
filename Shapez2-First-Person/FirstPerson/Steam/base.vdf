@@ -9,7 +9,7 @@
     "description" "[h1]First Person[/h1]
 Stand on your own factory floor and watch the shapes go past at eye level.
 
-Press [b]F6[/b] in a save and you arrive at the vortex, one and a half tiles tall, with your factory around you instead of below you.
+New game, Regular, [b]First Person[/b]. You arrive at the vortex one and a half tiles tall, with your factory around you instead of below you, and you stay there - this is a scenario rather than a camera toggle. Resources are closer and more generous than usual, because everything here is a walk.
 
 [h2]What you can do down there[/h2]
 [list]
@@ -17,36 +17,36 @@ Press [b]F6[/b] in a save and you arrive at the vortex, one and a half tiles tal
 [*][b]Fall off the edge[/b] - and be put back on the last solid ground, because a space platform has edges and there is nothing under them.
 [*][b]Build[/b] at a crosshair. Placing, deleting and the pipette all work on whatever you are looking at.
 [*][b]Ride the belts.[/b] Stand on one and it carries you, at the speed it really moves - research upgrades included.
-[*][b]Ride the trains.[/b] Look at one, press the board key, and go with it across platforms, up lifts and over the jumps between them.
+[*][b]Ride the trains.[/b] Hold the board key while one is in your crosshair and you climb onto the engine, across platforms, up lifts, over the jumps between them and around onto the underside of an inverted track.
 [*][b]Fly[/b], once you have researched it, and fast travel between the waypoints you have already placed.
 [/list]
 
 [h2]Controls[/h2]
 Every key is rebindable in the game's own settings, under [b]First Person[/b]. Out of the box:
 [list]
-[*][b]F6[/b] - enter or leave. Hold shift to arrive where the camera is looking instead of at the vortex.
 [*][b]Your movement keys[/b] - walk. It uses your bindings, not hardcoded WASD.
+[*][b]Your move-faster key[/b] - sprint, on foot and in the air.
 [*][b]Space[/b] - jump. Double-tap to fly.
 [*][b]Tab[/b] (hold) - release the mouse for the HUD, the side panels and the menus.
 [*][b]F5[/b] - travel to your next waypoint. Clicking one on the map, or the home icon, travels there too.
-[*][b]F7[/b] - board the train under the crosshair.
+[*][b]F[/b] (hold) - board the train in your crosshair. It stands aside for mirror while you are holding a building.
+[*][b]Q[/b] and [b]E[/b] - the build layer, as always. While flying it is yours to pick rather than following your altitude.
 [*][b]Wheel[/b] - move through the toolbar. Ctrl and the wheel steps into a submenu and back out.
 [/list]
 
 [h2]Three things are researched[/h2]
-Walking and building are free. Flight, waypoint travel and riding trains are cheap nodes in a [b]First Person[/b] research category, so the mode opens up as you play rather than arriving complete.
+Walking and building are free. [b]Jet Pack[/b], [b]Waypoint Travel[/b] and [b]Train Riding[/b] are nodes in a First Person research category, priced against the top of the vanilla ladder, so the scenario opens up as you play rather than arriving complete. Flight is deliberately no faster than a train until you sprint.
 
 [h2]For other mod authors[/h2]
-This is meant to be built on. One static class, [b]FirstPersonControl[/b], lets another mod lock the player into first person permanently, or turn any of the three features off, make them free, or set their price. Reference the dll or drive it reflectively - it is plain static fields either way.
+This is meant to be built on. One static class, [b]FirstPersonControl[/b], lets another mod lock the player into first person in any save, turn the scenario off, switch any of the three features off or make them free, set their prices, or change the walking and flight speeds. Reference the dll or drive it reflectively - it is plain static fields either way.
 
 [h2]Before you install[/h2]
 [list]
-[*][b]It does not affect save games.[/b] Add it to an existing save or remove it from one; research you bought is dropped harmlessly if the mod goes away.
-[*]Restart the game after installing - the research nodes are built when a scenario loads, so a hot reload will not add them.
+[*][b]It does not affect save games.[/b] Add it to an existing save or remove it from one; nothing in an ordinary save changes, because first person only happens in its own scenario.
+[*]Restart the game after installing - the scenario and the research nodes are game data, so a hot reload will not add them.
 [*]Requires Shapez Shifter and MonoMod.RuntimeDetour.
 [/list]
 
 Bugs and requests: https://github.com/QuinnBast/Shapez2-Mods/issues
 Licensed under Apache 2.0."
-    "changenote" "First release."
 }

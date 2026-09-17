@@ -1,0 +1,37 @@
+{
+  "FormatVersion": 3,
+  "GameVersion": 1058,
+  "UniqueId": "first-person-scenario",
+  "SupportedGameModes": ["RegularGameMode"],
+  "Title": "@scenario.first-person.title",
+  "Description": "@scenario.first-person.description",
+  "PreviewImageId": "ScenarioBackground_Classic_Regular",
+  "IsTutorial": false,
+  "ExampleShapes": [
+    "CwRwCwRw:CkCkCkCk:CcCwCcCw",
+    "RbRbRbRb:CrCrCrCr",
+    "RuRgRuRg:SbSbSbSb",
+    "RbCbCbCb:RuCuCuCu",
+    "SuP-P-Su:P-P-P-P-:RbCgCgRb",
+    "RyP-RyP-:SwRuSwRu"
+  ],
+  "Progression": {
+    "Levels": "#include:Scenarios/Classic/Regular/MilestoneReferences",
+    "SideQuestGroups": "#include:Scenarios/Classic/Regular/SideTaskReferences",
+    "ScenarioContent": "#include:Scenarios/Classic/DefaultData/ResearchContentBundles",
+    "LinearUpgrades": "#include:Scenarios/Classic/DefaultData/ResearchLinearUpgrades",
+    "WikiConfiguration": "#include:Scenarios/Classic/DefaultData/WikiContentConfiguration_Classic"
+  },
+  "PlayerBadge": {
+  "Title": "@player-badge.classic-regular.title",
+  "ImageId": "OperatorBadgeClassicRegular"
+},
+  "Mechanics": "#include:Scenarios/SharedData/ResearchMechanics",
+  "StartingLocation": "#include:Scenarios/Classic/DefaultData/StartingLocation",
+  "ResearchConfig": "#include:Scenarios/Classic/Regular/ResearchConfig",
+  "PlayerLevelConfig": "#include:Scenarios/Classic/Regular/PlayerLevelConfig",
+  "ConvertersConfig": "#include:Scenarios/Classic/DefaultData/ConvertersConfig",
+  "ResearchStationConfig": "#include:Scenarios/SharedData/EmptyResearchStationConfig",
+  "RailColorsConfig": "#include:Scenarios/SharedData/RailColorsConfig",
+  "ToolbarConfig": "#include_raw:Scenarios/Classic/DefaultData/Toolbar/ToolbarConfigWithConverters"
+}

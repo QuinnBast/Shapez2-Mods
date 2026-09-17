@@ -187,10 +187,18 @@ public sealed class FirstPersonResearch : IGameScenarioRewirer
             HideReward = false,
         }));
 
+        // Our own artwork when it loaded, the borrowed one when it did not. A node without
+        // an image that resolves takes the research screen down with it, so the fallback is
+        // not a nicety.
+        if (!FirstPersonIcons.TryGetImageId(unlock.Key, out GameImageId icon))
+        {
+            icon = imageId;
+        }
+
         SideUpgrade.New()
             .WithPresentationData(new SideUpgradePresentationData(
                 new ResearchUpgradeId(unlock.UpgradeId),
-                imageId,
+                icon,
                 GameVideoId.Empty,
                 ("first-person." + unlock.Key + ".title").T(),
                 ("first-person." + unlock.Key + ".description").T(),

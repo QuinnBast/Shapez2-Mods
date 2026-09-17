@@ -20,6 +20,11 @@ public static class FirstPersonTuning
     // the input context rather than through Input.GetKey - so a value here is a starting
     // point, not the key the mod actually uses.
 
+    /// <summary>
+    /// The default for the toggle binding - which is **not registered unless a mod sets**
+    /// <see cref="FirstPersonControl.ToggleEnabled"/>. First person is normally entered by
+    /// playing the scenario, so this key is dead in an ordinary game.
+    /// </summary>
     public const KeyCode ToggleKey = KeyCode.F6;
 
     /// <summary>
@@ -58,18 +63,16 @@ public static class FirstPersonTuning
     /// Boards the train the crosshair is on, or steps off the one you are riding. Jumping
     /// gets off too.
     ///
-    /// `F7` to sit beside the other two: `F5` travels, `F6` toggles first person.
+    /// `F` is `building-placement.mirror`, and that clash is resolved by *when* the binding
+    /// is read rather than by picking a different key: it is skipped entirely while the
+    /// player is holding something, so mirror keeps working where it means anything and `F`
+    /// boards a train the rest of the time. Reading it at all would consume it, because the
+    /// input system marks every other active binding on the same key consumed too.
     ///
-    /// **The debug keybinding layer is live for ordinary players.** `F6` is
-    /// `debug.step-speed` and `F7` is `debug.slow-speed`, so entering first person also
-    /// stepped the simulation to a crawl and boarding a train slowed it down. Both keys are
-    /// handled now by registering the mod's keys as real bindings, so the input system's
-    /// own de-duplication resolves the clash and the settings screen shows it. An earlier
-    /// version of this comment argued the layer was inactive because `F6` had never appeared
-    /// to collide; it had been quietly pausing the game the whole time. `F5` is genuinely
-    /// unbound.
+    /// It was `F7`, which is `debug.slow-speed` - that one read as "riding a train is
+    /// expensive" rather than as a key collision.
     /// </summary>
-    public const KeyCode BoardKey = KeyCode.F7;
+    public const KeyCode BoardKey = KeyCode.F;
 
     /// <summary>
     /// Two taps of the jump key inside this many seconds toggles flight, the way a creative
@@ -127,19 +130,28 @@ public static class FirstPersonTuning
     /// </summary>
     public const float StepHeight = 1.15f;
 
-    /// Tiles per second. A belt moves items at a few tiles per second, so this is
-    /// deliberately close to belt speed - walking beside a shape is the whole point.
+    /// Tiles per second, and the default for <see cref="FirstPersonControl.WalkSpeed"/>. A
+    /// belt moves items at a few tiles per second, so this is deliberately close to belt
+    /// speed - walking beside a shape is the whole point.
     public const float WalkSpeed = 8f;
 
+    /// The default for <see cref="FirstPersonControl.SprintMultiplier"/>.
     public const float SprintMultiplier = 3f;
 
     /// <summary>
-    /// Tiles per second, in noclip. Ten times the old value, because the map is measured in
-    /// chunks of twenty tiles and spirals outward: at walking pace the first spiral edge is
-    /// an hour away. At this speed it is nine chunks a second, and the sprint key still
-    /// multiplies it. Vertical movement uses the same number.
+    /// Tiles per second, in noclip, before sprinting. The map is measured in chunks of
+    /// twenty tiles and spirals outward, so walking pace would put the first spiral edge an
+    /// hour away; this is three chunks a second, and the sprint key triples it.
+    ///
+    /// This was 180 - what the sprint speed is now. At that pace flight outran a train,
+    /// which made riding one a novelty rather than a way of getting anywhere. Trains are
+    /// faster than unhurried flight now, and sprinting still beats them, so crossing the map
+    /// in the air is a choice rather than the default.
+    ///
+    /// The default for <see cref="FirstPersonControl.FlySpeed"/>, which is what the mod
+    /// actually reads.
     /// </summary>
-    public const float FlySpeed = 180f;
+    public const float FlySpeed = 60f;
 
     /// Tiles per second squared. Earth gravity in these units would be 9.81, which at this
     /// scale reads as floaty, because the "metre" here is a belt width.
@@ -169,8 +181,16 @@ public static class FirstPersonTuning
     /// wagon's dimensions are not readable from anything the mod can reach - the renderer
     /// is handed finished matrices, not a size - so where "on top of the train" is has to
     /// be chosen by eye. Adjust until it looks right rather than trying to derive it.
+    ///
+    /// Raised four times - 1.6, 2.6, 4.4, 7 - and the fourth finally put the rider on the
+    /// roof rather than inside the wagon, but close enough that the near clip plane was
+    /// cutting into it. This last step is for the clip plane rather than for the wagon.
+    ///
+    /// There is nothing to derive it from - a wagon's dimensions are not readable from
+    /// anything a mod can reach - which is why
+    /// <see cref="FirstPersonControl.TrainRideHeight"/> exposes it.
     /// </summary>
-    public const float TrainRideOffset = 1.6f;
+    public const float TrainRideOffset = 7.8f;
 
     /// How far down the crosshair a wagon can be and still be boardable, in tiles.
     public const float BoardReach = 25f;
@@ -189,6 +209,25 @@ public static class FirstPersonTuning
     /// on would otherwise throw you off it.
     /// </summary>
     public const int TrainLostFrames = 30;
+
+    /// <summary>
+    /// How many frames the camera hook may go without being called before the mod assumes
+    /// the session has gone and stands down. See <c>FirstPersonCamera.Watchdog</c>.
+    ///
+    /// Half a second at 60fps. Generous on purpose: a load pauses the camera update for a
+    /// few frames quite legitimately, and being ejected from first person for it would be a
+    /// worse bug than the one this guards against.
+    /// </summary>
+    public const int CameraLostFrames = 30;
+
+    /// <summary>
+    /// How far from the player a shape or fluid patch stays visible regardless of where the
+    /// player is looking, in world units. 2000 is a hundred chunks.
+    ///
+    /// The default for <see cref="FirstPersonControl.ResourceRenderRadius"/>. See
+    /// <c>FirstPersonMod.OnResourceBounds</c> for what it does and why a patch needs it.
+    /// </summary>
+    public const float ResourceRenderRadius = 2000f;
 
     // ---- Reaching ---------------------------------------------------------------
 
@@ -221,6 +260,16 @@ public static class FirstPersonTuning
     /// close enough to a shape or fluid island to place an extractor meant landing on it.
     /// </summary>
     public const float FlyingReachMultiplier = 3f;
+
+    /// <summary>
+    /// How much further than <see cref="ChunkReach"/> the miner-placement resource highlight
+    /// is allowed to reach, as a multiple.
+    ///
+    /// Bounding it to exactly the reach would make patches appear at the instant they became
+    /// placeable, which reads as pop-in; a little beyond means you can see where to walk to.
+    /// See <see cref="FirstPersonPlacementHighlight"/> for why it is bounded at all.
+    /// </summary>
+    public const float PlacementHighlightMargin = 1.5f;
 
     // ---- Presentation -----------------------------------------------------------
 

@@ -35,13 +35,41 @@ namespace QuinnBast.Shapez2.FirstPerson;
 public sealed class FirstPersonTrains
 {
     /// <summary>
-    /// Where every drawn wagon was, as of the last frame the renderer ran. Keyed by train
-    /// and wagon index - `TrainId` implements `IEquatable`, so the pair is a sound
-    /// dictionary key and survives between frames, which is what makes "keep riding the
-    /// wagon I boarded" possible at all.
+    /// A wagon as the renderer last drew it: where it was, and which way was up.
+    ///
+    /// The second half is what makes riding an upside-down rail work. shapez has them -
+    /// `SidedCoordinate` carries a plain `bool UpsideDown` - and a wagon on one is drawn
+    /// with `pitch = 180`, which `TrainsDrawer.CalculateWagonTransform` composes as
+    ///
+    /// <code>
+    /// Matrix4x4.TRS(pos, Quaternion.Euler(roll + lean, yaw, pitch), scale)
+    /// </code>
+    ///
+    /// - so "pitch" is the **Z** euler despite the name, and at 180 it sends the wagon's own
+    /// +Y to -Y. Column 1 of a TRS matrix is that transformed local Y, so the up vector is
+    /// readable straight off the matrix we already collect. No second hook, and nothing to
+    /// keep in step with the navigation state.
     /// </summary>
-    private readonly Dictionary<(TrainId, int), Vector3> Wagons =
-        new Dictionary<(TrainId, int), Vector3>();
+    private readonly struct Wagon
+    {
+        public readonly Vector3 Position;
+        public readonly Vector3 Up;
+
+        public Wagon(Vector3 position, Vector3 up)
+        {
+            Position = position;
+            Up = up;
+        }
+    }
+
+    /// <summary>
+    /// Every drawn wagon, as of the last frame the renderer ran. Keyed by train and wagon
+    /// index - `TrainId` implements `IEquatable`, so the pair is a sound dictionary key and
+    /// survives between frames, which is what makes "keep riding the wagon I boarded"
+    /// possible at all.
+    /// </summary>
+    private readonly Dictionary<(TrainId, int), Wagon> Wagons =
+        new Dictionary<(TrainId, int), Wagon>();
 
     private DrawHooks Subscribed;
     private DrawHooks.DrawTrainDelegate Handler;
@@ -111,8 +139,15 @@ public sealed class FirstPersonTrains
 
         foreach (KeyValuePair<int, Matrix4x4> wagon in wagonsMatricesMap)
         {
-            // The fourth column of a TRS matrix is its translation.
-            Wagons[(trainId, wagon.Key)] = wagon.Value.GetColumn(3);
+            // Column 3 of a TRS matrix is its translation, column 1 the transformed local Y.
+            Vector3 up = wagon.Value.GetColumn(1);
+
+            // A lift's solver writes `scale` by reference, so the column is not unit length
+            // and a degenerate one is possible. Falling back to world up puts the rider on
+            // top, which is the answer for every rail that is not inverted.
+            up = up.sqrMagnitude > 1E-06f ? up.normalized : Vector3.up;
+
+            Wagons[(trainId, wagon.Key)] = new Wagon(wagon.Value.GetColumn(3), up);
         }
     }
 
@@ -140,9 +175,9 @@ public sealed class FirstPersonTrains
         bool found = false;
         (TrainId, int) bestKey = default;
 
-        foreach (KeyValuePair<(TrainId, int), Vector3> wagon in Wagons)
+        foreach (KeyValuePair<(TrainId, int), Wagon> wagon in Wagons)
         {
-            Vector3 offset = wagon.Value - origin;
+            Vector3 offset = wagon.Value.Position - origin;
             float along = Vector3.Dot(offset, direction);
 
             if (along < 0f || along > FirstPersonTuning.BoardReach)
@@ -166,7 +201,12 @@ public sealed class FirstPersonTrains
             return false;
         }
 
-        RidingKey = bestKey;
+        // Ride the locomotive, whichever wagon was actually aimed at. Wagon 0 is the head -
+        // `TrainData.Head` is `Wagons[0]`, and `TrainSimulationDebugData` calls that pair
+        // the Locomotive - so boarding a cargo wagon halfway down the train was a matter of
+        // which part happened to be nearest the crosshair. Riding up front is what anyone
+        // means by riding a train.
+        RidingKey = (bestKey.Item1, 0);
         MissingFrames = 0;
         Riding = true;
         return true;
@@ -179,19 +219,22 @@ public sealed class FirstPersonTrains
     }
 
     /// <summary>
-    /// Where the ridden wagon is now. False means it has been gone long enough to call it
-    /// gone - the train was destroyed, or delivered itself into the hub with the player
-    /// aboard.
+    /// Where the ridden wagon is now, and which way is up for it. False means it has been
+    /// gone long enough to call it gone - the train was destroyed, or delivered itself into
+    /// the hub with the player aboard.
     /// </summary>
-    public bool TryGetRidingPosition(out Vector3 position)
+    public bool TryGetRidingPosition(out Vector3 position, out Vector3 up)
     {
-        if (Riding && Wagons.TryGetValue(RidingKey, out position))
+        if (Riding && Wagons.TryGetValue(RidingKey, out Wagon wagon))
         {
+            position = wagon.Position;
+            up = wagon.Up;
             MissingFrames = 0;
             return true;
         }
 
         position = Vector3.zero;
+        up = Vector3.up;
 
         if (!Riding)
         {

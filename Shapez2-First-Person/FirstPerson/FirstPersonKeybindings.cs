@@ -59,7 +59,7 @@ public static class FirstPersonKeybindings
         // A hot reload gives this assembly a fresh static while the old layer is still in
         // the array. Ids are strings, so the old layer answers our lookups perfectly well -
         // registering a second one would only put a duplicate section in the settings.
-        if (keybindings.KeybindingsById.ContainsKey(Toggle))
+        if (keybindings.KeybindingsById.ContainsKey(FreeCursor))
         {
             logger?.Info?.Log("First Person: keybindings already registered by a previous load.");
             return true;
@@ -73,7 +73,6 @@ public static class FirstPersonKeybindings
             // settings screen, rebindable, and resolved by the game: consuming a binding
             // marks every other active binding sharing its key code as consumed too, so
             // whichever is read first wins and the other stays quiet.
-            new Keybinding("toggle", new KeySet(FirstPersonTuning.ToggleKey)),
             new Keybinding("free-cursor", new KeySet(FirstPersonTuning.CursorKey)),
             new Keybinding("jump", new KeySet(FirstPersonTuning.JumpKey)),
             new Keybinding("sink", new KeySet(FirstPersonTuning.SinkKey)),
@@ -82,6 +81,14 @@ public static class FirstPersonKeybindings
         // A row for a feature a mod has switched off would do nothing, so it is left out
         // entirely. FirstPersonInput must skip reading these to match - looking up an
         // unregistered id throws rather than returning false.
+        // Off by default: first person is entered by playing the scenario, not by pressing a
+        // key in a save that was not built for it. An unregistered binding is also why
+        // FirstPersonInput must not read this one - see FirstPersonControl.ToggleEnabled.
+        if (FirstPersonControl.ToggleEnabled)
+        {
+            bindings.Add(new Keybinding("toggle", new KeySet(FirstPersonTuning.ToggleKey)));
+        }
+
         if (FirstPersonControl.FlightEnabled)
         {
             bindings.Add(new Keybinding("fly", new KeySet(FirstPersonTuning.FlyKey)));

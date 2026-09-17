@@ -1,6 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Game.Core.Coordinates;
+using Game.Core.GameData.Presets;
+using Game.Core.GameData.Scenario;
+using Game.Core.Rendering.Culling;
+using Game.Core.Research;
 using JetBrains.Annotations;
 using MonoMod.RuntimeDetour;
 using ShapezShifter.Flow;
@@ -64,6 +69,37 @@ public class FirstPersonMod : IMod
 
     private delegate void ToolbarInputOrig(HUDToolbarView view, InputDownstreamContext context);
 
+    private delegate Sprite GetImageOrig(GameData gameData, GameImageId uniqueId);
+
+    private delegate bool ReadScenarioOrig(
+        ScenarioReader reader, string text, string source,
+        out SerializedGameScenario serialized, out GameScenarioData data);
+
+    private delegate bool ReadScenarioHook(
+        ReadScenarioOrig orig, ScenarioReader reader, string text, string source,
+        out SerializedGameScenario serialized, out GameScenarioData data);
+
+    private delegate IReadOnlyList<GameScenarioParametersPreset> PresetsOrig(GameData gameData);
+
+    private delegate void ShapeHighlightOrig(
+        IslandPlacementHelperHighlightShapeResources helper, FrameDrawOptions options, IMapModel map);
+
+    private delegate void FluidHighlightOrig(
+        IslandPlacementHelperHighlightFluidResources helper, FrameDrawOptions options, IMapModel map);
+
+    private delegate Bounds ResourceBoundsOrig(
+        SpaceThemeBoundsProvider provider, IMapResourceSource mapResource);
+
+    private delegate bool ChunkAtScreenOrig(
+        Viewport viewport, in float2 screenCoordinate, out GlobalChunkCoordinate chunk_GC);
+
+    private delegate bool ChunkAtScreenHook(
+        ChunkAtScreenOrig orig, Viewport viewport, in float2 screenCoordinate,
+        out GlobalChunkCoordinate chunk_GC);
+
+    private delegate void SuperChunksDrawOrig(
+        SuperChunksDrawer drawer, FrameDrawOptionsNoLOD options, MapCullResult cullResult);
+
     private delegate void LayerPlanesOrig(
         IslandPlayingFieldLayersDrawer drawer, FrameDrawOptionsNoLOD options, IIslandDefinition definition,
         GlobalChunkTransform transform, LODRenderConfig lod, bool renderContours);
@@ -78,6 +114,7 @@ public class FirstPersonMod : IMod
     {
         Logger = logger;
         Camera = new FirstPersonCamera(logger);
+        FirstPersonIcons.Bind(logger);
 
         // A definition rather than logic: built once per scenario load, so a hot reload
         // will not pick it up and the game needs restarting after an install.
@@ -138,6 +175,72 @@ public class FirstPersonMod : IMod
             Hooks.Add(DetourHelper.CreatePostfixHook<HUDToolbarView, InputDownstreamContext>(
                 (view, context) => view.ProcessInput(context),
                 OnToolbarInput));
+
+            // Our shop icons are ids GameData has never heard of, and GetImage throws on one
+            // of those rather than returning null - which takes the whole research screen
+            // with it. Answering for our own prefix is all this does.
+            Hooks.Add(new Hook(
+                typeof(GameData).GetMethod(nameof(GameData.GetImage)),
+                new Func<GetImageOrig, GameData, GameImageId, Sprite>(OnGetImage)));
+
+            // The mod's scenario. Both of these are ordinary methods on the way to the
+            // menu's scenario list, which is why the mod reaches the scenario through them
+            // rather than through the constructors of ScenarioCollection and
+            // ScenarioPresetCollection - those would be the obvious seams, and both are
+            // constructors.
+            Hooks.Add(new Hook(
+                typeof(ScenarioReader).GetMethod(nameof(ScenarioReader.TryReadingScenario)),
+                new ReadScenarioHook(OnReadScenario)));
+
+            Hooks.Add(new Hook(
+                typeof(GameData).GetProperty(nameof(GameData.ScenarioParameterPresets)).GetGetMethod(),
+                new Func<PresetsOrig, GameData, IReadOnlyList<GameScenarioParametersPreset>>(OnPresets)));
+
+            // Miner placement sweeps the whole map for patches to highlight. See
+            // FirstPersonPlacementHighlight for why an eye-level camera makes that expensive
+            // and an overhead one does not.
+            Hooks.Add(new Hook(
+                typeof(IslandPlacementHelperHighlightShapeResources)
+                    .GetMethod(nameof(IslandPlacementHelperHighlightShapeResources.Draw)),
+                new Action<ShapeHighlightOrig, IslandPlacementHelperHighlightShapeResources,
+                    FrameDrawOptions, IMapModel>(OnShapeResourceHighlight)));
+
+            Hooks.Add(new Hook(
+                typeof(IslandPlacementHelperHighlightFluidResources)
+                    .GetMethod(nameof(IslandPlacementHelperHighlightFluidResources.Draw)),
+                new Action<FluidHighlightOrig, IslandPlacementHelperHighlightFluidResources,
+                    FrameDrawOptions, IMapModel>(OnFluidResourceHighlight)));
+
+            // `SuperChunksDrawer.Draw` starts by asking which chunk the centre of the screen
+            // is over, and gives up entirely when the answer is "none" - which at eye level
+            // is every frame the horizon is below the crosshair.
+            Hooks.Add(new Hook(
+                typeof(ScreenUtils).GetMethods()
+                    .First(method => method.Name == nameof(ScreenUtils.TryGetChunkCoordinate)
+                                     && method.GetParameters().Length == 3),
+                new ChunkAtScreenHook(OnChunkAtScreen)));
+
+            // ...and then culls each resource against the camera frustum, so pitch decides
+            // what exists. Swap the frustum for a box around the player for the duration.
+            Hooks.Add(new Hook(
+                typeof(SuperChunksDrawer).GetMethod(nameof(SuperChunksDrawer.Draw)),
+                new Action<SuperChunksDrawOrig, SuperChunksDrawer, FrameDrawOptionsNoLOD,
+                    MapCullResult>(OnDrawSuperChunks)));
+
+            // Asteroids appearing when you look down and vanishing when you look up. The
+            // bounds they are culled against are pinned to a fixed height band that has
+            // nothing to do with where they are drawn.
+            Hooks.Add(new Hook(
+                typeof(SpaceThemeBoundsProvider)
+                    .GetMethod(nameof(SpaceThemeBoundsProvider.ComputeResourceSourceBounds)),
+                new Func<ResourceBoundsOrig, SpaceThemeBoundsProvider, IMapResourceSource, Bounds>(
+                    OnResourceBounds)));
+
+            // The scenario picker has no scroll view, and this mod is what pushes it past
+            // what fits. Postfix, because the cards are created inside the call.
+            Hooks.Add(DetourHelper.CreatePostfixHook<HUDMenuSelectScenarioState, object>(
+                (state, payload) => state.OnMenuEnterState(payload),
+                OnScenarioMenuEntered));
 
             // There is no static accessor for HUDEvents, so it is captured as the HUD builds
             // itself. Fires once per HUD part - the same object every time, so overwriting is
@@ -248,7 +351,8 @@ public class FirstPersonMod : IMod
         // debug.step-speed and pause the game.
         if (FirstPersonKeybindings.Ready)
         {
-            Camera.SetInput(FirstPersonInput.Read(context, Camera.Active));
+            Camera.SetInput(FirstPersonInput.Read(
+                context, Camera.Active, options.Player?.InteractionState?.PlacingAnything ?? false));
         }
 
         return (context, options);
@@ -276,6 +380,19 @@ public class FirstPersonMod : IMod
         }
 
         orig(controller, waypoint);
+    }
+
+    /// <summary>
+    /// Serves the mod's own research icons; everything else is the game's.
+    /// </summary>
+    private Sprite OnGetImage(GetImageOrig orig, GameData gameData, GameImageId uniqueId)
+    {
+        if (FirstPersonIcons.TryGetSprite(uniqueId.Id, out Sprite sprite))
+        {
+            return sprite;
+        }
+
+        return orig(gameData, uniqueId);
     }
 
     /// <summary>
@@ -336,9 +453,296 @@ public class FirstPersonMod : IMod
         orig(drawer, options, definition, transform, lod, renderContours);
     }
 
+    /// <summary>
+    /// Refuses the mod's own scenario when a downstream mod has switched it off, and
+    /// contains anything the mod's own scenario throws.
+    ///
+    /// Returning false is the reader's own "this file is not a scenario" answer -
+    /// <c>ScenarioCollection</c> simply skips a promise that fails - so nothing else has to
+    /// know the scenario was ever there. The test is against the raw JSON because that is
+    /// all a promise carries at this point; the id does not exist as a field until after
+    /// the deserialise this hook may be about to skip.
+    ///
+    /// The catch is the more important half. <c>TryReadingScenario</c> resolves
+    /// <c>#include:</c> references **before** its try block:
+    ///
+    /// <code>
+    /// text = new IncludePreProcessorSolver("#include:").Process(text);  // not guarded
+    /// try { serializedGameScenario = …Deserialize(text); } catch { … return false; }
+    /// </code>
+    ///
+    /// and <c>IncludePreProcessorSolver</c> throws <c>Could not resolve path …</c> for a
+    /// reference it cannot find. That throw comes out through <c>GameData</c>'s constructor
+    /// and <c>LoadGameDataBlindStep</c>, so a scenario file naming one path the current
+    /// game version no longer ships does not fail to load - **it stops the game starting**.
+    /// Our scenario is the default one with three strings changed, so it names about a
+    /// dozen of the game's own resource paths, every one of which is a future game update
+    /// away from moving. Catching here turns that from a dead install into a missing menu
+    /// entry.
+    ///
+    /// Only for our own file. Swallowing another scenario's failure would hide a real bug
+    /// in the game or in someone else's mod.
+    /// </summary>
+    private bool OnReadScenario(
+        ReadScenarioOrig orig, ScenarioReader reader, string text, string source,
+        out SerializedGameScenario serialized, out GameScenarioData data)
+    {
+        bool ours = FirstPersonScenario.IsOurs(text);
+
+        if (ours && !FirstPersonControl.ScenarioEnabled)
+        {
+            serialized = null;
+            data = null;
+            return false;
+        }
+
+        if (!ours)
+        {
+            return orig(reader, text, source, out serialized, out data);
+        }
+
+        try
+        {
+            return orig(reader, text, source, out serialized, out data);
+        }
+        catch (Exception exception)
+        {
+            Logger.Exception?.LogException(exception);
+            Logger.Error?.Log(
+                "First Person: the scenario could not be read and will not appear in the menu. "
+                + "Its #include: paths are the game's own, so a game update may have moved one.");
+            serialized = null;
+            data = null;
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Stamps the scenario's map generation onto its preset, and hides the preset when the
+    /// scenario is switched off.
+    ///
+    /// This getter is the only public way to the preset list and every route into a new
+    /// game goes through it, which makes it the one place both jobs can be done without
+    /// hooking a constructor. Stamping is assignment, so running it per call is idempotent
+    /// and cheap; the filter allocates, but only in the switched-off case.
+    /// </summary>
+    private IReadOnlyList<GameScenarioParametersPreset> OnPresets(PresetsOrig orig, GameData gameData)
+    {
+        IReadOnlyList<GameScenarioParametersPreset> presets = orig(gameData);
+
+        if (!FirstPersonControl.ScenarioEnabled)
+        {
+            return FirstPersonScenario.WithoutOurPreset(presets);
+        }
+
+        bool wasApplied = FirstPersonScenario.MapGenerationApplied;
+        FirstPersonScenario.ApplyMapGeneration(presets);
+
+        if (!wasApplied && FirstPersonScenario.MapGenerationApplied)
+        {
+            // Said once, because the silent failure here - the JIT inlining this getter into
+            // its caller, so the hook is never reached - looks exactly like nothing having
+            // happened. A log line turns "the map came out vanilla" into a question with an
+            // answer.
+            Logger.Info?.Log("First Person: scenario map generation applied to "
+                             + FirstPersonScenario.PresetId + ".");
+        }
+
+        return presets;
+    }
+
+    /// <summary>
+    /// Answers "which chunk is the middle of the screen over" with the player's own chunk
+    /// when the ray misses the build plane.
+    ///
+    /// <c>SuperChunksDrawer.Draw</c> opens with
+    ///
+    /// <code>
+    /// if (!ScreenUtils.TryGetChunkCoordinate(viewport, in ScreenUtils.ScreenCenter, out var c))
+    /// {
+    ///     return;
+    /// }
+    /// </code>
+    ///
+    /// and that coordinate is only a **seed** - the method floods outward from it through
+    /// neighbouring super chunks. But the lookup is the flat-plane intersection, and from
+    /// eye level a ray aimed above the horizon never meets the plane, so the drawer returns
+    /// having drawn nothing at all and every asteroid in the world disappears until the
+    /// crosshair drops below the horizon again. Riding the underside of a track mirrors it:
+    /// the plane is overhead there, and looking *down* is what empties the sky.
+    ///
+    /// The player's own chunk is the right seed anyway. It is where the flood should start
+    /// from, and unlike the intersection it always exists.
+    ///
+    /// No conflict with the <c>...AtCursor</c> hook: that one replaces its own method
+    /// outright while first person is on and never reaches this one.
+    /// </summary>
+    private bool OnChunkAtScreen(
+        ChunkAtScreenOrig orig, Viewport viewport, in float2 screenCoordinate,
+        out GlobalChunkCoordinate chunk_GC)
+    {
+        if (orig(viewport, in screenCoordinate, out chunk_GC))
+        {
+            return true;
+        }
+
+        if (!Camera.Active || viewport == null)
+        {
+            return false;
+        }
+
+        chunk_GC = Camera.PlayerChunk(viewport);
+        return true;
+    }
+
+    /// <summary>
+    /// Draws map resources around the player rather than only in front of them.
+    ///
+    /// Everything <c>SuperChunksDrawer</c> decides is a frustum test - which super chunks to
+    /// visit (<c>CullChunk</c>), and each patch within them against the patch's bounds - and
+    /// those bounds are a flat slab, because
+    /// <c>SpaceThemeBoundsProvider.ComputeResourceSourceBounds</c> throws the patch's height
+    /// away in favour of a fixed band. A slab sits at a fixed angle from an eye-level camera,
+    /// so pitch decides whether the map has asteroids in it.
+    ///
+    /// Widening the slab was the first attempt and it did not work, for a reason worth
+    /// recording: <c>SuperChunksDrawer.GetResourceBounds</c> **caches** the answer per
+    /// resource for the life of the drawer, so a hook on the bounds runs once per patch and
+    /// is then served from a dictionary forever.
+    ///
+    /// Replacing the frustum for the duration of the call sidesteps both. The drawer's own
+    /// distance gates still apply - 5500 units for a resource, <c>MaxRenderDistanceSq</c> for
+    /// a super chunk - so this widens *what* is considered rather than how far.
+    /// </summary>
+    private void OnDrawSuperChunks(
+        SuperChunksDrawOrig orig, SuperChunksDrawer drawer, FrameDrawOptionsNoLOD options,
+        MapCullResult cullResult)
+    {
+        if (!Camera.Active || FirstPersonControl.ResourceRenderRadius <= 0f)
+        {
+            orig(drawer, options, cullResult);
+            return;
+        }
+
+        FirstPersonPlacementHighlight.WithinRadius(
+            options, FirstPersonControl.ResourceRenderRadius,
+            () => orig(drawer, options, cullResult));
+    }
+
+    /// <summary>
+    /// Makes a resource patch's culling bounds cover where it is actually drawn.
+    ///
+    /// <c>SpaceThemeBoundsProvider.ComputeResourceSourceBounds</c> takes the patch's real
+    /// world bounds and then throws its height away:
+    ///
+    /// <code>
+    /// min.y = MapResourceMinHeight;   // -50
+    /// max.y = MapResourceMaxHeight;   // -22
+    /// result.SetMinMax(min, max);
+    /// </code>
+    ///
+    /// From an overhead camera that is harmless - the frustum points at the ground and that
+    /// band is always inside it. At eye level it is the whole bug: the band sits a fixed
+    /// distance below the horizon, so looking down a few degrees brings every asteroid in
+    /// the map into view at once and looking up takes them all away, while their meshes never
+    /// moved. That is the popping, and it is also part of why arriving is expensive - the
+    /// band is a flat slab a near-level frustum slices through for a very long way.
+    ///
+    /// Growing the box to include the patch's own extent is all this does, and all it may
+    /// do: <c>SuperChunksDrawer.GetResourceBounds</c> caches the result per resource for the
+    /// life of the drawer, so anything depending on where the player is would be frozen at
+    /// whatever it was the first time that patch was seen - and would outlive first person
+    /// itself. The pitch problem is solved by replacing the frustum instead, in
+    /// <see cref="OnDrawSuperChunks"/>.
+    ///
+    /// <c>Bounds.Encapsulate</c> only ever enlarges, so nothing that was visible before can
+    /// become invisible, and the game's band is left in place rather than replaced.
+    /// </summary>
+    private Bounds OnResourceBounds(
+        ResourceBoundsOrig orig, SpaceThemeBoundsProvider provider, IMapResourceSource mapResource)
+    {
+        Bounds bounds = orig(provider, mapResource);
+
+        if (!Camera.Active || mapResource == null)
+        {
+            return bounds;
+        }
+
+        bounds.Encapsulate(mapResource.Bounds_GC.ToWorldBounds());
+        return bounds;
+    }
+
+    /// <summary>
+    /// Bounds the shape-patch highlight to the distance the player could actually place at.
+    /// </summary>
+    private void OnShapeResourceHighlight(
+        ShapeHighlightOrig orig, IslandPlacementHelperHighlightShapeResources helper,
+        FrameDrawOptions options, IMapModel map)
+    {
+        if (!Camera.Active)
+        {
+            orig(helper, options, map);
+            return;
+        }
+
+        FirstPersonPlacementHighlight.WithinRadius(
+            options, HighlightRadius, () => orig(helper, options, map));
+    }
+
+    /// <summary>
+    /// The same for fluid patches. Its loop is cheaper - no stack of ten indicator planes per
+    /// chunk - but it sweeps the same super chunks through the same frustum.
+    /// </summary>
+    private void OnFluidResourceHighlight(
+        FluidHighlightOrig orig, IslandPlacementHelperHighlightFluidResources helper,
+        FrameDrawOptions options, IMapModel map)
+    {
+        if (!Camera.Active)
+        {
+            orig(helper, options, map);
+            return;
+        }
+
+        FirstPersonPlacementHighlight.WithinRadius(
+            options, HighlightRadius, () => orig(helper, options, map));
+    }
+
+    /// <summary>
+    /// How far the resource highlight is allowed to look, in world units. Tracks the flying
+    /// multiplier, so the hint reaches as far as the placement does.
+    /// </summary>
+    private float HighlightRadius =>
+        FirstPersonTuning.ChunkReach
+        * Camera.Targeting.ReachMultiplier
+        * FirstPersonTuning.PlacementHighlightMargin;
+
+    /// <summary>
+    /// Adds a scroll view to the scenario picker once its cards exist.
+    ///
+    /// Guarded because it is surgery on the live menu hierarchy: a throw here would come out
+    /// through the menu state machine, and a main menu that cannot open a page is a worse
+    /// outcome than a list that does not scroll.
+    /// </summary>
+    private void OnScenarioMenuEntered(HUDMenuSelectScenarioState state, object payload)
+    {
+        try
+        {
+            FirstPersonScenarioMenu.EnsureScrollable(state.UIScenariosParent, Logger);
+        }
+        catch (Exception exception)
+        {
+            Logger.Exception?.LogException(exception);
+        }
+    }
+
     private void OnTick(float deltaTime)
     {
         FirstPersonKeybindings.EnsureRegistered(Logger);
+
+        // A postfix on GameSessionOrchestrator.Tick, which keeps running for the main menu's
+        // background game - unlike the camera hook, which stops with the player interaction
+        // when a session ends. That is the gap the watchdog covers.
+        Camera.Watchdog();
     }
 
     public void Dispose()
@@ -350,6 +754,7 @@ public class FirstPersonMod : IMod
         GameRewirers.RemoveRewirer(FlightResearchHandle);
         GameRewirers.RemoveRewirer(TickHandle);
         FirstPersonKeybindings.Unregister();
+        FirstPersonIcons.Forget();
     }
 
     private void Unhook()

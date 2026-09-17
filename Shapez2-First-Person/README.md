@@ -18,7 +18,9 @@ Walk around your platforms, fall off them, and build at a crosshair.
 | Research gates, configurable reach | compiled, not yet played |
 | Riding belts | works (played) |
 | Waypoint fast travel | works (played) |
-| Riding trains | works (played) |
+| Riding trains | works (played) — upside-down rails included |
+| The First Person scenario | works (played) |
+| Shop icons and research nodes | works (played) |
 | Settings page | not yet — see below |
 
 Test in a save you do not mind breaking until the bottom rows move up.
@@ -28,12 +30,13 @@ Test in a save you do not mind breaking until the bottom rows move up.
 All of these are **rebindable in the game's own settings**, under *First Person*. The
 defaults are below.
 
+There is no key to turn first person on. You are in it because you are playing the **First
+Person** scenario, and you stay in it for that session — see below.
+
 | | |
 | --- | --- |
-| `F6` | toggle first person — you arrive at the vortex |
-| `Shift` + `F6` | enter where the camera is looking instead |
 | your movement keys | walk (uses the game's own bindings, not hardcoded WASD) |
-| your "move faster" key | sprint |
+| your "move faster" key | sprint — three times walking, and three times flight |
 | `Space` | jump, or rise while flying |
 | `LeftCtrl` | sink while flying |
 | `Q` / `E` | layer down / up (yours to pick while flying) |
@@ -42,7 +45,7 @@ defaults are below.
 | `Tab` (hold) | release the mouse to click the HUD, side panels and menus |
 | `F5` | fast travel to your next waypoint |
 | click a waypoint or the home icon | travel there on foot, not in space view |
-| `F7` | board the train you are looking at, or step off (jump works too) |
+| `F` | board the train you are looking at, or step off (jump works too) — stands aside for mirror while you are holding a building |
 | mouse | look |
 | wheel | previous / next toolbar (belts, fluids, platforms) |
 | `Ctrl` + wheel | step a level deeper into the toolbar, or back out — the plain wheel then cycles at that level |
@@ -64,14 +67,52 @@ the nearest one fills the screen.
 (An earlier build pinned you to layer 1 to get rid of those planes. That was the wrong
 fix: the planes were the problem, not the layers.)
 
-## Flight and fast travel are researched
+## The First Person scenario
 
-Walking is free. Flight needs **Personal Flight Unit**, waypoint travel needs **Waypoint
-Beacon**, and riding trains needs **Rail Pass** — all cheap nodes in the research shop's
-*First Person* category. Until they are bought, those keys say so rather than doing nothing.
+New game → Regular → **First Person**. That is the only way in: there is no toggle key, and
+in any other save the mod does nothing. It is the ordinary scenario with two differences:
 
-You cannot get stranded by that: the toggle key leaves first person from anywhere, and
-falling past every floor puts you back on the last solid ground by itself.
+- **You are locked in.** First person starts on the first frame and there is nothing to
+  press to leave, the same way `FirstPersonControl.Forced` behaves for a downstream mod.
+- **The map is denser.** No spiral, bigger patches, and enough of them that resources are
+  a walk rather than an expedition — which matters when you are walking.
+
+| | Vanilla | Here |
+| --- | --- | --- |
+| Spiral generation | off | off |
+| Fluid patch likeliness | 15% | 250% |
+| Fluid patch base size / growth / max | 2 / 70% / 4 | 3 / 60% / 8 |
+| Shape patch likeliness | 30% | 200% |
+| Shape patch base size / growth / max | 2 / 70% / 5 | 4 / 70% / 8 |
+| Rare shapes | 30% | 45% |
+| Very rare shapes | 10% | 33% |
+
+Above 100% these do not saturate, they **loop**: `DefaultMapGenerator` runs
+`do { … k -= 100; } while (k > 100)`, so the count is `ceil(k / 100) - 1` patches per super
+chunk, each one placed outright — 250% and 200% are both two patches.
+A super chunk is 64×64 chunks, and the vanilla figures above are less than one patch each.
+
+(The vanilla column is the class default in `MapGenerationParameters.SerializedData`. The
+scenario's own base file is a Unity `TextAsset` behind a `#include:`, which nothing dumps,
+so the real vanilla numbers could differ — what the table promises is the right-hand
+column, which is written directly onto the resolved parameters.)
+
+These are *starting* values: the scenario config dialog still lets you change them before
+you press play, and the shape-type distribution table is left exactly as vanilla has it.
+
+Set `FirstPersonControl.ScenarioEnabled = false` and the scenario and its preset both
+disappear from the menu.
+
+## Three things are researched
+
+Walking and building are free. Flight needs **Jet Pack** (6k), fast travel needs **Waypoint
+Travel** (5k), and riding trains needs **Train Riding** (4.8k) — three nodes in the research
+shop's *First Person* category, each with its own icon. They are priced against the top of
+the vanilla ladder, where 5k buys a third factory floor. Until they are bought, those keys
+say so rather than doing nothing.
+
+You cannot get stranded by that: falling past every floor puts you back on the last solid
+ground by itself, and leaving the session leaves first person.
 
 The nodes are definitions, so **restart the game** after installing — a hot reload will not
 add them.
@@ -102,7 +143,7 @@ public class MyMod : IMod
         FirstPersonControl.Forced = true;                     // a first-person game
         FirstPersonControl.FlightEnabled = false;             // on foot, permanently
         FirstPersonControl.TravelRequiresResearch = false;    // fast travel from the start
-        FirstPersonControl.TrainRidingResearchCostPoints = 5; // shows as "500"
+        FirstPersonControl.TrainRidingResearchCostPoints = 20; // shows as "2k"
     }
 }
 ```
@@ -111,19 +152,27 @@ public class MyMod : IMod
 
 | Member | Type | Default | |
 | --- | --- | --- | --- |
-| `Forced` | `bool` | `false` | Lock the player into first person: they enter on the first frame of a session and the toggle stops working. |
+| `Forced` | `bool` | `false` | Lock the player into first person for every session, the way the scenario does. |
+| `LockedIn` | `bool` (get) | | `Forced`, or the mod's own scenario is running. This is what the camera reads. |
+| `ToggleEnabled` | `bool` | `false` | Whether the toggle key can put an ordinary session into first person. Off means the binding is not registered at all. |
+| `WalkSpeed` | `float` | `8` | Tiles per second on foot. |
+| `FlySpeed` | `float` | `60` | Tiles per second in the air, before sprinting. Vertical movement uses the same number. |
+| `SprintMultiplier` | `float` | `3` | What the game's "move faster" key multiplies both by, climbing and diving included. |
+| `ResourceRenderRadius` | `float` | `2000` | How far shape and fluid patches stay drawn regardless of where you look, in world units (100 chunks). `0` leaves the game's culling alone. |
+| `TrainRideHeight` | `float` | `7.8` | How far from a ridden wagon's origin the rider sits, in tiles — measured along the wagon's own up, so an upside-down rail hangs you underneath. |
 | `Active` | `bool` (get) | | Whether the player is in first person right now. |
+| `ScenarioEnabled` | `bool` | `true` | Whether the **First Person** scenario and its preset appear in the new-game menu. |
 | `FlightEnabled` | `bool` | `true` | Whether flight is offered at all. |
 | `FlightRequiresResearch` | `bool` | `true` | Whether flight must be bought. |
-| `FlightResearchCostPoints` | `int` | `2` | Cost of the flight node. |
+| `FlightResearchCostPoints` | `int` | `60` | Cost of the flight node. |
 | `FlightUnlocked` | `bool` (get) | | Can the player fly right now, by either route. |
 | `TravelEnabled` | `bool` | `true` | Whether waypoint fast travel is offered at all. |
 | `TravelRequiresResearch` | `bool` | `true` | Whether fast travel must be bought. |
-| `TravelResearchCostPoints` | `int` | `2` | Cost of the travel node. |
+| `TravelResearchCostPoints` | `int` | `50` | Cost of the travel node. |
 | `TravelUnlocked` | `bool` (get) | | Can the player fast travel right now. |
 | `TrainRidingEnabled` | `bool` | `true` | Whether riding trains is offered at all. |
 | `TrainRidingRequiresResearch` | `bool` | `true` | Whether riding trains must be bought. |
-| `TrainRidingResearchCostPoints` | `int` | `2` | Cost of the train node. |
+| `TrainRidingResearchCostPoints` | `int` | `48` | Cost of the train node. |
 | `TrainRidingUnlocked` | `bool` (get) | | Can the player ride trains right now. |
 
 ### Off, free, or bought
@@ -142,9 +191,18 @@ feature off wants it gone, not pending.
 ### Costs are multiplied by 100 on screen
 
 `…CostPoints` is the **stored** amount, not the displayed one. `Format(this
-ResearchPointCurrency)` renders `Amount * 100`, so the default `2` appears as "200" and `50`
-appears as "5k". Reading this backwards prices a node a hundredfold out and still looks
-entirely plausible.
+ResearchPointCurrency)` renders `Amount * 100`, so `30` appears as "3k" and `50` as "5k".
+Reading this backwards prices a node a hundredfold out and still looks entirely plausible.
+
+The defaults are priced against the authored ladder in `default-scenario.json`, whose top
+end is 42 for train transfer stations, 48 for an extra rail line colour, 50 for a third
+factory or space floor, 90 for the large platform pack and 200 for vortex delivery. Points
+arrive from side quests in ones, twos and threes, so these are small numbers carrying a lot
+of weight.
+
+All three sit in that top band on purpose. Flight is above the third-floor unlock because
+it is worth more than one — it does not add somewhere to build, it removes traversal as a
+problem for the rest of the save.
 
 ### When to set them
 
@@ -153,6 +211,9 @@ which is early enough for all of it:
 
 | | |
 | --- | --- |
+| `ScenarioEnabled` | read while game data loads, which is after mods are constructed |
+| `ToggleEnabled` | read when the keybindings register, on the first tick |
+| movement speeds and the ride height | read live, every frame |
 | research options | read when a scenario loads |
 | `…Enabled` | also read when the keybindings register, on the first tick |
 | `Forced`, and everything else | read live, every frame |

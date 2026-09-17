@@ -1,0 +1,13 @@
+{
+  "Version": "1",
+  "UniqueId": "first-person-scenario-parameter-preset",
+  "Title": "@scenario-preset.first-person.title",
+  "Description": "@scenario-preset.first-person.description",
+  "Parameters": {
+    "ScenarioId": "first-person-scenario",
+    "MapGenerationParameters": "#include:Scenarios/SharedData/BaseMapGenerationParameters",
+    "GameRuleParameters": {
+      "RuleIds": []
+    }
+  }
+}
