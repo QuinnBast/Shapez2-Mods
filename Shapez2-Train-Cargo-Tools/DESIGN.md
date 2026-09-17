@@ -2024,6 +2024,13 @@ Two things worth keeping from the composition pass:
   the four captures the machines sit in the upper half, and a scrim across the top covered the
   very thing being captioned. Each image gets a `centre` that lifts its subject into the clear
   band instead.
+- **A capture far wider than 16:9 gets set into the frame, not cropped to it.** The research
+  shop is 1459x223 - six and a half to one. Cropping that to 16:9 either throws away both ends,
+  which is where the two nodes are, or scales it until the text in it cannot be read. It is
+  placed at its own aspect instead, on a ground made from the capture itself blown up, blurred
+  and darkened: the one backdrop guaranteed to be in the right colours, because it *is* the
+  picture. Anything invented would be a guess at the research screen's palette sitting directly
+  beside the real thing.
 - **The icon takes a strip, not a wash.** `cargo-line-alt.png` is tight enough that freight
   fills the frame, and a scrim deep enough to read a wordmark against would cover the half of
   it that makes the icon work at 96 pixels. A solid strip along the bottom with a rule above it

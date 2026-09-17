@@ -21,7 +21,7 @@ are the item page images, where there is room to say what each part of the mod d
 
 import os
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))          # the repo folder
@@ -159,6 +159,63 @@ def build(source, headline, subline, out, centre=0.5, zoom=1.0, place="bottom"):
     print("  wrote   %-26s %.0f KB" % (out, os.path.getsize(os.path.join(HERE, out)) / 1024))
 
 
+def build_wide(source, headline, subline, out, panel_width=1160):
+    """A capture far wider than 16:9, set into the frame rather than cropped to it.
+
+    The research shop is a 1459x223 strip - six and a half to one. Cropping that to 16:9 either
+    throws away both ends, which is where the two nodes are, or scales it until the text in it
+    cannot be read. So it is placed at its own aspect and the frame is built around it.
+
+    The ground is the capture itself, blown up, blurred and darkened. It is the one backdrop
+    guaranteed to be in the right colours, because it *is* the picture - anything invented here
+    would be a guess at the research screen's palette sitting directly beside the real thing.
+    """
+    shot = Image.open(os.path.join(SHOTS, source)).convert("RGB")
+
+    # Cover the frame, then blur hard enough that no detail survives to compete with the panel.
+    cover = max(WIDTH / shot.width, HEIGHT / shot.height) * 1.6
+    ground = shot.resize((int(shot.width * cover), int(shot.height * cover)), Image.LANCZOS)
+    left = (ground.width - WIDTH) // 2
+    top = (ground.height - HEIGHT) // 2
+    ground = ground.crop((left, top, left + WIDTH, top + HEIGHT))
+    ground = ground.filter(ImageFilter.GaussianBlur(38))
+    ground = Image.blend(ground, Image.new("RGB", (WIDTH, HEIGHT), (10, 12, 26)), 0.62)
+
+    panel_height = int(shot.height * panel_width / shot.width)
+    panel = shot.resize((panel_width, panel_height), Image.LANCZOS)
+
+    # Centred in what is left under the caption block, not in the frame - otherwise the text
+    # crowds it at the top and there is a hand's width of nothing at the bottom.
+    caption_bottom = 52 + 48 + 62 + 18 + 30
+    py = caption_bottom + (HEIGHT - caption_bottom - panel_height) // 2
+    px = (WIDTH - panel_width) // 2
+
+    shadow = Image.new("L", (WIDTH, HEIGHT), 0)
+    ImageDraw.Draw(shadow).rectangle(
+        [px + 6, py + 10, px + panel_width - 6, py + panel_height + 10], fill=150)
+    ground.paste(Image.new("RGB", (WIDTH, HEIGHT), (4, 5, 12)), (0, 0),
+                 shadow.filter(ImageFilter.GaussianBlur(18)))
+
+    ground.paste(panel, (px, py))
+
+    head = font(BLACK_FONT, 54)
+    sub = font(SEMI_FONT, 24)
+    brow = font(SEMI_FONT, 19)
+
+    scrim(ground, caption_bottom + 10, caption_bottom + 230)
+    draw = ImageDraw.Draw(ground)
+
+    tracked(draw, (60, 52), "TRAIN CARGO TOOLS", brow, AMBER, 3.4)
+    draw.rectangle([60, 84, 148, 87], fill=AMBER)
+
+    draw.text((62, 103), headline, font=head, fill=(0, 0, 0))
+    draw.text((60, 100), headline, font=head, fill=INK)
+    draw.text((60, 180), subline, font=sub, fill=MUTED)
+
+    ground.save(os.path.join(HERE, out), optimize=True)
+    print("  wrote   %-26s %.0f KB" % (out, os.path.getsize(os.path.join(HERE, out)) / 1024))
+
+
 # The headlines are Quinn's. Each subline carries a figure this repo can show its working for -
 # see the throughput table in DESIGN.md - so the page says something as well as sells.
 #
@@ -196,3 +253,8 @@ if __name__ == "__main__":
 
     for source, headline, subline, out, centre, zoom, place in IMAGES:
         build(source, headline, subline, out, centre, zoom, place)
+
+    build_wide("CargoResearch.png",
+               "Unlock Through Research!",
+               "Two nodes in the trains group, 4.8k points each - machines, then stores.",
+               "promo-research.png")
