@@ -1992,33 +1992,42 @@ out to the East; the unpackager is the mirror. Which end is the packed one is th
 question on all four machines - **the duct is the packed side** - rather than a different tell
 per pair. The pipe end is now a statement rather than a default.
 
-## Store art is rendered, not captured
+## Store art: captures, with a renderer as the stopgap
 
 Screenshots rot. The Steam preview and every promo image showed grey machines with a
 see-through hopper for two days after both were fixed, because the captures predated the art
 work and nobody retakes five images per change.
 
-`Tools/render_meshes.py` reads the same `.obj` files the game loads and colours them **by the
-role sentinels the generator writes** - every vertex already carries a per-role marker UV, so
-the renderer knows which triangles are `hull`, which are `frame`, which are `warn`, and paints
-them the way `CargoPalette` does at runtime. Regenerate the meshes, re-run
-`Steam/make-promo.py`, and the art is current by construction.
+The answer was `Tools/render_meshes.py`: it reads the same `.obj` files the game loads and
+colours them **by the role sentinels the generator writes** - every vertex already carries a
+per-role marker UV, so the renderer knows which triangles are `hull`, `frame` or `warn` and
+paints them the way `CargoPalette` does at runtime. Palette and lighting were sampled from real
+captures rather than picked: the platform-edge orange is `rgb(189, 111, 1)` out of
+`cargo-line.png`, the body grey `rgb(112, 100, 97)` out of `cargo-stores.png`, and a face turned
+away from the light sits at luma 0.39 against 0.53 facing it - a ratio near 1.35, so heavy
+ambient and a light key. A hard key at 0.30 ambient rendered the machines nearly black:
+accurate to the palette, nothing like the game.
 
-The figures in `ROLE_COLOURS` are **sampled from the real captures** rather than picked: the
-platform-edge orange is `rgb(189, 111, 1)` out of `cargo-line.png` and the machine body grey is
-`rgb(112, 100, 97)` out of `cargo-stores.png`. So is the lighting - a face turned away from the
-light sits at luma 0.39 against 0.53 for one facing it, a ratio near 1.35, so the model is
-heavy ambient and a light key. The first pass used a hard key at 0.30 ambient and rendered the
-machines nearly black: accurate to the palette, nothing like the game.
+**And it still was not good enough to ship.** Quinn's verdict on the result - "these screenshots
+are terrible lmao" - is the right one. A likeness with no metal, noise or scratch passes, and
+accent colours that only resolve against a live palette at runtime, reads as exactly what it is
+the moment it sits next to real game art. *A screenshot wins whenever one exists.*
 
-It is a likeness, not a frame grab. No metal, noise or scratch passes, and the accent slots
-resolve against a live palette that only exists at runtime. **A fresh in-game capture is still
-the better store image** - this is what to ship until somebody takes one.
+So `Steam/make-promo.py` composes from `Screenshots/` again, and the renderer stays as a
+development tool - `python Tools/render_meshes.py CargoPackager` is still the quickest way to
+look at a mesh change without launching the game.
 
-Two framing rules learned by looking: one subject per image, because the auto-fit scales a row
-of three down until a junction is a ribbon forty pixels tall; and a `bias` that lifts the
-subject clear of the caption block, because a scrim across the bottom third otherwise lands on
-the thing being captioned.
+Two things worth keeping from the composition pass:
+
+- **The subject has to clear the caption.** Every headline ended up at the bottom, which was
+  not the plan - alternating top and bottom reads less like a template - because in three of
+  the four captures the machines sit in the upper half, and a scrim across the top covered the
+  very thing being captioned. Each image gets a `centre` that lifts its subject into the clear
+  band instead.
+- **The icon takes a strip, not a wash.** `cargo-line-alt.png` is tight enough that freight
+  fills the frame, and a scrim deep enough to read a wordmark against would cover the half of
+  it that makes the icon work at 96 pixels. A solid strip along the bottom with a rule above it
+  costs one eighth of the picture and stays legible in a grid.
 
 ## Open questions
 
