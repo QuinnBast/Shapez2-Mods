@@ -32,7 +32,6 @@ PREVIEW = 640
 
 AMBER = (244, 158, 36)
 INK = (245, 247, 252)
-MUTED = (196, 201, 214)
 
 BLACK_FONT = r"C:\Windows\Fonts\seguibl.ttf"           # Segoe UI Black
 SEMI_FONT = r"C:\Windows\Fonts\seguisb.ttf"            # Segoe UI Semibold
@@ -123,17 +122,16 @@ def build_preview(source="cargo-line-alt.png", centre=0.5, out="preview.png"):
 # --------------------------------------------------------------------------- the promos
 
 
-def build(source, headline, subline, out, centre=0.5, zoom=1.0, place="bottom"):
+def build(source, headline, out, centre=0.5, zoom=1.0, place="bottom"):
     image = frame(source, WIDTH / float(HEIGHT), centre, zoom).resize(
         (WIDTH, HEIGHT), Image.LANCZOS)
 
     head = font(BLACK_FONT, 54)
-    sub = font(SEMI_FONT, 24)
     brow = font(SEMI_FONT, 19)
 
     lines = headline.split("\n")
-    LINE, GAP, MARGIN, LEFT = 62, 18, 52, 60
-    block = 48 + len(lines) * LINE + GAP + 30
+    LINE, MARGIN, LEFT = 62, 52, 60
+    block = 48 + len(lines) * LINE + 8
 
     if place == "top":
         top = MARGIN
@@ -153,13 +151,11 @@ def build(source, headline, subline, out, centre=0.5, zoom=1.0, place="bottom"):
         draw.text((LEFT, y), line, font=head, fill=INK)
         y += LINE
 
-    draw.text((LEFT, y + GAP), subline, font=sub, fill=MUTED)
-
     image.save(os.path.join(HERE, out), optimize=True)
     print("  wrote   %-26s %.0f KB" % (out, os.path.getsize(os.path.join(HERE, out)) / 1024))
 
 
-def build_wide(source, headline, subline, out, panel_width=1160):
+def build_wide(source, headline, out, panel_width=1160):
     """A capture far wider than 16:9, set into the frame rather than cropped to it.
 
     The research shop is a 1459x223 strip - six and a half to one. Cropping that to 16:9 either
@@ -186,7 +182,7 @@ def build_wide(source, headline, subline, out, panel_width=1160):
 
     # Centred in what is left under the caption block, not in the frame - otherwise the text
     # crowds it at the top and there is a hand's width of nothing at the bottom.
-    caption_bottom = 52 + 48 + 62 + 18 + 30
+    caption_bottom = 52 + 48 + 62 + 8
     py = caption_bottom + (HEIGHT - caption_bottom - panel_height) // 2
     px = (WIDTH - panel_width) // 2
 
@@ -199,7 +195,6 @@ def build_wide(source, headline, subline, out, panel_width=1160):
     ground.paste(panel, (px, py))
 
     head = font(BLACK_FONT, 54)
-    sub = font(SEMI_FONT, 24)
     brow = font(SEMI_FONT, 19)
 
     scrim(ground, caption_bottom + 10, caption_bottom + 230)
@@ -210,38 +205,32 @@ def build_wide(source, headline, subline, out, panel_width=1160):
 
     draw.text((62, 103), headline, font=head, fill=(0, 0, 0))
     draw.text((60, 100), headline, font=head, fill=INK)
-    draw.text((60, 180), subline, font=sub, fill=MUTED)
 
     ground.save(os.path.join(HERE, out), optimize=True)
     print("  wrote   %-26s %.0f KB" % (out, os.path.getsize(os.path.join(HERE, out)) / 1024))
 
 
-# The headlines are Quinn's. Each subline carries a figure this repo can show its working for -
-# see the throughput table in DESIGN.md - so the page says something as well as sells.
+# The headlines are Quinn's, and they are the whole caption. An explanatory line under each
+# went in first and came straight back out: a store page image is read in about a second, and a
+# second line of prose is the part nobody reads while being the part that makes the image look
+# like a slide. The figures it carried live in the description instead, which is where somebody
+# who wants them is already looking.
 #
-# Every caption sits at the bottom, which was not the plan - alternating top and bottom reads
-# less like a template - but in three of the four captures the machines are in the upper half
-# of the shot, and a scrim across the top covered the very thing being captioned. `centre`
-# then lifts each subject into the clear band above the text.
+# Placement is bottom on all four, which was not the plan - alternating top and bottom reads
+# less like a template - because in three of the four captures the machines sit in the upper
+# half, and a scrim across the top covered the very thing being captioned. `centre` then lifts
+# each subject into the clear band above the text.
 IMAGES = [
-    ("CargoPackagers.png",
-     "Create Cargo yourself!",
-     "360 shapes into one container, or 60 fluid. No train required.",
+    ("CargoPackagers.png", "Create Cargo yourself!",
      "promo-packagers.png", 0.38, 1.0, "bottom"),
 
-    ("TransportCargo.png",
-     "Move Cargo Anywhere",
-     "About 18x a space belt for shapes. Corners, junctions and lifts place themselves.",
+    ("TransportCargo.png", "Move Cargo Anywhere",
      "promo-transport.png", 0.42, 1.0, "bottom"),
 
-    ("CargoStorage.png",
-     "Store Excess Cargo!",
-     "75 containers per store - 25 on each floor, shapes and fluid in the same rack.",
+    ("CargoStorage.png", "Store Excess Cargo!",
      "promo-storage.png", 0.40, 1.0, "bottom"),
 
-    ("CargoUnloaders.png",
-     "Unpackage on Demand!",
-     "Back onto a space belt or pipe, wherever you needed it.",
+    ("CargoUnloaders.png", "Unpackage on Demand!",
      "promo-unloaders.png", 0.40, 1.0, "bottom"),
 ]
 
@@ -251,10 +240,7 @@ if __name__ == "__main__":
 
     build_preview()
 
-    for source, headline, subline, out, centre, zoom, place in IMAGES:
-        build(source, headline, subline, out, centre, zoom, place)
+    for source, headline, out, centre, zoom, place in IMAGES:
+        build(source, headline, out, centre, zoom, place)
 
-    build_wide("CargoResearch.png",
-               "Unlock Through Research!",
-               "Two nodes in the trains group, 4.8k points each - machines, then stores.",
-               "promo-research.png")
+    build_wide("CargoResearch.png", "Unlock Through Research!", "promo-research.png")

@@ -2024,6 +2024,11 @@ Two things worth keeping from the composition pass:
   the four captures the machines sit in the upper half, and a scrim across the top covered the
   very thing being captioned. Each image gets a `centre` that lifts its subject into the clear
   band instead.
+- **The headline is the whole caption.** An explanatory line under each went in first and came
+  straight back out. A store page image is read in about a second: a second line of prose is
+  the part nobody reads while being the part that makes the image look like a slide. The
+  figures it carried live in the description instead, which is where somebody who wants them is
+  already looking.
 - **A capture far wider than 16:9 gets set into the frame, not cropped to it.** The research
   shop is 1459x223 - six and a half to one. Cropping that to 16:9 either throws away both ends,
   which is where the two nodes are, or scales it until the text in it cannot be read. It is
