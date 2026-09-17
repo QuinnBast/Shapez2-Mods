@@ -5,32 +5,65 @@
     "contentfolder" "${CONTENT_PATH}"
     "previewfile" "${PREVIEW_IMG}"
     "visibility" "2"
-    "title" "Decoration Blocks"
-    "description" "[h1]Decoration Blocks[/h1]
-A platform is all machines and belts. This is the other half: 21 textured voxel blocks you can place on the machine layer for no reason except that it looks like somewhere.
+    "title" "Blockworks"
+    "description" "[h1]Blockworks[/h1]
+You've heard of Minceraft, but have you tried it in Shapez2?!
+
+BlockWorks takes a particularly famous blocky sandbox game and adds blocks inspired by the game to Shapez2 as both [b]functional[/b] and decorational blocks.
+This mod includes 21 textured blocks and 9 functional logic blocks that you can place on the machine layer to enhance your Shapez2 world. 
+
+The following decorative blocks exist:
 
 Stone, cobblestone, stone bricks, bricks, oak planks and logs, dirt, grass, sand, gravel, snow, glass, bookshelves, obsidian, neitherrack, and solid blocks of gold, iron, diamond, emerald, lapis lazuli and sparkstone.
 
-One block fills exactly one building layer, so they sit on the same grid as everything else and stack three high. Placement is in area mode, so a wall is dragged out as a rectangle rather than clicked one tile at a time.
-
-[h2]Sparkstone[/h2]
-A second tab, running a real signal simulation on a 0.1 second tick.
-
 [list]
-[*][b]Sparkstone Dust[/b] - carries a strength of 0 to 15 and loses one per tile
-[*][b]Torches[/b] - a power source standing free, an inverter mounted on the side of a block
-[*][b]Levers and Buttons[/b] - the switches you wire everything else to
-[*][b]Repeaters[/b] - refresh a signal to full strength, delay it 1 to 4 ticks, and lock from the side
-[*][b]Comparators[/b] - compare or subtract, with inputs from either side and the back
-[*][b]Observers[/b] - pulse out of the back whenever the tile they face changes
-[*][b]Lamps[/b] - light while powered
-[*][b]Block of Sparkstone[/b] - always on
-[*][b]Sparkstone Converter[/b] - bridges to shapez wires, both directions at once
+[*][b]Stone[/b]
+[*][b]cobblestone[/b]
+[*][b]Stone bridks[/b]
+[*][b]Bricks[/b]
+[*][b]Oak Planks[/b]
+[*][b]Oak Logs[/b]
+[*][b]Dirt[/b]
+[*][b]Grass[/b]
+[*][b]Sand[/b]
+[*][b]Gravel[/b]
+[*][b]Snow[/b]
+[*][b]Glass[/b]
+[*][b]Bookshelf[/b]
+[*][b]Obsidian[/b]
+[*][b]Neitherrack[/b] (Intentional Spelling)
+[*][b]Gold Block[/b]
+[*][b]Iron Block[/b]
+[*][b]Diamond Block[/b]
+[*][b]Emerald Block[/b]
+[*][b]Block of Lapis Lazuli[/b]
 [/list]
 
-The converter is the piece that makes this more than decoration. A wire signal that is not Off broadcasts full-strength sparkstone, and sparkstone power puts a true back on the wire - so a lever can gate a belt, and a shape sensor can light a lamp.
+One block fills exactly one building layer, so they sit on the same grid as everything else.
 
-Levers, buttons, repeaters and comparators are worked from the side panel: select one and its switch is there. shapez has no click-a-building-in-the-world interaction, so that is where the controls live.
+[h2]Sparkstone[/h2]
+A second tab, includes functional logical components that even integrate with the SHapez2 Wire system and run on a real simulation at a 0.1 second tick rate.
+
+The following logical blocks are included:
+
+[list]
+[*][b]Sparkstone Dust[/b] - dust that carries a strength of 0 to 15 and loses one per tile
+[*][b]Sparkstone Torch[/b] - a power source when standing free, but inverts a signal if mounted on the side of a block. Mount by rotating it.
+[*][b]Levers and Buttons[/b] - the switches to turn a signal on.
+[*][b]Sparkstone Repeater[/b] - refresh a signal to full strength, delay it 1 to 4 ticks, and lock from the side
+[*][b]Comparators[/b] - compare or subtract, with inputs from either side and the back
+[*][b]Observers[/b] - pulses out of the back whenever the tile they face changes
+[*][b]Sparkstone Lamp[/b] - lights up while powered
+[*][b]Block of Sparkstone[/b] - always on
+[*][b]Sparkstone Converter[/b] - Converts a sparstone signal to the Shapez logic layer and back. Boolean signals only.
+[/list]
+
+The Sparkstone Converter makes this mod more than a decor pack.
+A Shapez 2 wire signal that is not Off can be sent through the Converter to broadcast a full-strength sparkstone signal.
+Alternatively, the converter can accept a Sparkstone signal and output a 'true' signal back onto a Shapez wire.
+Now a lever can gate a belt, and a shape sensor can light a lamp.
+
+Levers, buttons, repeaters and comparators can be interacted with from the info panel.
 
 [h2]Before you install[/h2]
 [list]

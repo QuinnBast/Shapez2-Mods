@@ -1,4 +1,4 @@
-# Decoration Blocks
+# Blockworks
 
 21 voxel blocks for shapez 2, placeable on the machine layer alongside your machines. They
 connect to nothing, process nothing and appear in no statistic. They are there so the empty half
