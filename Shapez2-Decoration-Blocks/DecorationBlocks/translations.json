@@ -4,5 +4,29 @@
     "decoration-blocks.redstone-toolbar.title": "Sparkstone",
     "decoration-blocks.research.title": "Blockworks",
     "decoration-blocks.research.description": "21 decorative blocks and a tab of sparkstone circuitry - torches, dust, repeaters, comparators, observers, lamps, and a converter that bridges to wires."
+  },
+  "ja-JP": {
+    "decoration-blocks.toolbar.title": "装飾",
+    "decoration-blocks.redstone-toolbar.title": "スパークストーン",
+    "decoration-blocks.research.title": "Blockworks",
+    "decoration-blocks.research.description": "装飾ブロック21種と、スパークストーン回路のタブ - トーチ、ダスト、リピーター、コンパレーター、オブザーバー、ランプ、そしてワイヤーと橋渡しするコンバーター。"
+  },
+  "zh-Hans": {
+    "decoration-blocks.toolbar.title": "装饰",
+    "decoration-blocks.redstone-toolbar.title": "火石",
+    "decoration-blocks.research.title": "Blockworks",
+    "decoration-blocks.research.description": "21 种装饰方块,以及一整页火石电路 - 火把、粉末、中继器、比较器、侦测器、灯,还有一个与电路互通的转换器。"
+  },
+  "fr-FR": {
+    "decoration-blocks.toolbar.title": "Décorations",
+    "decoration-blocks.redstone-toolbar.title": "Sparkstone",
+    "decoration-blocks.research.title": "Blockworks",
+    "decoration-blocks.research.description": "21 blocs décoratifs et un onglet de circuits en sparkstone - torches, poussière, répéteurs, comparateurs, observateurs, lampes, et un convertisseur qui fait le pont avec les câbles."
+  },
+  "ru": {
+    "decoration-blocks.toolbar.title": "Декорации",
+    "decoration-blocks.redstone-toolbar.title": "Искрокамень",
+    "decoration-blocks.research.title": "Blockworks",
+    "decoration-blocks.research.description": "21 декоративный блок и вкладка искрокаменных схем - факелы, пыль, повторители, компараторы, наблюдатели, лампы и преобразователь, связывающий их с проводами."
   }
 }

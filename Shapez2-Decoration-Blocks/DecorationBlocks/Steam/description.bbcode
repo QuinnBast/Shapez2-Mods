@@ -67,3 +67,99 @@ Levers, buttons, repeaters and comparators can be interacted with from the info 
 
 Bugs and requests: https://github.com/QuinnBast/Shapez2-Mods/issues
 Licensed under Apache 2.0. Block textures are the property of Mojang Studios and are not covered by that license.
+
+[hr][/hr]
+[h1]日本語[/h1]
+[h2]Blockworks[/h2]
+とある有名なブロック型サンドボックスゲームに着想を得たブロックを、Shapez 2 に[b]装飾[/b]としても[b]機能部品[/b]としても追加します。テクスチャ付きの装飾ブロック21種と、論理ブロック9種を機械レイヤーに設置できます。
+
+装飾ブロック - 石、丸石、石レンガ、レンガ、オークの板材と原木、土、草、砂、砂利、雪、ガラス、本棚、黒曜石、Neitherrack(綴りは意図的です)、そして金、鉄、ダイヤモンド、エメラルド、ラピスラズリ、スパークストーンの各ブロック。
+1ブロックが建築レイヤーちょうど1段分なので、他のすべてと同じグリッドに乗ります。
+
+[h2]スパークストーン[/h2]
+2つ目のタブには論理部品が入っています。Shapez 2 のワイヤーシステムと連携し、0.1秒間隔の実シミュレーションで動作します。
+[list]
+[*][b]スパークストーンダスト[/b] - 強度0から15を運び、1タイルごとに1ずつ減衰します
+[*][b]スパークストーントーチ[/b] - 単独では電源、ブロックの側面に取り付けると信号を反転します。回転させて取り付けます
+[*][b]レバーとボタン[/b] - 信号をオンにするスイッチです
+[*][b]スパークストーンリピーター[/b] - 信号を最大強度に戻し、1から4ティック遅延させ、横からロックできます
+[*][b]コンパレーター[/b] - 比較または減算。入力は両側面と背面から
+[*][b]オブザーバー[/b] - 正面のタイルが変化するたびに背面からパルスを出します
+[*][b]スパークストーンランプ[/b] - 通電中は点灯します
+[*][b]スパークストーンブロック[/b] - 常時オン
+[*][b]スパークストーンコンバーター[/b] - スパークストーン信号を Shapez のロジック層と相互変換します。ブール値のみ
+[/list]
+このコンバーターがあるので、これは単なる装飾パックではありません。オフでない Shapez 2 のワイヤー信号を通せば、最大強度のスパークストーン信号を送り出せます。逆に、スパークストーン信号を受けて Shapez のワイヤーに true を返すこともできます。レバーでベルトを止め、図形センサーでランプを点けられるということです。
+レバー、ボタン、リピーター、コンパレーターは情報パネルから操作できます。
+
+[h2]導入前に[/h2]
+[list]
+[*][b]このMODはセーブデータに影響します。[/b]一度導入したセーブは、このMODなしでは遊べなくなります。
+[*]Shapez Shifter が必要です。
+[*]すべて安価な研究ノード1つで解放されます。
+[*]信号の状態はセーブと再読み込みをまたぎません。読み込み後1、2ティックで回路は落ち着きます。
+[/list]
+
+[hr][/hr]
+[h1]简体中文[/h1]
+[h2]Blockworks[/h2]
+本模组从某款著名的方块沙盒游戏汲取灵感,为 Shapez 2 加入既能[b]装饰[/b]又能[b]发挥功能[/b]的方块:21 种带贴图的装饰方块,以及 9 种可放置在机械层的逻辑方块。
+
+装饰方块 - 石头、圆石、石砖、砖块、橡木木板与原木、泥土、草、沙子、砂砾、雪、玻璃、书架、黑曜石、Neitherrack(拼写是故意的),以及金、铁、钻石、绿宝石、青金石和火石的实心方块。
+一个方块正好占满一个建筑层,因此它们与其他一切共用同一套网格。
+
+[h2]火石[/h2]
+第二个分页收录逻辑元件。它们能与 Shapez 2 的电路系统对接,并以 0.1 秒一刻的真实模拟运行。
+[list]
+[*][b]火石粉[/b] - 传递 0 到 15 的强度,每格衰减 1
+[*][b]火石火把[/b] - 独立放置时是电源,贴在方块侧面时反转信号。旋转即可贴装
+[*][b]拉杆与按钮[/b] - 用来开启信号的开关
+[*][b]火石中继器[/b] - 把信号恢复到满强度,延迟 1 至 4 刻,可从侧面锁定
+[*][b]比较器[/b] - 比较或相减,输入来自两侧与背面
+[*][b]侦测器[/b] - 所面向的格子一发生变化,就从背面输出脉冲
+[*][b]火石灯[/b] - 通电时亮起
+[*][b]火石块[/b] - 恒为开启
+[*][b]火石转换器[/b] - 在火石信号与 Shapez 逻辑层之间双向转换,仅限布尔信号
+[/list]
+正是这个转换器让本模组不只是一个装饰包。任何非「关」的 Shapez 2 电路信号送进转换器,都会广播出一个满强度的火石信号;反过来,转换器也能接收火石信号,向 Shapez 电路输出 true。于是拉杆可以控制传送带,形状传感器可以点亮一盏灯。
+拉杆、按钮、中继器和比较器都可以在信息面板中操作。
+
+[h2]安装前须知[/h2]
+[list]
+[*][b]本模组会影响存档。[/b]一旦为某个存档安装,就无法再在没有它的情况下游玩该存档。
+[*]需要 Shapez Shifter。
+[*]全部内容由一个廉价的研究节点解锁。
+[*]信号状态不会跨存档保留 - 载入后一两刻内电路便会重新稳定。
+[/list]
+
+[hr][/hr]
+[h1]Français[/h1]
+[h2]Blockworks[/h2]
+Blockworks s'inspire d'un certain jeu bac à sable en blocs très connu et en apporte les blocs à Shapez 2, à la fois [b]décoratifs[/b] et [b]fonctionnels[/b] : 21 blocs texturés et 9 blocs de logique, à poser sur la couche des machines.
+
+Les blocs décoratifs - pierre, pierraille, briques de pierre, briques, planches et rondins de chêne, terre, herbe, sable, gravier, neige, verre, bibliothèque, obsidienne, Neitherrack (orthographe volontaire), et des blocs pleins d'or, de fer, de diamant, d'émeraude, de lapis-lazuli et de sparkstone.
+Un bloc remplit exactement une couche de construction, sur la grille de tout le reste.
+
+[h2]Sparkstone[/h2]
+Un second onglet réunit des composants logiques, reliés au câblage de Shapez 2 et vraiment simulés, au rythme d'un tick toutes les 0,1 seconde.
+[list]
+[*][b]Poussière de sparkstone[/b] - porte une force de 0 à 15 et en perd une par case
+[*][b]Torche de sparkstone[/b] - source d'énergie posée seule, inverseur fixée au flanc d'un bloc (tournez-la)
+[*][b]Leviers et boutons[/b] - les interrupteurs qui mettent un signal en marche
+[*][b]Répéteur de sparkstone[/b] - remet un signal à pleine force, le retarde de 1 à 4 ticks, et se verrouille par le côté
+[*][b]Comparateurs[/b] - comparent ou soustraient, avec des entrées sur les deux flancs et à l'arrière
+[*][b]Observateurs[/b] - émettent une impulsion par l'arrière dès que la case qu'ils regardent change
+[*][b]Lampe de sparkstone[/b] - s'allume tant qu'elle est alimentée
+[*][b]Bloc de sparkstone[/b] - toujours actif
+[*][b]Convertisseur de sparkstone[/b] - relie les signaux de sparkstone à la couche logique de Shapez, dans les deux sens. Booléens uniquement
+[/list]
+C'est ce convertisseur qui fait de ce mod autre chose qu'un pack de décor. Un signal de câble Shapez 2 qui n'est pas éteint le traverse pour diffuser un signal de sparkstone à pleine force, et inversement il renvoie un true sur un câble Shapez. Un levier peut donc commander un convoyeur, et un capteur de formes allumer une lampe.
+Leviers, boutons, répéteurs et comparateurs s'actionnent depuis le panneau d'information.
+
+[h2]Avant d'installer[/h2]
+[list]
+[*][b]Ce mod affecte les sauvegardes.[/b] Une fois installé sur une partie, celle-ci ne peut plus être jouée sans lui.
+[*]Nécessite Shapez Shifter.
+[*]Tout est derrière un unique noeud de recherche peu coûteux.
+[*]L'état des signaux ne survit pas à une sauvegarde : les circuits se stabilisent à nouveau un ou deux ticks après le chargement.
+[/list]
