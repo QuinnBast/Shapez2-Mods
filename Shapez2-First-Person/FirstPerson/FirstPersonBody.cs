@@ -96,13 +96,16 @@ public sealed class FirstPersonBody
         // Conveyors carry you. Through TryMove rather than straight onto Horizontal, so a
         // belt running into a wall presses you against it instead of through it - and so
         // that walking against the belt works the way it looks like it should.
-        double2 drift = ConveyorDrift(map, deltaTime);
-        TryMove(map, new double2(drift.x, 0.0));
-        TryMove(map, new double2(0.0, drift.y));
+        if (FirstPersonControl.BeltsCarryPlayer)
+        {
+            double2 drift = ConveyorDrift(map, deltaTime);
+            TryMove(map, new double2(drift.x, 0.0));
+            TryMove(map, new double2(0.0, drift.y));
+        }
 
         if (jump && Grounded)
         {
-            VerticalSpeed = FirstPersonTuning.JumpSpeed;
+            VerticalSpeed = FirstPersonControl.JumpSpeed;
             Grounded = false;
         }
 

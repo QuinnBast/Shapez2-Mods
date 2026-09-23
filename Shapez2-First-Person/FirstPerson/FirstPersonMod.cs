@@ -116,6 +116,15 @@ public class FirstPersonMod : IMod
         Camera = new FirstPersonCamera(logger);
         FirstPersonIcons.Bind(logger);
 
+        // Attached in the constructor because it has to exist before a save is read, and
+        // registered both ways round: the position is copied out of the body just before the
+        // game writes, and handed to the camera once a save has been read. The camera keeps
+        // the object rather than a copy, so a session that starts without one - a fresh game -
+        // simply has nothing to resume from.
+        this.AttachSaveData<FirstPersonSaveData>();
+        this.RegisterToBeforeSaveDataSerialized<FirstPersonSaveData>(Camera.CapturePosition);
+        this.RegisterToAfterSaveDataDeserialized<FirstPersonSaveData>(data => Camera.Saved = data);
+
         // A definition rather than logic: built once per scenario load, so a hot reload
         // will not pick it up and the game needs restarting after an install.
         FlightResearchHandle = GameRewirers.AddRewirer(new FirstPersonResearch(logger));
@@ -306,15 +315,11 @@ public class FirstPersonMod : IMod
             return orig(viewport, out tile_G);
         }
 
-        if (Camera.CursorFreed)
-        {
-            // Not "pass through to the original": that is the flat-plane intersection, and
-            // from head height it answers with the map origin rather than a miss. Refusing
-            // is the only safe answer while the player is aiming at the HUD.
-            tile_G = default;
-            return false;
-        }
-
+        // Holding the cursor key does not change the answer, only the pointer. Refusing here
+        // used to look right - the player is aiming at the HUD, not at the world - but a
+        // refusal is what makes the game's path trackers `Peek` an empty stack and throw, and
+        // the clamped answer is always within reach of the player, so nothing can be placed
+        // anywhere surprising by it. See FirstPersonTargeting.TryReach.
         return Camera.Targeting.TryGetTile(viewport, out tile_G);
     }
 
@@ -323,12 +328,6 @@ public class FirstPersonMod : IMod
         if (!Camera.Active)
         {
             return orig(viewport, out chunk_GC);
-        }
-
-        if (Camera.CursorFreed)
-        {
-            chunk_GC = GlobalChunkCoordinate.Origin;
-            return false;
         }
 
         return Camera.Targeting.TryGetChunk(viewport, out chunk_GC);
@@ -751,6 +750,7 @@ public class FirstPersonMod : IMod
         // next update, so it has to run while our hooks are still installed.
         Camera.Dispose();
         Unhook();
+        this.UnregisterToBeforeSaveDataSerialized<FirstPersonSaveData>(Camera.CapturePosition);
         GameRewirers.RemoveRewirer(FlightResearchHandle);
         GameRewirers.RemoveRewirer(TickHandle);
         FirstPersonKeybindings.Unregister();

@@ -39,12 +39,19 @@ public static class FirstPersonTuning
     /// <summary>
     /// Held to release the mouse so the HUD, the side panels and the menus can be clicked.
     ///
-    /// Shares Tab with `toolbar.next-variant` on purpose. Reading our binding first consumes
-    /// it, and the input system marks every other active binding on the same key consumed
-    /// too, so variant cycling stays quiet while first person is on and comes back when it
-    /// is not - without the mod having to suppress anything by hand.
+    /// This was Tab, which is `toolbar.next-variant` - and sharing a key here is not free.
+    /// Reading our binding consumes it, and the input system marks every other active
+    /// binding on the same key consumed too, so first person silently took variant cycling
+    /// away from the player. Variants are picked constantly while building; freeing the
+    /// mouse is occasional. The occasional one moves.
+    ///
+    /// `LeftAlt` is as close to free as the keyboard gets. `DefaultKeybindings` binds it
+    /// once, to `mass-selection.deselect-area-modifier` - a drag modifier, which is a thing
+    /// you do with a map camera rather than from the factory floor - and every other
+    /// candidate is worse: `M` is flight, `F5` is travel, and the function keys are a reach
+    /// from the movement keys for something that has to be held.
     /// </summary>
-    public const KeyCode CursorKey = KeyCode.Tab;
+    public const KeyCode CursorKey = KeyCode.LeftAlt;
 
     /// <summary>
     /// Held while pressing <see cref="ToggleKey"/> to enter where the camera is looking
@@ -80,6 +87,17 @@ public static class FirstPersonTuning
     /// need a drum roll.
     /// </summary>
     public const float FlyDoubleTapSeconds = 0.3f;
+
+    /// <summary>
+    /// Held with the wheel to cycle a building's variants instead of walking the toolbar.
+    ///
+    /// Shift rather than Ctrl, which is what the old depth modifier used: Ctrl is
+    /// <see cref="SinkKey"/>, so a player descending while flying was also driving the
+    /// toolbar every time they touched the wheel.
+    /// </summary>
+    public const KeyCode ToolbarVariantModifier = KeyCode.LeftShift;
+
+    public const KeyCode ToolbarVariantModifierAlt = KeyCode.RightShift;
 
     public const KeyCode JumpKey = KeyCode.Space;
     public const KeyCode SinkKey = KeyCode.LeftControl;
@@ -157,9 +175,35 @@ public static class FirstPersonTuning
     /// scale reads as floaty, because the "metre" here is a belt width.
     public const float Gravity = 26f;
 
-    /// Tiles per second of initial upward speed. With the gravity above this clears a
-    /// little over one tile, so a jump is a way onto a machine, not a way over it.
-    public const float JumpSpeed = 8.5f;
+    /// <summary>
+    /// Tiles per second of initial upward speed, and the default for
+    /// <see cref="FirstPersonControl.JumpSpeed"/>.
+    ///
+    /// Sized to clear **three building layers**, which is what a blueprint that fills all
+    /// three of them needs - and those are common enough that the old jump could leave a
+    /// player unable to get into their own platform at all.
+    ///
+    /// The arithmetic is not simply "three tiles", because <see cref="StepHeight"/> is free
+    /// clearance: `Blocked` scans the column from `floor(feet + StepHeight)`, so moving
+    /// horizontally over an N-layer stack needs the feet at `N - StepHeight`, and the apex
+    /// of a jump is `v^2 / 2g`.
+    ///
+    /// | Stack | Feet needed | Speed |
+    /// | --- | --- | --- |
+    /// | 2 layers | 0.85 | 6.65 |
+    /// | 3 layers | 1.85 | 9.81 |
+    /// | 4 layers | 2.85 | 12.17 |
+    ///
+    /// 11 puts the apex at 2.33 - comfortably over the 1.85 that three layers wants, and
+    /// comfortably under the 2.85 that would start clearing four. Sitting in the middle of
+    /// that band is deliberate: the integration is Euler and the real apex is a little under
+    /// the analytic one, so a value chosen to just barely clear three layers would fail at a
+    /// low frame rate.
+    ///
+    /// This was 8.5, an apex of 1.39 - over two layers and under three, which is exactly
+    /// where a three-layer blueprint becomes a wall.
+    /// </summary>
+    public const float JumpSpeed = 11f;
 
     /// Terminal velocity, so a fall off the edge does not run away to infinity and lose
     /// float precision on the way.
@@ -192,8 +236,18 @@ public static class FirstPersonTuning
     /// </summary>
     public const float TrainRideOffset = 7.8f;
 
-    /// How far down the crosshair a wagon can be and still be boardable, in tiles.
-    public const float BoardReach = 25f;
+    /// <summary>
+    /// How far down the crosshair a wagon can be and still be boardable, in tiles, and the
+    /// default for <see cref="FirstPersonControl.BoardReach"/>.
+    ///
+    /// Two chunks. Raised from 25, which was about the length of one platform: a train you
+    /// could see coming was routinely out of range, and the key had to be held until it had
+    /// almost arrived. <see cref="BoardRadius"/> is unchanged, so the angular tolerance
+    /// narrows with distance - at 40 tiles a radius of 4 is about six degrees, which is
+    /// still a comfortable aim and keeps the far end of the reach from grabbing a train you
+    /// were only looking past.
+    /// </summary>
+    public const float BoardReach = 40f;
 
     /// <summary>
     /// How far off the line of sight a wagon can be and still count as the one you meant.

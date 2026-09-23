@@ -126,44 +126,10 @@ public static class FirstPersonScenario
                 continue;
             }
 
-            // Off. The spiral is a shape the map is cut into, and a first-person player
-            // walking it meets an edge rather than a horizon.
-            map.SpiralGeneration = false;
-
-            // Above 100 these do not saturate, they loop: `DefaultMapGenerator` runs
-            //
-            //     do { if (rng.TestPercentage(k)) …; k -= 100; } while (k > 100);
-            //
-            // so the count is `ceil(k / 100) - 1` patches per super chunk, every one of them
-            // placed outright because k is still over 100 when it is tested. The trailing
-            // remainder is dropped rather than rolled - the loop exits at k <= 100 without
-            // testing it - so 350 is exactly three, not three and a half, and 200 is exactly
-            // two. A super chunk is 64x64 chunks, and vanilla's defaults are 15 and 30,
-            // meaning well under one patch each.
-            // Two, to match the shape patches below. This was 350 - three - which left fluids
-            // denser than shapes on a map whose whole point is the shapes.
-            map.FluidPatchLikelinessPercent = 250;
-            map.FluidPatchBaseSize = 3;
-            map.FluidPatchSizeGrowPercentPerChunk = 60;
-            map.FluidPatchMaxSize = 8;
-
-            // Two shape patches per super chunk. This was 500 - four - which read as a map
-            // made of asteroids rather than a map with asteroids in it. Fewer and larger is
-            // the shape a walking player wants: the patch sizes below are untouched, so each
-            // one is still worth arriving at.
-            map.ShapePatchLikelinessPercent = 200;
-            map.ShapePatchBaseSize = 4;
-            map.ShapePatchSizeGrowPercentPerChunk = 70;
-            map.ShapePatchMaxSize = 8;
-
-            map.ShapePatchRareShapeLikelinessPercent = 45;
-            map.ShapePatchVeryRareShapeLikelinessPercent = 33;
-
+            // The numbers, and the note about percentages above 100 looping rather than
+            // saturating, live on the settings object - it is what a downstream mod changes.
+            FirstPersonControl.ScenarioMapGeneration.ApplyTo(map);
             MapGenerationApplied = true;
-
-            // Deliberately not set: ShapePatchGenerationLikeliness, the table of which shape
-            // types spawn how far out. It arrives through the #include and is the one part
-            // of the parameters this mod has no readable source for.
         }
     }
 

@@ -145,9 +145,43 @@ public sealed class FirstPersonCamera
     /// </summary>
     private int LastUpdateFrame = -1;
 
+    /// <summary>
+    /// The save's copy of where the player was standing, handed over by the mod once the
+    /// savegame has been read. Null until then, and null in a session with no save data at
+    /// all - both mean "arrive at the vortex", which is what the mod has always done.
+    /// </summary>
+    public FirstPersonSaveData Saved;
+
     public FirstPersonCamera(ILogger logger)
     {
         Logger = logger;
+    }
+
+    /// <summary>
+    /// Copies the body into the save object, just before the game writes it.
+    ///
+    /// Only while active: leaving first person does not erase where they were, so a player
+    /// who steps out to look at the map and saves still comes back to their own factory
+    /// floor rather than to the vortex.
+    ///
+    /// The feet rather than the eye, matching <c>FirstPersonBody.Height</c> - and nothing
+    /// about what is underneath, because gravity settles that on the first frame and a stored
+    /// answer would only be a way to disagree with a platform the player has since rebuilt.
+    /// </summary>
+    public void CapturePosition(FirstPersonSaveData data)
+    {
+        if (data == null || !Active)
+        {
+            return;
+        }
+
+        data.HasPosition = true;
+        data.PositionX = Body.Horizontal.x;
+        data.PositionY = Body.Horizontal.y;
+        data.Height = Body.Height;
+        data.Yaw = Yaw;
+        data.Pitch = Pitch;
+        data.Flying = Body.Flying;
     }
 
     /// <summary>
@@ -311,13 +345,34 @@ public sealed class FirstPersonCamera
         float startHeight = viewport.Height;
 
         bool spawnHere = Keys.SpawnHere;
-        if (!spawnHere && FirstPersonSpawn.TryFindVortex(map, out double2 vortex, out float vortexHeight))
+        bool resumed = false;
+
+        // Where they left off wins over the vortex, because in a scenario that is first
+        // person from the first frame, "the vortex" is only right once - the first time.
+        // Holding the spawn-here modifier still overrides it, which is the escape hatch if a
+        // stored position ever turns out to be somewhere unreachable.
+        if (!spawnHere && Saved != null && Saved.HasPosition)
+        {
+            start = new double2(Saved.PositionX, Saved.PositionY);
+            startHeight = Saved.Height;
+            Yaw = Saved.Yaw;
+            Pitch = math.clamp(Saved.Pitch, FirstPersonTuning.MinPitch, FirstPersonTuning.MaxPitch);
+            resumed = true;
+        }
+        else if (!spawnHere && FirstPersonSpawn.TryFindVortex(map, out double2 vortex, out float vortexHeight))
         {
             start = vortex;
             startHeight = vortexHeight;
         }
 
         Body.Reset(start, startHeight);
+
+        // Only if they can still fly. A save that loses the research, or a mod that turns
+        // flight off, would otherwise leave the player hovering with no way down.
+        if (resumed && Saved.Flying && FirstPersonResearch.FlightUnlocked)
+        {
+            Body.Flying = true;
+        }
 
         viewport.MainCamera.fieldOfView = FirstPersonTuning.FieldOfView;
         viewport.TransparentCamera.fieldOfView = FirstPersonTuning.FieldOfView;
@@ -775,6 +830,9 @@ public sealed class FirstPersonCamera
         Pitch = 0f;
 
         Notifier.Show(announcement ?? (string.IsNullOrEmpty(waypoint.Name) ? "Travelled." : waypoint.Name));
+
+        // After the body has moved, so a subscriber reading the position gets the new one.
+        FirstPersonControl.ReportTravelled();
         return true;
     }
 
@@ -839,6 +897,14 @@ public sealed class FirstPersonCamera
 
         Shader.SetGlobalVector(GlobalShaderInputs.CursorWorldPos, (Vector3)cursor);
 
+        // One report a frame for each, rather than one beside every assignment: the body's
+        // flags are written from a dozen places - the toggle, the research re-check, travel,
+        // losing a train - and a transition that has to be announced at each of them is a
+        // transition that will eventually be missed. FirstPersonControl only raises an event
+        // when the value actually changes, so this costs two comparisons.
+        FirstPersonControl.ReportFlying(Body.Flying);
+        FirstPersonControl.ReportRiding(Body.Riding);
+
         // Published rather than queried, because the targeting hooks are called from the
         // game's own placement code and have no way back to the body.
         Targeting.ReachMultiplier = Body.Flying ? FirstPersonTuning.FlyingReachMultiplier : 1f;
@@ -857,7 +923,12 @@ public sealed class FirstPersonCamera
             // Recomputed here rather than read back from the placement hook, because that
             // hook only runs while a placer is active and the crosshair should mean
             // something the rest of the time too.
-            Crosshair.SetTargeted(Targeting.TryGetTile(viewport, out GlobalTileCoordinate _));
+            //
+            // The *exact* test, not the clamped one placement uses: placement must always
+            // have an answer or the game's path trackers throw, but the crosshair should go
+            // back to idle when there is nothing really under it.
+            Crosshair.SetTargeted(Targeting.HasExactTarget(
+                viewport, FirstPersonTuning.Reach * Targeting.ReachMultiplier));
         }
     }
 

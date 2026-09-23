@@ -71,10 +71,31 @@ validate_vdf() {
     return 1
   fi
 
-  if LC_ALL=C grep -n '[^[:print:][:space:]]' "$file" >/dev/null 2>&1; then
-    echo "error: base.vdf contains non-ASCII bytes. Every vdf that has published from this" >&2
-    echo "       repo is plain ASCII - use - for a dash and ... for an ellipsis:" >&2
-    LC_ALL=C grep -n '[^[:print:][:space:]]' "$file" | head -5 >&2
+  # Non-ASCII is allowed. It used to be refused, on the evidence that every vdf that had
+  # published from this repo was plain ASCII - true, and not a rule. Valve's KeyValues text
+  # parser scans for the closing quote and copies the bytes between, so a UTF-8 sequence is
+  # opaque to it. The descriptions here carry Japanese, Simplified Chinese and French because
+  # workshop_build_item has no per-language description; see the note at the end of this file.
+  #
+  # Two things about those bytes are still worth refusing.
+
+  # A BOM is three bytes ahead of the first key rather than inside a value, so the parser
+  # does not skip it the way an editor does: it becomes part of the first key's name and
+  # "workshopitem" stops matching. The failure is the same silent one as a stray quote.
+  if [ "$(head -c 3 "$file" | od -An -tx1 | tr -d '[:space:]')" = "efbbbf" ]; then
+    echo "error: base.vdf starts with a UTF-8 BOM. Valve's parser does not skip it, so the" >&2
+    echo "       first key reads as <BOM>workshopitem and the file parses as empty." >&2
+    echo "       Rewrite it: python Steam/build-vdf.py" >&2
+    return 1
+  fi
+
+  # Invalid UTF-8 means the file was written through a code page somewhere - Set-Content
+  # without -Encoding utf8 is the usual way - and the translated sections arrive on the
+  # workshop page as mojibake. steamcmd uploads it without complaint either way.
+  if ! iconv -f UTF-8 -t UTF-8 "$file" >/dev/null 2>&1; then
+    echo "error: base.vdf is not valid UTF-8, so the translated sections will publish as" >&2
+    echo "       mojibake. Something wrote it through a code page - rewrite it with:" >&2
+    echo "           python Steam/build-vdf.py" >&2
     return 1
   fi
 
@@ -85,7 +106,8 @@ validate_vdf() {
 # uploading anything.
 if [ "${1:-}" = "--check" ]; then
   validate_vdf "$BASE_VDF" || exit 1
-  echo "base.vdf parses as far as this can tell: no quotes in the description, plain ASCII."
+  echo "base.vdf parses as far as this can tell: no quotes in the description, valid"
+  echo "UTF-8, no BOM."
   exit 0
 fi
 
@@ -298,7 +320,15 @@ echo "Without that line only the preview and the text changed."
 
 # The category checkboxes are Workshop tags, and workshop_build_item has no key for them -
 # it reads appid, publishedfileid, filetype, title, description, visibility, previewfile,
-# contentfolder, kvtags and changenote, and nothing else. A "tags" block in base.vdf is an
+# contentfolder, kvtags and changenote, and nothing else.
+#
+# That same list is why the descriptions in this repo carry their translations inline. The
+# Workshop backend does hold a separate title and description per language - ISteamUGC has
+# SetItemUpdateLanguage for exactly that - but steamcmd never calls it: the key names above
+# are the complete set of strings in steamconsole64.dll around workshop_build_item, and
+# there is no "language" among them. Everything published this way lands in the item's
+# default language. So one description holds English, then a Japanese, Simplified Chinese
+# and French section, which is what multilingual workshop items do anyway. A "tags" block in base.vdf is an
 # unknown key that the KeyValues parser silently drops, and kvtags is AddItemKeyValueTag -
 # API metadata, not the categories. Set them on the page below; because nothing here calls
 # SetItemTags, later publishes leave them alone.

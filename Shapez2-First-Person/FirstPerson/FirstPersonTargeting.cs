@@ -89,19 +89,88 @@ public sealed class FirstPersonTargeting
     }
 
     /// <summary>
-    /// The centre-screen ray against the build plane, refused if it misses or lands too
-    /// far away. <c>enter</c> is the distance along the ray, so the limit is arm's reach
-    /// rather than ground distance - looking down steeply gives you a short reach in front
-    /// of your feet, which is the behaviour you want.
+    /// Whether the crosshair is on the build plane for real, rather than being clamped.
+    /// Only the crosshair's own colour uses this - placement takes the clamped answer.
+    /// </summary>
+    public bool HasExactTarget(Viewport viewport, float reach)
+    {
+        Refresh(viewport);
+        return CachedValid && CachedEnter <= reach;
+    }
+
+    /// <summary>
+    /// The centre-screen ray against the build plane, **clamped** to arm's reach rather than
+    /// refused when it misses or overshoots. <c>enter</c> is the distance along the ray, so
+    /// the limit is arm's reach rather than ground distance - looking down steeply gives you
+    /// a short reach in front of your feet, which is the behaviour you want.
+    ///
+    /// The clamp is not a nicety, and refusing was actively wrong. Refusing made the game
+    /// throw:
+    ///
+    /// <code>
+    /// InvalidOperationException: Stack empty.
+    ///   at Stack`1[T].Peek ()
+    ///   at PathNotchClampRotationPlacementTracker.UseNotchRotationTracker (…)
+    /// </code>
+    ///
+    /// A path placer - every belt, pipe, wire and space belt - fills its `SegmentsStack` from
+    /// `UpdateDraggedPosition`, which is only called when the cursor query **succeeds**. The
+    /// trackers then `Peek()` that stack unconditionally, because in vanilla the query never
+    /// fails: `GetCursorPointOnVirtualPlane` answers with the map origin rather than nothing.
+    /// Making it honest left the stack empty and the `Peek` unguarded.
+    ///
+    /// The throw is caught by `EntityPlacementRunner.UpdateCurrentPlacer`, which cancels the
+    /// placement - and cancelling **deselects the toolbar entry**. That is what made the
+    /// wheel look broken: select a belt while not looking at the floor, the placer throws,
+    /// the belt is deselected back to its category, and the next scroll starts from the
+    /// category again. 606 of these in one session. It also explains why looking down at the
+    /// platform made scrolling behave: with a real target the stack is filled and nothing
+    /// throws.
+    ///
+    /// Guarding the `Peek` is not available - `PathStartRotationPlacementTracker` is a
+    /// **generic type**, which MonoMod cannot hook. So the query has to answer, always.
+    ///
+    /// Clamping rather than returning the origin keeps the protection that made this refuse
+    /// in the first place: the answer is always within reach of the player, so a level camera
+    /// still cannot drop a building at the centre of the map.
     /// </summary>
     private bool TryReach(Viewport viewport, float reach, out double3 hit)
     {
         Refresh(viewport);
-        hit = CachedPoint;
 
-        // A miss means the ray is level with the plane or pointing above it, and never meets
-        // it at all. The game's own helper would have answered with the map origin here.
-        return CachedValid && CachedEnter <= reach;
+        if (CachedValid && CachedEnter <= reach)
+        {
+            hit = CachedPoint;
+            return true;
+        }
+
+        hit = Clamp(viewport, reach);
+        return true;
+    }
+
+    /// <summary>
+    /// As far as the player can reach, in the direction they are facing, on the build plane.
+    ///
+    /// The look direction is flattened onto the plane rather than followed, because the cases
+    /// that get here are exactly the ones where following it does not meet the plane at all.
+    /// A degenerate flat direction - looking straight up - falls back to the player's own
+    /// position, which is predictable and cannot be anywhere surprising.
+    /// </summary>
+    private static double3 Clamp(Viewport viewport, float reach)
+    {
+        Transform camera = viewport.MainCamera.transform;
+        Vector3 eye = camera.position;
+        Vector3 flat = new Vector3(camera.forward.x, 0f, camera.forward.z);
+
+        Vector3 ground = new Vector3(eye.x, viewport.Height, eye.z);
+        float length = flat.magnitude;
+
+        if (length > 0.0001f)
+        {
+            ground += flat / length * reach;
+        }
+
+        return new double3(ground.x, ground.y, ground.z);
     }
 
     /// <summary>

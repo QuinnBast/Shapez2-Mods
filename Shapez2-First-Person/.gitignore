@@ -17,3 +17,13 @@ base.tmp.vdf
 
 # steamcmd transcript from Steam/SteamPublish.sh
 publish.log
+
+# Raw screen captures. These are the *input* to tools/caption-screenshots.py, 16 files and
+# 42 MB of them, and only the captioned output is ever published - so the output is tracked
+# and the sources are not. Re-running the caption script therefore needs the original
+# captures, which live on the machine that took them; a fresh clone can change a caption's
+# wording in the script but cannot regenerate the images without them.
+#
+# Matches only the top level: captioned/ is a directory below this and a single * does not
+# cross one, so the published files there stay tracked.
+FirstPerson/Screenshots/*.png

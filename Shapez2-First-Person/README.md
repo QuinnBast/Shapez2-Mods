@@ -12,11 +12,11 @@ Walk around your platforms, fall off them, and build at a crosshair.
 | Crosshair, placing and deleting belts at it | works (played) |
 | Gravity, floors, walls, falling off the edge | compiled, not yet played |
 | Wheel between toolbars, Tab for the cursor | works (played) |
-| Vortex spawn | works (played) |
+| Vortex spawn, and resuming where you saved | spawn works (played); resume compiled, not yet played |
 | Rebindable keys in the game's settings | works (played) |
-| Ctrl+wheel for space scope | compiled, not yet played |
+| Flat wheel through the toolbar, Shift+wheel for variants | compiled, not yet played |
 | Research gates, configurable reach | compiled, not yet played |
-| Riding belts | works (played) |
+| Riding belts | works, off by default — it carried you away from what you were building |
 | Waypoint fast travel | works (played) |
 | Riding trains | works (played) — upside-down rails included |
 | The First Person scenario | works (played) |
@@ -37,19 +37,20 @@ Person** scenario, and you stay in it for that session — see below.
 | --- | --- |
 | your movement keys | walk (uses the game's own bindings, not hardcoded WASD) |
 | your "move faster" key | sprint — three times walking, and three times flight |
-| `Space` | jump, or rise while flying |
+| `Space` | jump — high enough to get onto a three-layer blueprint — or rise while flying |
 | `LeftCtrl` | sink while flying |
 | `Q` / `E` | layer down / up (yours to pick while flying) |
 | double-tap `Space` | fly / noclip — needs the flight research |
 | `M` | the same, as a fixed key |
-| `Tab` (hold) | release the mouse to click the HUD, side panels and menus |
+| `LeftAlt` (hold) | release the mouse to click the HUD, side panels and menus |
+| `Tab` | cycle variants — the game's own binding, left alone |
 | `F5` | fast travel to your next waypoint |
 | click a waypoint or the home icon | travel there on foot, not in space view |
 | `F` | board the train you are looking at, or step off (jump works too) — stands aside for mirror while you are holding a building |
 | mouse | look |
-| wheel | previous / next toolbar (belts, fluids, platforms) |
-| `Ctrl` + wheel | step a level deeper into the toolbar, or back out — the plain wheel then cycles at that level |
-| stand on a belt | it carries you, at the belt's real speed |
+| wheel | the next item, anywhere in the toolbar — and it switches between the machine and space views by itself when it crosses into one |
+| `Shift` + wheel | cycle the variants of whatever you are holding |
+| stand on a belt | nothing — it is floor. Set `BeltsCarryPlayer` if you want to be carried |
 | left click | place, delete, pipette — whatever the toolbar is holding, at the crosshair |
 
 The cursor unlocks by itself whenever a dialog opens, so the pause menu and the settings
@@ -103,6 +104,15 @@ you press play, and the shape-type distribution table is left exactly as vanilla
 Set `FirstPersonControl.ScenarioEnabled = false` and the scenario and its preset both
 disappear from the menu.
 
+**A First Person save needs this mod to open.** The save records its scenario id and the game
+resolves it on load, so removing the mod makes that particular save fail.
+
+The manifest still declares `AffectsSaveGames: false`, deliberately. Setting it true would
+turn that failure into a polite refusal, but the same barrier also blocks mods that were
+*added* — so every pre-existing save would stop loading the moment this mod was installed.
+The mod does nothing to an ordinary save, so that trade buys nothing and costs the player
+their library. Ordinary saves load normally, with or without it.
+
 ## Three things are researched
 
 Walking and building are free. Flight needs **Jet Pack** (6k), fast travel needs **Waypoint
@@ -130,122 +140,34 @@ tunable in the same way.
 
 ## For other mods
 
-First Person is meant to be built on. `FirstPersonControl` is the entire public surface —
-plain statics, no events, interfaces or generics.
+First Person is meant to be built on, and the whole public surface is one static class:
 
 ```csharp
 using QuinnBast.Shapez2.FirstPerson;
 
-public class MyMod : IMod
-{
-    public MyMod(ILogger logger)
-    {
-        FirstPersonControl.Forced = true;                     // a first-person game
-        FirstPersonControl.FlightEnabled = false;             // on foot, permanently
-        FirstPersonControl.TravelRequiresResearch = false;    // fast travel from the start
-        FirstPersonControl.TrainRidingResearchCostPoints = 20; // shows as "2k"
-    }
-}
+FirstPersonControl.Forced = true;                   // first person in every save
+FirstPersonControl.FlightEnabled = false;           // on foot, permanently
+FirstPersonControl.TravelRequiresResearch = false;  // fast travel from the start
+FirstPersonControl.WalkSpeed = 12f;
 ```
 
-### The members
+Thirty-odd plain statics, five `Action` fields for events, and one object holding the eleven
+numbers the scenario's map generator uses. No interfaces, no generics, nothing to register -
+so a mod that would rather not take a hard dependency can drive all of it reflectively.
 
-| Member | Type | Default | |
-| --- | --- | --- | --- |
-| `Forced` | `bool` | `false` | Lock the player into first person for every session, the way the scenario does. |
-| `LockedIn` | `bool` (get) | | `Forced`, or the mod's own scenario is running. This is what the camera reads. |
-| `ToggleEnabled` | `bool` | `false` | Whether the toggle key can put an ordinary session into first person. Off means the binding is not registered at all. |
-| `WalkSpeed` | `float` | `8` | Tiles per second on foot. |
-| `FlySpeed` | `float` | `60` | Tiles per second in the air, before sprinting. Vertical movement uses the same number. |
-| `SprintMultiplier` | `float` | `3` | What the game's "move faster" key multiplies both by, climbing and diving included. |
-| `ResourceRenderRadius` | `float` | `2000` | How far shape and fluid patches stay drawn regardless of where you look, in world units (100 chunks). `0` leaves the game's culling alone. |
-| `TrainRideHeight` | `float` | `7.8` | How far from a ridden wagon's origin the rider sits, in tiles — measured along the wagon's own up, so an upside-down rail hangs you underneath. |
-| `Active` | `bool` (get) | | Whether the player is in first person right now. |
-| `ScenarioEnabled` | `bool` | `true` | Whether the **First Person** scenario and its preset appear in the new-game menu. |
-| `FlightEnabled` | `bool` | `true` | Whether flight is offered at all. |
-| `FlightRequiresResearch` | `bool` | `true` | Whether flight must be bought. |
-| `FlightResearchCostPoints` | `int` | `60` | Cost of the flight node. |
-| `FlightUnlocked` | `bool` (get) | | Can the player fly right now, by either route. |
-| `TravelEnabled` | `bool` | `true` | Whether waypoint fast travel is offered at all. |
-| `TravelRequiresResearch` | `bool` | `true` | Whether fast travel must be bought. |
-| `TravelResearchCostPoints` | `int` | `50` | Cost of the travel node. |
-| `TravelUnlocked` | `bool` (get) | | Can the player fast travel right now. |
-| `TrainRidingEnabled` | `bool` | `true` | Whether riding trains is offered at all. |
-| `TrainRidingRequiresResearch` | `bool` | `true` | Whether riding trains must be bought. |
-| `TrainRidingResearchCostPoints` | `int` | `48` | Cost of the train node. |
-| `TrainRidingUnlocked` | `bool` (get) | | Can the player ride trains right now. |
+What you can change: whether the player is locked in, whether the toggle and the scenario
+exist at all, walk / fly / sprint / jump speeds, reach and ride height, whether belts carry
+you, and for each of flight, fast travel and riding trains whether it is **off, free, or
+bought** and what it costs.
 
-### Off, free, or bought
+**[EXTENDING.md](EXTENDING.md) is the full guide** - every member with its type and default,
+the events and when they fire, the map-generation fields, worked recipes, when each setting is
+read, and what is deliberately not exposed.
 
-The three gated features take the same three options each, so there is one shape to learn:
-
-| | |
-| --- | --- |
-| `…Enabled = false` | the feature does not exist — **no research node, and no row in the keybindings screen** |
-| `…Enabled = true`, `…RequiresResearch = false` | available from the start, still no research node |
-| both `true` (default) | a node appears in the research shop's *First Person* category |
-
-"Off" is a deliberately different question from "not yet researched": a mod that switches a
-feature off wants it gone, not pending.
-
-### Costs are multiplied by 100 on screen
-
-`…CostPoints` is the **stored** amount, not the displayed one. `Format(this
-ResearchPointCurrency)` renders `Amount * 100`, so `30` appears as "3k" and `50` as "5k".
-Reading this backwards prices a node a hundredfold out and still looks entirely plausible.
-
-The defaults are priced against the authored ladder in `default-scenario.json`, whose top
-end is 42 for train transfer stations, 48 for an extra rail line colour, 50 for a third
-factory or space floor, 90 for the large platform pack and 200 for vortex delivery. Points
-arrive from side quests in ones, twos and threes, so these are small numbers carrying a lot
-of weight.
-
-All three sit in that top band on purpose. Flight is above the third-floor unlock because
-it is worth more than one — it does not add somewhere to build, it removes traversal as a
-problem for the rest of the save.
-
-### When to set them
-
-Set everything from your mod's constructor. That runs at mod load, before any scenario,
-which is early enough for all of it:
-
-| | |
-| --- | --- |
-| `ScenarioEnabled` | read while game data loads, which is after mods are constructed |
-| `ToggleEnabled` | read when the keybindings register, on the first tick |
-| movement speeds and the ride height | read live, every frame |
-| research options | read when a scenario loads |
-| `…Enabled` | also read when the keybindings register, on the first tick |
-| `Forced`, and everything else | read live, every frame |
-
-`Forced` can be set mid-session and takes effect on the next frame. The research options
-cannot — a node is a definition, so changing them after a scenario has loaded does nothing
-until the next one.
-
-### Without a reference
-
-Every member is a plain static, so a mod that would rather not take a hard dependency on
-another mod can do the same thing reflectively:
-
-```csharp
-Type control = Type.GetType("QuinnBast.Shapez2.FirstPerson.FirstPersonControl, FirstPerson");
-control?.GetField("Forced")?.SetValue(null, true);
-```
-
-That is the reason the surface is as dull as it is — anything richer would serve a
-referencing consumer and shut out this one.
-
-### Behaviour worth knowing
-
-- **Leaving a session exits first person**, because the body's position belongs to a map
-  that no longer exists. A forced player is put straight back in on the next session.
-- **Locks are re-checked, not latched.** Loading a save where flight is not bought puts the
-  player on the floor rather than leaving them airborne, and off a train rather than riding
-  one they are not entitled to.
-- **A forced player who cannot fly cannot easily find resource islands** — the shape-resource
-  overlay is shown while flying. If you lock players in, either turn
-  `FlightRequiresResearch` off or expect them to buy it.
-- **Nothing here is saved.** Set it every session from your own load path.
+Two things that bite if you skip it: a research cost is the **stored** amount and the screen
+shows it multiplied by a hundred, so `60` reads as "6k"; and the research settings are read
+**when a scenario loads**, so they are the one group a constructor must set rather than
+change later.
 
 ## Build
 

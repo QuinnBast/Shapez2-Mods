@@ -1,3 +1,6 @@
+using System;
+using Core;
+
 namespace QuinnBast.Shapez2.FirstPerson;
 
 /// <summary>
@@ -42,12 +45,146 @@ public static class FirstPersonControl
     public static bool Active { get; private set; }
 
     /// <summary>
+    /// Whether the player is flying right now, as opposed to walking.
+    /// </summary>
+    public static bool Flying { get; private set; }
+
+    /// <summary>
+    /// Whether the player is riding a train right now.
+    /// </summary>
+    public static bool Riding { get; private set; }
+
+    // ---- Events ---------------------------------------------------------------------
+    //
+    // Plain delegate fields rather than `event`, to stay reachable from a mod that would
+    // rather not take a hard reference: `event` exposes only add and remove accessors, while
+    // a field can be read, combined and written back through reflection.
+    //
+    //     FirstPersonControl.OnEntered += () => …;
+    //
+    // The cost of a field is that `=` clobbers everyone else's handlers, so use `+=`.
+    //
+    // All of them are parameterless on purpose. A consumer that needs to know *what*
+    // happened can read the state above, or ask the game; putting game types in the
+    // signatures would serve a referencing consumer and shut out the reflective one, which
+    // is the same trade the rest of this class refuses.
+
+    /// <summary>
+    /// The player has entered first person. Fires on the frame they arrive, including the
+    /// automatic entry at the start of a scenario session.
+    /// </summary>
+    public static Action OnEntered;
+
+    /// <summary>
+    /// The player has left first person - by leaving the session, by a mod clearing
+    /// <see cref="Forced"/>, or by the camera standing down because its hook went quiet.
+    /// </summary>
+    public static Action OnLeft;
+
+    /// <summary>
+    /// Flight has been turned on or off. Read <see cref="Flying"/> for which.
+    /// </summary>
+    public static Action OnFlyingChanged;
+
+    /// <summary>
+    /// The player has boarded a train, or stopped riding one. Read <see cref="Riding"/> for
+    /// which. "Stopped riding" covers stepping off, jumping off, losing the research, and
+    /// the train being delivered into the hub underneath them.
+    /// </summary>
+    public static Action OnRidingChanged;
+
+    /// <summary>
+    /// The player has fast travelled to a waypoint - by the travel key, or by clicking a
+    /// waypoint or the home icon. Fires after the body has been moved.
+    /// </summary>
+    public static Action OnTravelled;
+
+    /// <summary>
     /// Called by <see cref="FirstPersonCamera"/>. Public only because a private setter and a
     /// reflection-friendly surface do not mix; treat it as internal.
+    ///
+    /// Each of these is the single choke point for its flag, which is why the events are
+    /// raised from here rather than from the dozen places the camera assigns to the body:
+    /// a transition cannot be missed if there is only one place it can happen.
     /// </summary>
     public static void ReportActive(bool active)
     {
+        if (Active == active)
+        {
+            return;
+        }
+
         Active = active;
+
+        if (!active)
+        {
+            // Leaving first person ends both of these whether or not the camera says so -
+            // it may be standing down from the watchdog, with no frame left to report in.
+            ReportFlying(false);
+            ReportRiding(false);
+        }
+
+        Raise(active ? OnEntered : OnLeft, active ? "OnEntered" : "OnLeft");
+    }
+
+    /// <summary>Called by <see cref="FirstPersonCamera"/>; treat it as internal.</summary>
+    public static void ReportFlying(bool flying)
+    {
+        if (Flying == flying)
+        {
+            return;
+        }
+
+        Flying = flying;
+        Raise(OnFlyingChanged, nameof(OnFlyingChanged));
+    }
+
+    /// <summary>Called by <see cref="FirstPersonCamera"/>; treat it as internal.</summary>
+    public static void ReportRiding(bool riding)
+    {
+        if (Riding == riding)
+        {
+            return;
+        }
+
+        Riding = riding;
+        Raise(OnRidingChanged, nameof(OnRidingChanged));
+    }
+
+    /// <summary>Called by <see cref="FirstPersonCamera"/>; treat it as internal.</summary>
+    public static void ReportTravelled()
+    {
+        Raise(OnTravelled, nameof(OnTravelled));
+    }
+
+    /// <summary>
+    /// Invokes one event without letting a subscriber take the frame with it.
+    ///
+    /// These are raised from inside the camera update, which is inside the game's own draw
+    /// path. An exception escaping here would stop the camera updating for the rest of the
+    /// session, and the player would see a frozen view rather than another mod's bug - so it
+    /// is caught, reported once per throw, and the frame carries on.
+    ///
+    /// Reported through <c>DebugLogger</c> rather than the mod's own logger because this
+    /// class deliberately has no state beyond its settings, and a logger field would be one
+    /// more thing a consumer could reach and break.
+    /// </summary>
+    private static void Raise(Action handler, string name)
+    {
+        if (handler == null)
+        {
+            return;
+        }
+
+        try
+        {
+            handler();
+        }
+        catch (Exception exception)
+        {
+            DebugLogger.Error?.Log(
+                "First Person: a subscriber to " + name + " threw: " + exception);
+        }
     }
 
     // ---- Movement -------------------------------------------------------------------
@@ -80,6 +217,46 @@ public static class FirstPersonControl
     /// climbing and diving as well as to horizontal movement.
     /// </summary>
     public static float SprintMultiplier = FirstPersonTuning.SprintMultiplier;
+
+    /// <summary>
+    /// Tiles per second of initial upward speed. The apex is <c>v^2 / 2g</c> with a gravity
+    /// of 26, and what a jump can get onto is governed by the step allowance as well - see
+    /// <see cref="FirstPersonTuning.JumpSpeed"/> for the table. The default clears three
+    /// building layers and not four.
+    /// </summary>
+    public static float JumpSpeed = FirstPersonTuning.JumpSpeed;
+
+    /// <summary>
+    /// How far along the crosshair a wagon can be and still be boardable, in tiles.
+    /// </summary>
+    public static float BoardReach = FirstPersonTuning.BoardReach;
+
+    /// <summary>
+    /// Writes a line to <c>Player.log</c> for every toolbar scroll: the list it walked, where
+    /// the selection was, where it was sent, and - the point of the whole thing - where the
+    /// selection actually ended up afterwards.
+    ///
+    /// Off. It was on while the wheel was being worked out, and it earned its keep: the
+    /// toolbar answers a selection with side effects the calling code cannot see, and reading
+    /// back what actually happened is what found both the placer crash that was cancelling
+    /// selections and the `values[0]` fallback in
+    /// `PrioritizeToolbarElementFromCurrentCategorySelector`. Neither was visible from the
+    /// code, and neither was guessable from watching it. Left in place for the next time.
+    /// </summary>
+    public static bool LogToolbar;
+
+    /// <summary>
+    /// Whether standing on a belt carries the player along it, at the belt's real speed.
+    ///
+    /// **Off by default**, which is a change from it always happening. It is a lovely thing
+    /// to discover and a bad thing to live with: a factory floor is mostly belt, so standing
+    /// still to work on something meant being quietly carried away from it. The demo and the
+    /// daily experience wanted different answers and the daily one won.
+    ///
+    /// Set it true to have it back - nothing else about belts changes, and a belt is still
+    /// something you can stand on.
+    /// </summary>
+    public static bool BeltsCarryPlayer;
 
     /// <summary>
     /// How high above a ridden wagon's own origin the rider stands, in tiles.
@@ -119,6 +296,17 @@ public static class FirstPersonControl
     /// the key that would let them is the one this governs.
     /// </summary>
     public static bool ToggleEnabled;
+
+    /// <summary>
+    /// The map the First Person scenario generates. Change the fields on it to change the
+    /// map; see <see cref="FirstPersonMapGeneration"/> for what each one does and why
+    /// percentages above 100 behave the way they do.
+    ///
+    /// Read when the new-game menu asks for the scenario presets, so setting it from your
+    /// mod's constructor is in time.
+    /// </summary>
+    public static readonly FirstPersonMapGeneration ScenarioMapGeneration =
+        new FirstPersonMapGeneration();
 
     /// <summary>
     /// Whether the mod's own scenario is offered in the new-game menu.

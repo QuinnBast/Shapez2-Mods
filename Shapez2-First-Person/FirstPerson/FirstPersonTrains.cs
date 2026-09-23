@@ -180,7 +180,7 @@ public sealed class FirstPersonTrains
             Vector3 offset = wagon.Value.Position - origin;
             float along = Vector3.Dot(offset, direction);
 
-            if (along < 0f || along > FirstPersonTuning.BoardReach)
+            if (along < 0f || along > FirstPersonControl.BoardReach)
             {
                 continue;
             }

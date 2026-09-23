@@ -636,6 +636,11 @@ precisely the symptom, a pause on entry.
 
 ## What downstream mods can use
 
+> [EXTENDING.md](EXTENDING.md) is the consumer-facing version of this: every member with its
+> type and default, worked recipes, and when each setting is read. This section is the
+> *reasoning* - why the surface has this shape. Keep the reference table there rather than
+> growing this one, or the two drift.
+
 `FirstPersonControl` is the whole public surface. Reference the assembly and it is what it
 looks like:
 
@@ -648,6 +653,9 @@ FirstPersonControl.TravelRequiresResearch = false;   // fast travel from the sta
 | | |
 | --- | --- |
 | `Forced` | lock the player in: they enter on the first frame of a session and the toggle stops working |
+| `Flying` / `Riding` | what the player is doing right now |
+| `OnEntered` / `OnLeft` / `OnFlyingChanged` / `OnRidingChanged` / `OnTravelled` | plain `Action` fields, raised from the single choke point for each flag |
+| `ScenarioMapGeneration` | the eleven numbers the scenario stamps onto its preset |
 | `LockedIn` | `Forced`, or the mod's own scenario is running - what the camera actually reads |
 | `Active` | whether the player is in first person right now |
 | `ScenarioEnabled` | whether the **First Person** scenario and its preset appear in the new-game menu |
@@ -673,8 +681,8 @@ working. `FlightResearchCostPoints` and its twin are **the stored amount, not th
 one**: the research screen renders `Amount * 100`, so the default 60 appears as "6k". That
 trap is worth restating in the one place a consumer will read.
 
-The surface is deliberately dumb - plain statics, no events, no interfaces, no generics -
-for a reason beyond taste. Direct reference is the normal path and needs nothing clever, but
+The surface is deliberately dumb - plain statics and `Action` fields, no `event`s, no
+interfaces, no generics - for a reason beyond taste. Direct reference is the normal path and needs nothing clever, but
 a mod that would rather not take a hard reference on another mod can drive the same members
 reflectively. Anything richer would serve the first kind of consumer and shut out the second.
 
@@ -683,6 +691,44 @@ keybindings when they register, so a mod's constructor is early enough for all o
 
 Leaving a session still exits, because the body's position belongs to a map that is gone;
 the next session puts a forced player straight back in.
+
+### Events, and where they are raised from
+
+Five `Action` **fields** - `OnEntered`, `OnLeft`, `OnFlyingChanged`, `OnRidingChanged`,
+`OnTravelled`. Fields rather than `event`s for the same reason everything else here is a
+field: an `event` exposes only add and remove accessors, and the reflective consumer needs to
+read the delegate, combine and write it back.
+
+They are raised from `ReportActive` / `ReportFlying` / `ReportRiding`, which are the **single
+choke point for each flag**, and each one compares before it assigns. That matters more than
+it looks: `Body.Flying` and `Body.Riding` are written from about a dozen places - the toggle,
+the per-frame research re-check, travel, losing a train, leaving the session - and an event
+raised beside every assignment is an event that will eventually be missed when a thirteenth
+is added. The camera reports both once a frame from `Apply` instead, and the comparison turns
+that into an event only when something changed.
+
+`ReportActive(false)` forces both to false on its way out, because the camera may be standing
+down from the watchdog, with no frame left in which to report.
+
+A throwing subscriber is caught and logged through `DebugLogger`. These run inside the camera
+update, inside the game's draw path: an escaping exception would stop the camera updating for
+the rest of the session, and the player would see a frozen view rather than another mod's
+bug. `DebugLogger` rather than the mod's own logger so the class keeps no state a consumer
+could reach and break.
+
+### The scenario's map generation is data
+
+`FirstPersonControl.ScenarioMapGeneration` is a plain `FirstPersonMapGeneration` with eleven
+public fields and an `ApplyTo`. `FirstPersonScenario` no longer holds the numbers at all; it
+calls `ApplyTo` on the resolved parameters.
+
+The defaults live on that class rather than in `FirstPersonTuning`, which holds camera and
+body constants. These describe a map rather than how a player moves around one, and nothing
+else wants them.
+
+`ShapePatchGenerationLikeliness` is still not exposed, and will not be: it arrives through the
+`#include` from authored ScriptableObject data with no readable source, so the only thing a
+field could offer a consumer is an invitation to invent game data.
 
 ## The scenario ships in the mod folder
 
@@ -741,6 +787,57 @@ Our file names about a dozen of the game's own resource paths, every one of them
 update away from moving, so `OnReadScenario` wraps the call **for our file only** and
 returns the reader's own false on a throw. A missing menu entry is a bug report; a dead
 install is not.
+
+### `AffectsSaveGames` is false, and that is a choice with a cost
+
+A save records its scenario id - `GameParameters.Serialize()` writes
+`ScenarioParameters.ScenarioId` - and loading reads it straight back:
+
+```csharp
+GameParameters parameters = GameParameters.From(reader.Metadata.Parameters, gameData);
+mode = GameMode.From(savegame.Parameters, …);       // SavegameSerializationUtils.Load
+// …which opens with
+SerializedGameScenario raw = gameData.GetRawScenario(parameters.ScenarioParameters.ScenarioId);
+```
+
+and `ScenarioCollection.GetRawScenario` **throws** on an id it cannot resolve.
+
+That throw is never reached from the menu, which was worth finding out before trading
+anything away for it. `HUDSavegameEntryPrefab.RenderSavegameMetadata` asks
+`Savegame.IsCompatible` first, and that has three ways to say no:
+
+```csharp
+if (metadata.Version < UpdateConverterProgression || metadata.Version > CurrentVersion) return false;
+if (!gameData.GameModeIds.Contains(new GameModeId(metadata.Parameters.GameModeId))) return false;
+if (!gameData.TryGetScenarioData(new ScenarioId(...ScenarioId), out var _)) return false;
+```
+
+A missing scenario fails the third, and all three raise the same overlay -
+`menu.play.savegame-version-mismatch`, "Unsupported savegame version". So a First Person save
+without the mod is **greyed out in the list with Resume disabled**, not a crash. The label is
+misleading, and the label is the whole of the damage.
+
+`AffectsSaveGames: true` turns that into a civilised refusal - the barrier lists mods added
+or removed since the save was written, keeps only those that affect saves, and shows an
+OK-only dialog. That was the first answer here and it was the wrong trade, because the same
+barrier fires on mods that were **added**: with the flag on, installing this mod stops every
+*pre-existing* save from loading at all.
+
+The mod does nothing to an ordinary save. It is scenario-only - no toggle key, no hooks that
+bite outside its own session - so blocking every other save buys the player nothing and costs
+them their library. Loading old games with the mod installed is the common path; uninstalling
+after playing the scenario is the rare one. The common path wins.
+
+The residual risk is real but small, and is stated in the store description rather than
+engineered around: **a First Person save needs the mod installed**, and without it shows up
+as "Unsupported savegame version". Nothing can be done about the wording from inside the mod,
+because in the uninstalled case none of this code runs.
+
+What is *not* a risk, and was worth checking rather than assuming: the `FirstPersonSaveData`
+blob attached to every save the mod touches. `SaveDataInterceptor.OnDeserializeSavePostfix`
+iterates only the **registered** rewirers, each reading its own key, with a try/catch around
+each - there is no pass that walks unknown keys and chokes. An ordinary save carrying our
+data opens perfectly well once the mod is gone.
 
 ### The map generation could not be data
 
@@ -1077,6 +1174,264 @@ distance cull at all, only `GeometryUtility.TestPlanesAABB` - so far more of the
 and has to be streamed and drawn. That is a cost of the viewpoint rather than a bug in it.
 
 
+
+## The jump clears three building layers, and the step allowance is why
+
+A blueprint that fills all three building layers is common, and the old jump could not get
+onto one - which meant a player could be locked out of their own platform entirely. The fix
+is a higher jump, but the number is not "three tiles".
+
+`Blocked` scans the column from `floor(feet + StepHeight)` upward, so the step allowance is
+free clearance: moving horizontally over an N-layer stack needs the feet at `N - StepHeight`,
+not at `N`. With `StepHeight` 1.15 and an apex of `v^2 / 2g` at `g = 26`:
+
+| Stack | Feet needed | Speed to reach it |
+| --- | --- | --- |
+| 1 layer | -0.15 | walk on |
+| 2 layers | 0.85 | 6.65 |
+| 3 layers | 1.85 | 9.81 |
+| 4 layers | 2.85 | 12.17 |
+
+The old `JumpSpeed` of 8.5 is an apex of 1.39 - over two layers, under three. That is exactly
+the gap the report describes, and it falls out of the table rather than needing a guess.
+
+11 puts the apex at 2.33, in the middle of the band between 1.85 and 2.85. The middle rather
+than the edge on purpose: the integration is Euler - `VerticalSpeed` is decremented before the
+position is advanced - so the real apex is a little under the analytic one, and a value chosen
+to just barely clear three layers would fail at a low frame rate. Four layers stays out of
+reach, which keeps a jump a way onto a machine rather than a way over the factory.
+
+`FirstPersonControl.JumpSpeed` exposes it, like the other movement numbers.
+
+## The wheel walks the toolbar flat
+
+One notch is one item, wherever it lives: belt, rotator, cutter, stacker, miner, pin pusher,
+label, trash, then straight on into the fluids category. No level, no cursor, no modifier to
+reach anything.
+
+That replaced a depth cursor the player had to drive themselves - Ctrl, later Shift, to step
+into a submenu before the wheel could reach it. It worked and it was wrong: a hotbar is a flat
+thing to a player even though it is a tree underneath, and the wheel should agree with the
+player rather than with the data structure.
+
+The order is not invented. `ToolbarQuery.GetElementsInTopDownOrder` is a **breadth-first**
+walk from the root - a queue, not a stack - so every depth-2 element comes out grouped by its
+category and in category order, which is the reading order of the toolbar on screen. Filtering
+that to `TreeDepth() == 2 && IsUnlocked()` is the whole list.
+
+The list is rebuilt per scroll rather than cached: research unlocks entries mid-session, and
+the interaction scope swaps the entire toolbar between buildings and platforms. A stale list
+would scroll onto something that is no longer there, and a cache with an invalidation rule
+would cost more to own than a breadth-first walk of a few hundred nodes on a wheel notch.
+
+### The wheel changes the view, and the order is the fix
+
+The first version walked the whole root and was unusable: it would not reach the first
+conveyor, it jumped from trade stations back to blueprints, and clicking the space platforms
+tab and scrolling bounced straight back out of it. The second confined the list to the
+current view, which was the wrong answer to the right observation - the player then simply
+could not reach half the toolbar.
+
+The cause is a **selection side effect**. `ToolbarScopeSynchronizer` registers an `OnSelect`
+callback on every top-level category:
+
+```csharp
+element.OnSelect.Register(() => OnIslandCategorySelected(element));
+//   -> PlayerInteraction.TryMoveIntoBaseState(Islands)
+//   -> OnPlayerScopeChange -> LastIslandCategory?.Select();
+```
+
+So selecting an out-of-view item moves the view *as a side effect*, and the view change then
+force-selects that view's **remembered** category rather than the thing that was asked for.
+Select first and the selection is overwritten a moment later; the wheel then reads its next
+position out of the place it was snapped to and orbits a handful of entries forever.
+
+The fix is to **move the view first, then select**, which puts the clobber before the
+selection instead of after it:
+
+```csharp
+if (CategoryScope.TryGetValue(category, out var scope) && scope.HasValue)
+{
+    view.Player.InteractionState.TryMoveIntoBaseState(scope.Value);
+}
+
+view.Select(item);
+```
+
+By the time `Select` runs, `BaseState` already matches, so the category's own callback calls
+`TryMoveIntoBaseState` with the state it is already in - which returns false at its first line
+without firing `OnStateChanged` - and nothing touches the selection again.
+
+The result is better than either earlier attempt: the wheel crosses from the machine view into
+the space view on its own, which is what the player wanted from a flat list in the first place.
+
+Categories are classified by repeating `TryClassifyCategoryPlacementType` - the synchronizer is
+held by the session with no handle a mod can reach. A category with **no** type, blueprints
+being the example, moves no view: those are exactly the ones the synchronizer skips, and moving
+the view for one would be the mod inventing a rule the game does not have.
+
+## Refusing a cursor coordinate makes the game throw
+
+The wheel still jumped after the scope fix, and the logging found the cause somewhere else
+entirely. 606 of these in one session:
+
+```
+InvalidOperationException: Stack empty.
+  at Stack`1[T].Peek ()
+  at PathNotchClampRotationPlacementTracker.UseNotchRotationTracker (…)
+Rethrow as Exception: Exception triggered while updating LazyText[building-variant.BeltDefaultVariant.title]
+```
+
+Every path placer - belt, pipe, wire, space belt - fills its `SegmentsStack` from
+`PathPlacementInput.UpdateDraggedPosition`, which is only called when the cursor query
+**succeeds**. The trackers then `Peek()` that stack unconditionally, and they are entitled to:
+in vanilla the query never fails, because `GetCursorPointOnVirtualPlane` answers with the map
+origin rather than with nothing. This mod made it honest, and honest left the stack empty
+under an unguarded `Peek`.
+
+`EntityPlacementRunner.UpdateCurrentPlacer` catches the throw and **cancels the placement**,
+and cancelling deselects the toolbar entry. So: select a belt while not looking at the floor,
+the placer throws, the belt is deselected back to its category, and the next scroll starts
+from the category again - forever. The log shows it exactly, the same two lines repeating:
+
+```
++1 category-edge | from [-1] 2 (category Logic) | to [16] 2/0 Belt
+   landed on 2/0/0 BeltDefaultVariant
+```
+
+then the next notch is `category-edge` from category 2 again. The selection was taken back
+between notches, by a placer crash, in a part of the game the toolbar code cannot see. It
+also explains the report that looking down at the platform floor made scrolling behave: with
+a real target the stack is filled and nothing throws.
+
+Guarding the `Peek` is not available. `PathStartRotationPlacementTracker<TPivot, TCoordinate,
+TDirection>` is a **generic type**, and MonoMod cannot hook a method on one.
+
+So the query has to answer, always. `TryReach` now **clamps** instead of refusing: as far as
+the player can reach, in the direction they are facing, on the build plane. That keeps the
+protection refusing was there for - the answer is always within reach, so a level camera still
+cannot drop a building at the centre of the map - while giving the trackers the coordinate
+they assume exists. The look direction is flattened onto the plane rather than followed,
+because the cases that get here are exactly the ones where following it never meets the plane;
+a degenerate flat direction, from looking straight up, falls back to the player's own feet.
+
+The crosshair keeps the honest test. `HasExactTarget` is what colours it, so it still goes
+back to idle when there is nothing really under it - placement takes the clamped answer,
+the player sees the true one.
+
+The two `CursorFreed` refusals went the same way for the same reason. Holding the cursor key
+changes the pointer, not the world, and a refusal there throws just as readily.
+
+### The same tool appears in several categories, and only one copy is active
+
+A space belt is offered from Platforms, Trains and Converters. Those are three
+`PlacementToolbarElement`s **sharing one `PlacementInitiator`**, and an element's `IsActive`
+is not its own state at all:
+
+```csharp
+public bool IsActive => PlacementInitiator.IsPlacing
+    && MostFitPlacementElementSelector.MostFitPlacementToolbarElement(PlacementInitiator) == this;
+```
+
+So selecting any copy starts the shared initiator, and a *selector* then decides which copy
+counts as the active one. `PrioritizeToolbarElementFromCurrentCategorySelector`:
+
+```csharp
+var active = Root.GetChildren().FilterCast<CategoryGroupToolbarElement>()
+                 .Single(x => x.IsSelfActive);
+foreach (var item in values) if (item.IsAncestor(active)) return item;
+// …all of it inside a try/catch, falling through to:
+return values[0];
+```
+
+`Single` throws when **no** category is self-active, and when **two** are. The catch then
+returns `values[0]` - the first registered copy, which is the one in the earliest category.
+
+That is the whole bug, and it only ever showed on the notch that **enters** a category: the
+old category has gone and the new one has not arrived, the count is not one, and the first
+copy wins. The log shows it and shows it healing a notch later:
+
+```
+94  from[43] 4/11/0 -> to[44] 5/0  landed 4/0     <-- entering category 5
+95  from[44] 4/0    -> to[45] 5/1  landed 4/1
+96  from[45] 4/1    -> to[46] 5/2  landed 5/2/0   <-- settled
+…
+100 from[45] 5/1    -> to[44] 5/0  landed 5/0     <-- the same entry, from inside
+```
+
+`CategoryGroupToolbarElement.Select()` is what sets `IsSelfActive`, and
+`HUDToolbarView.Select` on a depth-1 element always reaches it. So the fix is to **select the
+category, then the item**: the count is exactly one by the time the selector runs, and it
+finds the copy underneath the category the player actually scrolled to.
+
+Every copy stays in the list. Deduplicating them was the earlier attempt and it was wrong
+twice over - a player scrolling through the trains category and finding the space belt absent
+while looking straight at it is worse than any jump, and it was treating a symptom of this.
+
+## The save remembers where the player was standing
+
+`FirstPersonSaveData` carries a position, a facing and a `HasPosition` flag through
+`ModSaveDataExtensions`. Entering first person uses it in preference to the vortex, because in
+a scenario that is first person from the first frame, the vortex is only the right answer
+once - the first time.
+
+Deliberately small. Only what cannot be recovered is stored: everything about what the player
+is *standing on* is recomputed from the map on the first frame, and saving it would only be a
+way to disagree with a platform they have since rebuilt. The height is the feet rather than
+the eye, matching `FirstPersonBody.Height`, and gravity settles the rest.
+
+Three details worth keeping:
+
+- **The position is captured even when first person is off at save time.** Stepping out to
+  look at the map and saving should not send the player back to the vortex.
+- **Flight is restored only if it is still available.** A save that loses the research, or a
+  mod that turns flight off, would otherwise leave the player hovering with no way down.
+- **Holding the spawn-here modifier still overrides it**, which is the escape hatch if a
+  stored position ever turns out to be somewhere unreachable.
+
+`AffectsSaveGames` was already true for the scenario, so nothing in the manifest changes. The
+one thing that must not change is the **type's full name**:
+`ModSaveDataExtensions.ResolveId<T>()` is `AssemblyName + "-" + typeof(T).FullName`, so
+renaming `FirstPersonSaveData` or moving it out of `QuinnBast.Shapez2.FirstPerson` silently
+orphans every save that has one.
+
+## Belts are floor
+
+`BeltsCarryPlayer` defaults to **false**. Being carried is a lovely thing to discover and a
+bad thing to live with: a factory floor is mostly belt, so standing still to work on something
+meant being quietly carried away from it. The demo and the daily experience wanted different
+answers and the daily one won. The code is unchanged and one flag switches it back on.
+
+The current position comes from `GetMostSpecificActiveElement().GetAncestorAtDepth(2)`, so a
+selected *variant* stands in for its item and scrolling away from the belt's corner piece
+lands on the rotator rather than on nothing.
+
+### Depth 3 is deliberately not in the list
+
+Those are variants, and paging through nine belt variants on the way from the belt to the
+rotator is not what a wheel is for. They get two controls of their own instead:
+
+- **Tab**, the game's own `toolbar.next-variant`, which works again - see below.
+- **Shift and the wheel**, which cycles at the selection's own depth exactly as the game's
+  handler does, so a mod that adds a fourth level gets it for free.
+
+## Tab was being taken, and it is the wrong key to take
+
+`CursorKey` was Tab, held to free the mouse, and it shared the key with
+`toolbar.next-variant` on purpose - reading our binding consumes it, and the input system
+marks every other active binding on the same key consumed too. That was framed as the
+collision resolving itself. It was not: it silently took variant cycling away from the player
+for the whole session.
+
+The trade is one-sided once stated. Variants are picked constantly while building; freeing
+the mouse is occasional. The occasional one moves.
+
+`LeftAlt` is as close to free as this keyboard gets. Dumping every `KeyCode` in
+`DefaultKeybindings` leaves it bound exactly once, to
+`mass-selection.deselect-area-modifier` - a drag modifier, which is something you do with a
+map camera rather than from the factory floor. The alternatives are all worse: `M` is flight,
+`F5` is travel, and a function key is a reach from the movement keys for something that has to
+be held.
 
 ## Reach
 
