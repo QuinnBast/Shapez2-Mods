@@ -1647,6 +1647,44 @@ things, neither of them about splitting:
   wrapped, and `CargoHandover.Allows` gained `SplittingItemDistributor` so a cargo belt will feed
   a junction in the first place.
 
+**Admitting the class was a bug that shipped in 0.48.3.** Every *vanilla* space belt and space
+pipe splitter receives through a `SplittingItemDistributor` too (`BuiltinSimulationSystems.CreateSpacePathSystems`
+builds a `SpaceSplitterSimulation` for any space path with more than one output, and
+`PathSplitterSimulation.GetItemReceiver` returns its distributor). A cargo belt is dual-tagged, so
+it connects to a vanilla `SpacePipe_YSplitter`. The guard then waved packages onto that
+splitter's plain lanes, the vanilla pipes carried them, and the run ended at a platform port. The
+player's log showed two symptoms, both `InvalidCastException`:
+
+- `SpaceFluidPortReceiverSimulation.CanAcceptItem` casts straight to `FluidPackageItem`. It runs
+  inside the simulation, so the exception went up through `SimulationGraph.UpdateClusters` every
+  tick and produced the yellow screen.
+- `SpacePathSimulationRenderer.DrawItems` threw on the same packages while drawing them on vanilla
+  track.
+
+`CargoSplitterSimulation.IsCargoJunction` now tells the two apart by the only mark there is: our
+output lanes carry one shared `PreAcceptHook` instance, compared by reference. (A method group
+makes a new delegate on every conversion, so the instance has to be a static field.) The merger
+avoided the same mistake from the start by giving its inputs the `CargoBeltLane` type.
+**Packages already on vanilla track are saved with the lanes**, so fixing the guard stops new
+leaks but cannot repair an affected save by itself. `CargoLeakSweep` does that. It runs once per
+`Simulator`, in a prefix on `StartAsynchronousUpdate` / `SynchronousUpdate`. That is the main
+thread with nothing simulating: both methods open with `PrepareUpdate`, which throws while the
+graph is updating, and `FinalizeLogicUpdate` waits on the previous step. The sweep looks at every
+simulation outside this assembly:
+
+- **Lanes.** It walks them with `TraverseLanes`, skipping `CargoBeltLane`. A simulation found
+  holding a package gets its own `ClearContent`, because `IItemLane` has `GetItem` and `Clear`
+  and nothing in between. Shapes or fluid on that island go with the package. That is the same
+  loss as removing and re-placing the island by hand.
+- **Port buffers.** `SimulationBuffer<IBeltItem>.State.Queue` is filtered under its own lock, so
+  only the packages are lost.
+
+`ClearContent` is a default interface method on `ISimulation`. Every vanilla space path and port
+simulation re-declares `ISimulation` in its base list, so the call reaches the class's own reset
+and not the empty default. No vanilla simulation keeps a package in an `IItemLane` on purpose: a
+station's inputs are `DummyLane`s and its tracks are not lanes. Each reset is logged as a warning
+with its chunk. Nothing here has been run against the affected save yet.
+
 `IItemBundleSimulation` is restated in the base list purely so the guarded
 `GetItemProviderBundle` can be an explicit implementation - C# only allows one for an interface
 the type itself names.

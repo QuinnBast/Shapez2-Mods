@@ -43,6 +43,24 @@ namespace QuinnBast.Shapez2.TrainCargoTools
     {
         private readonly CargoHandover.GuardedProviderBundle[] Outgoing;
 
+        /// The one hook instance every cargo splitter output carries, so a distributor can be
+        /// recognised as ours by reference. A method group converts to a fresh delegate each
+        /// time, so this has to be built once and shared.
+        private static readonly PreAcceptHookDelegate CargoOutputHook = CargoBeltSimulation.IsCargoPackage;
+
+        /// Whether a distributor is a cargo splitter's rather than a vanilla space splitter's.
+        ///
+        /// The class cannot tell them apart - this splitter *is* the vanilla one with its
+        /// output lanes hooked - so the lanes are the only mark. Read on the simulation's hot
+        /// path from pool threads, which is why it is a field compare and not a lookup table.
+        internal static bool IsCargoJunction(SplittingItemDistributor junction)
+        {
+            IItemReceiver[] outputs = junction.NextLanes;
+            return outputs.Length > 0
+                && outputs[0] is BeltPathLane lane
+                && ReferenceEquals(lane.PreAcceptHook, CargoOutputHook);
+        }
+
         public CargoSplitterSimulation(
             SpaceSplitterSimulationState state, ISpaceSplitterConfiguration configuration)
             : base(state, configuration)
@@ -55,7 +73,7 @@ namespace QuinnBast.Shapez2.TrainCargoTools
 
                     foreach (BeltPathLane output in splitter.OutputLanes)
                     {
-                        output.PreAcceptHook = CargoBeltSimulation.IsCargoPackage;
+                        output.PreAcceptHook = CargoOutputHook;
                         JunctionCapacity.Shrink(output.State);
                     }
                 }

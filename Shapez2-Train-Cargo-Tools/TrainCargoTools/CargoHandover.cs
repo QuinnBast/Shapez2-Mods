@@ -85,7 +85,14 @@ namespace QuinnBast.Shapez2.TrainCargoTools
                 // A cargo splitter's junction. Its outputs refuse loose items, so admitting the
                 // distributor here does not admit anything a cargo belt would refuse - see
                 // CargoSplitterSimulation.
-                || next is SplittingItemDistributor
+                //
+                // **Only a cargo splitter's.** Every vanilla space belt *and* space pipe splitter
+                // receives through this same class (`PathSplitterSimulation.GetItemReceiver`), so
+                // admitting the type alone let a cargo belt feed a vanilla pipe splitter, whose
+                // plain lanes carried packages on to a fluid port that casts to
+                // `FluidPackageItem` - an exception every tick and a yellow screen.
+                || (next is SplittingItemDistributor junction
+                    && CargoSplitterSimulation.IsCargoJunction(junction))
 
                 // The store and the unpackager - this mod's own receivers.
                 || next is ICargoPackageSink

@@ -43,6 +43,9 @@ namespace QuinnBast.Shapez2.TrainCargoTools
         /// Keeps a duplicate island-module registration from killing the session.
         private readonly CargoModuleGuard ModuleGuard;
 
+        /// Clears packages an earlier version leaked onto vanilla track out of a loaded save.
+        private readonly CargoLeakSweep LeakSweep;
+
         /// The two research nodes every island hangs off. Built before the islands because each
         /// one is handed to AddIsland as it is registered.
         private readonly CargoResearch Research;
@@ -305,6 +308,7 @@ namespace QuinnBast.Shapez2.TrainCargoTools
             Stations = new PackagedCargoStations(logger);
             Unloaders = new PackagedCargoUnloaders(logger);
             ModuleGuard = new CargoModuleGuard(logger);
+            LeakSweep = new CargoLeakSweep(logger);
 
             // Drag placement. One placer now, over the one belt family.
             //
@@ -351,6 +355,7 @@ namespace QuinnBast.Shapez2.TrainCargoTools
             Stations.Dispose();
             Unloaders.Dispose();
             ModuleGuard.Dispose();
+            LeakSweep.Dispose();
             Wiki.Dispose();
             Images.Dispose();
         }

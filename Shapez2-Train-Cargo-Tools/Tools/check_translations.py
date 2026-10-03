@@ -88,8 +88,16 @@ def check(text, key, problems):
 
 
 def main():
-    path = os.path.join(os.path.dirname(__file__), "..",
-                        "TrainCargoTools", "translations.json")
+    # An explicit path lets the other mods in this workspace be checked with the same
+    # parser, which matters now that they each carry four translated language blocks:
+    #     python Tools/check_translations.py ../Shapez2-First-Person/FirstPerson/translations.json
+    # The <gll:...> entry-id check below only fires on files that use the tag, so it does
+    # not get in the way of a mod with no wiki pages.
+    if len(sys.argv) > 1:
+        path = sys.argv[1]
+    else:
+        path = os.path.join(os.path.dirname(__file__), "..",
+                            "TrainCargoTools", "translations.json")
     with open(path, encoding="utf-8") as handle:
         data = json.load(handle)
 
@@ -106,7 +114,7 @@ def main():
 
     for problem in problems:
         print("PROBLEM:", problem)
-    print(f"checked {total} strings, {len(problems)} problems")
+    print(f"{os.path.basename(os.path.dirname(os.path.abspath(path)))}: checked {total} strings, {len(problems)} problems")
     return 1 if problems else 0
 
 
