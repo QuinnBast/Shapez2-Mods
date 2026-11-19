@@ -1,17 +1,17 @@
 {
   "_comment": "Rename to config.json to use. Every value below is the built-in default.",
 
-  "_machine_comment": "Extra building layers inside a platform. Hard-clamped so the top layer stays at or below 19 (a building layer is SafeMod(tile.z, 20)). Only layers 0-2 can carry a port to another platform - see DESIGN.md.",
-  "ExtraMachineLevels": 10,
+  "_machine_comment": "Extra building layers inside a platform. Hard-clamped so the top layer stays at or below 19 (a building layer is SafeMod(tile.z, 20)); the default 17 is all of that room. Only layers 0-2 can carry a port to another platform - see DESIGN.md.",
+  "ExtraMachineLevels": 17,
 
-  "_space_comment": "Extra platform layers in space, added above the current topmost one. No known engine ceiling; 30-50 is the intended playground.",
-  "ExtraSpaceLevels": 10,
+  "_space_comment": "Extra platform layers in space, added above the current topmost one. Hard-clamped so the top layer stays at or below 999; anything asked for past that is logged and dropped.",
+  "ExtraSpaceLevels": 20,
 
   "_policy_comment": "How the player earns them. Shop = buy them, Granted = have them all from the first frame, None = they exist but nothing unlocks them (for another mod to drive).",
   "UnlockPolicy": "Shop",
 
-  "_shop_comment": "Shop policy only. LayersPerShopEntry 1 gives one chained entry per layer; 5 keeps the research screen readable at 50 layers.",
-  "LayersPerShopEntry": 5,
+  "_shop_comment": "Shop policy only. How many layers one purchase grants; 1 gives one chained entry per layer. Costs are per entry: the first costs the base, each later one CostGrowthFactor times the one before.",
+  "LayersPerShopEntry": 100,
   "MachineLevelBaseCost": 2500,
   "SpaceLevelBaseCost": 4000,
   "CostGrowthFactor": 1.6,
@@ -24,6 +24,15 @@
   "_hud_comment": "The game's layer strip grows nine pixels per layer and runs off screen around thirty. This rescales it to fit, and does nothing while it already fits.",
   "CompactLayerStrip": true,
   "LayerStripMaxHeight": 420.0,
+
+  "_key_repeat_comment": "Seconds a layer up/down key must be held before it repeats; it then speeds up the longer it is held. 0 turns it off.",
+  "LayerKeyRepeatDelay": 1.0,
+
+  "_jump_comment": "Selecting a single platform or building on another layer moves the view to that layer.",
+  "JumpToSelectedLayer": true,
+
+  "_overview_step_comment": "Space layers moved per layer key press when fully zoomed out. 0 picks a tenth of the unlocked range (about 100 at 999 layers).",
+  "OverviewLayerStep": 0,
 
   "_hud_number_comment": "Above this many layers the strip shows the current layer's number instead of one handle per layer. 0 never switches.",
   "LayerStripNumberAbove": 8,

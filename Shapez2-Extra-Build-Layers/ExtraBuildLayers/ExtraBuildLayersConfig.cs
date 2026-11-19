@@ -35,14 +35,18 @@ public class ExtraBuildLayersConfig
     /// Only layers 0-2 can carry a port to another platform
     /// (<see cref="BuildLayers.PortConnectedMachineLevels"/>). Everything else - machines,
     /// belts, lifts, the hub's own input slots - reaches every floor.
+    ///
+    /// The default is the whole room there is: vanilla's top layer is 2, so 17 more reaches 19.
+    /// A scenario that already ships more layers gets clamped rather than refused.
     /// </summary>
-    public int ExtraMachineLevels = 10;
+    public int ExtraMachineLevels = 17;
 
     /// <summary>
-    /// Extra platform layers in space. No known engine ceiling; 10 is a default that changes
-    /// how the game plays without being a research grind on its own.
+    /// Extra platform layers in space, clamped so the top one stays at or below
+    /// <see cref="BuildLayers.MaxSpaceLevel"/>. 20 is a default that changes how the game plays
+    /// without being a research grind on its own.
     /// </summary>
-    public int ExtraSpaceLevels = 10;
+    public int ExtraSpaceLevels = 20;
 
     /// <summary>
     /// Which built-in <see cref="ILayerUnlockPolicy"/> to use: <c>Shop</c>, <c>Granted</c> or
@@ -55,7 +59,7 @@ public class ExtraBuildLayersConfig
     public string UnlockPolicy = "Shop";
 
     /// How many layers one shop purchase grants. 1 gives the one-entry-per-layer chain.
-    public int LayersPerShopEntry = 5;
+    public int LayersPerShopEntry = 100;
 
     /// Raw points for the first shop entry of each kind. The shop renders these times 100.
     public int MachineLevelBaseCost = 2500;
@@ -71,6 +75,24 @@ public class ExtraBuildLayersConfig
     /// entry.
     /// </summary>
     public string ShopCategory = "ExtraBuildLayers";
+
+    /// <summary>
+    /// Seconds a layer key must be held before it starts repeating. Repeating starts at about
+    /// eight layers a second and speeds up to one a frame over a couple of seconds. 0 or less
+    /// turns repeating off.
+    /// </summary>
+    public float LayerKeyRepeatDelay = 1f;
+
+    /// <summary>
+    /// Selecting a single platform or building on another layer moves the view to its layer.
+    /// </summary>
+    public bool JumpToSelectedLayer = true;
+
+    /// <summary>
+    /// Space layers moved per layer key press in the overview (fully zoomed out). 0 picks a
+    /// tenth of the unlocked range - about 100 at 999 layers.
+    /// </summary>
+    public int OverviewLayerStep = 0;
 
     /// <summary>
     /// Whether to lengthen <c>LayerColors</c> and <c>BeltArrowColors</c>.

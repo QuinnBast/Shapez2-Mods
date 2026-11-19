@@ -21,7 +21,7 @@ namespace QuinnBast.Shapez2.ExtraBuildLayers;
 public sealed class ShopUnlockPolicy : ILayerUnlockPolicy
 {
     /// How many layers one purchase grants. Clamped to at least 1.
-    public int LayersPerEntry = 5;
+    public int LayersPerEntry = 100;
 
     /// Raw points for the first entry. The shop renders this times 100.
     public int MachineBaseCost = 2500;

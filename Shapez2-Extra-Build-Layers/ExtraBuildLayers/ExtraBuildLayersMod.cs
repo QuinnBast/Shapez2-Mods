@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Game.Core.Research;
 using JetBrains.Annotations;
@@ -26,8 +27,11 @@ namespace QuinnBast.Shapez2.ExtraBuildLayers;
 /// <item><see cref="BuildingMeshLayerWidener"/> (twice: early, and late for other mods'
 /// buildings) widens each building's per-layer mesh array, without which a machine on a new
 /// floor takes its whole chunk's mesh down.</item>
-/// <item><see cref="ExtraLiftBuildings"/>, <see cref="ExtraLiftSystems"/> and
-/// <see cref="ExtraSpaceLiftIslands"/> make belts and pipes climb any number of floors.</item>
+/// <item><see cref="ExtraLiftBuildings"/> and <see cref="ExtraLiftSystems"/> make belts and pipes
+/// inside a platform climb any number of floors.</item>
+/// <item><see cref="LiftStationIslands"/>, <see cref="LiftStationPlacementRewirer"/> and
+/// <see cref="LiftStationConnectors"/> make space belts and pipes climb any number of space levels,
+/// with an entry and an exit station joined by a shaft rather than a definition per height.</item>
 /// <item><see cref="LayerVisualResourcesExtender"/> and <see cref="LayerNumberArt"/> give the new
 /// floors colours, floor planes and their own numbers; <see cref="HighFloorBlueprints"/> keeps
 /// previews lit above floor 9.</item>
@@ -54,9 +58,22 @@ public class ExtraBuildLayersMod : IMod
     private readonly RewirerHandle LiftDumpHandle;
     private readonly RewirerHandle LiftBuildingsHandle;
     private readonly RewirerHandle LiftSystemsHandle;
-    private readonly RewirerHandle SpaceLiftHandle;
+    private readonly RewirerHandle? StationArtHandle;
+    private readonly RewirerHandle? StationPlacementHandle;
+    private readonly LiftStationIslands Stations;
+    private readonly LiftStationConnectors StationConnectors;
+    private readonly LegacyTallLiftRemoval LegacyLifts;
+    private readonly LiftShaftPicking ShaftPicking;
+    private readonly LiftStationPairedDeletion PairedDeletion;
     private readonly TallPipeShaftInstaller PipeShafts;
     private readonly HighFloorBlueprints HighFloorPreviews;
+    private readonly LiveGridNumber GridNumber;
+    private readonly LayerKeyRepeat KeyRepeat;
+    private readonly LayerJumpOnSelect JumpOnSelect;
+    private readonly SpaceCullingBounds CullingBounds;
+    private readonly OverviewLayerParking OverviewParking;
+    private readonly ViewSelectionAction ViewAction;
+    private readonly ActionButtonRows ButtonRows;
     private readonly SavegameAdoption SaveAdoption;
     private readonly RewirerHandle LateWidenerHandle;
     private readonly LayerShaderParamsRefresher ShaderParams;
@@ -85,6 +102,20 @@ public class ExtraBuildLayersMod : IMod
         LiftSystemsHandle = GameRewirers.AddRewirer(new ExtraLiftSystems(logger));
         PipeShafts = new TallPipeShaftInstaller(logger);
         HighFloorPreviews = new HighFloorBlueprints(logger);
+        GridNumber = new LiveGridNumber(logger);
+        CullingBounds = new SpaceCullingBounds(logger);
+        OverviewParking = new OverviewLayerParking(logger);
+        ViewAction = new ViewSelectionAction(logger, ModResources.Locate(logger));
+        ButtonRows = new ActionButtonRows(logger);
+        if (config.LayerKeyRepeatDelay > 0f)
+        {
+            KeyRepeat = new LayerKeyRepeat(config.LayerKeyRepeatDelay, config.OverviewLayerStep, logger);
+        }
+
+        if (config.JumpToSelectedLayer)
+        {
+            JumpOnSelect = new LayerJumpOnSelect(logger);
+        }
 
         if (config.AllowAddingToExistingSaves)
         {
@@ -93,7 +124,24 @@ public class ExtraBuildLayersMod : IMod
         GrantHandle = GameRewirers.AddRewirer(new PendingGrantDrainer(pendingGrants, logger));
         DumpHandle = GameRewirers.AddRewirer(new LayerVisualsDump(logger));
         LiftDumpHandle = GameRewirers.AddRewirer(new LiftGeometryDump(logger));
-        SpaceLiftHandle = GameRewirers.AddRewirer(new ExtraSpaceLiftIslands(logger));
+
+        // Space lifts of any height. Contained: a throw out of a mod constructor is not caught
+        // by ModLoader, and the rest of the mod works without these.
+        try
+        {
+            Stations = new LiftStationIslands(logger, ModResources.Locate(logger));
+            StationConnectors = new LiftStationConnectors(logger);
+            LegacyLifts = new LegacyTallLiftRemoval(logger);
+            ShaftPicking = new LiftShaftPicking(logger);
+            PairedDeletion = new LiftStationPairedDeletion(logger);
+            StationArtHandle = GameRewirers.AddRewirer(new LiftStationArt(logger));
+            StationPlacementHandle = GameRewirers.AddRewirer(new LiftStationPlacementRewirer(logger));
+        }
+        catch (Exception exception)
+        {
+            logger.Exception?.LogException(exception);
+            logger.Error?.Log("Extra Build Layers: lift stations unavailable; space paths climb only as far as vanilla's lift.");
+        }
 
         if (config.RefreshLayerShaderParams)
         {
@@ -127,9 +175,30 @@ public class ExtraBuildLayersMod : IMod
         GameRewirers.RemoveRewirer(LiftDumpHandle);
         GameRewirers.RemoveRewirer(LiftBuildingsHandle);
         GameRewirers.RemoveRewirer(LiftSystemsHandle);
-        GameRewirers.RemoveRewirer(SpaceLiftHandle);
+        if (StationArtHandle.HasValue)
+        {
+            GameRewirers.RemoveRewirer(StationArtHandle.Value);
+        }
+
+        if (StationPlacementHandle.HasValue)
+        {
+            GameRewirers.RemoveRewirer(StationPlacementHandle.Value);
+        }
+
+        StationConnectors?.Dispose();
+        LegacyLifts?.Dispose();
+        ShaftPicking?.Dispose();
+        PairedDeletion?.Dispose();
+        Stations?.Dispose();
         PipeShafts?.Dispose();
         HighFloorPreviews?.Dispose();
+        GridNumber?.Dispose();
+        CullingBounds?.Dispose();
+        OverviewParking?.Dispose();
+        ViewAction?.Dispose();
+        ButtonRows?.Dispose();
+        KeyRepeat?.Dispose();
+        JumpOnSelect?.Dispose();
         SaveAdoption?.Dispose();
         GameRewirers.RemoveRewirer(LateWidenerHandle);
         ShaderParams?.Dispose();

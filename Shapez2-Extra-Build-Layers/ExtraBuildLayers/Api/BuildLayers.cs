@@ -56,9 +56,10 @@ public static class BuildLayers
     public static int ExtraMachineLevels { get; set; }
 
     /// <summary>
-    /// Extra platform layers in space, added above the current topmost one. No known ceiling -
-    /// the layer is a <c>short</c> and the camera height is unbounded - but see DESIGN.md for
-    /// what scales linearly with this number.
+    /// Extra platform layers in space, added above the current topmost one. Clamped so the
+    /// resulting top layer never exceeds <see cref="MaxSpaceLevel"/>; asking for more is logged
+    /// as an error and the excess dropped, never an exception. See DESIGN.md for what scales
+    /// linearly with this number.
     /// </summary>
     public static int ExtraSpaceLevels { get; set; }
 
@@ -90,6 +91,25 @@ public static class BuildLayers
     /// another platform's ground floor. 19 is the last value that does not.
     /// </summary>
     public const int MaxMachineLevel = 19;
+
+    /// <summary>
+    /// The highest space layer this mod will create, as a clamp on the top layer rather than on
+    /// the count requested.
+    ///
+    /// Unlike <see cref="MaxMachineLevel"/> this is a **safety margin, not a coordinate limit**.
+    /// The coordinate limit is higher - a tile's <c>z</c> is a <c>short</c> holding
+    /// <c>layer * 20 + floor</c>, so it runs out at layer 1637. Nothing this mod makes costs
+    /// memory per layer any more (the grid's number is redrawn for the layer on screen, not
+    /// stored for every layer), so what is left is:
+    /// <list type="bullet">
+    /// <item>Layer numbers are drawn for up to three digits. Two have been seen in game; three
+    /// shrink to fit and have not; four would not fit at all.</item>
+    /// <item>Tall space lifts are created for every span up to the top layer, so there are
+    /// proportionally more of them, each one taller. Cheap per lift, never measured in bulk.</item>
+    /// </list>
+    /// It is a constant so a dependent mod can see the ceiling before asking.
+    /// </summary>
+    public const int MaxSpaceLevel = 999;
 
     /// <summary>
     /// How many building layers can carry a **port to another platform**. Three - layers 0, 1

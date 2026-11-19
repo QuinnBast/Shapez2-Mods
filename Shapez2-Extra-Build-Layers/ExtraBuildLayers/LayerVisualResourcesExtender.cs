@@ -52,6 +52,17 @@ internal class LayerVisualResourcesExtender : IBuildingsRewirer
     {
         LayerVisualsDump.Theme = theme;
 
+        // Not behind the ramp switch: a stand hanging in the air is a geometry fault, not a
+        // shading choice.
+        try
+        {
+            TallStands.Extend(theme, Logger);
+        }
+        catch (Exception exception)
+        {
+            Logger.Exception?.LogException(exception);
+        }
+
         if (!Enabled)
         {
             Logger.Info?.Log("Extra Build Layers: layer ramp extension disabled by config.");
@@ -84,11 +95,9 @@ internal class LayerVisualResourcesExtender : IBuildingsRewirer
 
         try
         {
-            // Island layers run 0..TopSpaceLevel, one indicator slice each. Current is set by
-            // LayerScenarioExtender, whose scenario rewirer runs before any buildings rewirer
-            // inside GameMode.From; the fallback assumes vanilla's three plus the configured extra.
-            int topSpace = BuildLayers.Current?.TopSpaceLevel ?? 2 + BuildLayers.ExtraSpaceLevels;
-            LayerNumberArt.ExtendGridIndicator(theme, topSpace + 1, Logger);
+            // Independent of the layer count: the grid's last slice is redrawn to whichever
+            // layer is on screen, by LiveGridNumber.
+            LayerNumberArt.PrepareGridIndicator(theme, Logger);
         }
         catch (Exception exception)
         {

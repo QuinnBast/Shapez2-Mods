@@ -5,13 +5,17 @@ Builds the Workshop preview image.
     python Steam/make-promo.py
 
 Steam shows the grid thumbnail at well under 150 pixels, where a screenshot of a factory is grey
-mush. So this is the mod's idea drawn plainly instead: a stack of platform floors, far taller than
-the game's three, each one numbered, with a single lift running through all of them. The stack
-says "more layers", the numbers say "and they are labelled", the lift says "and things climb it" -
-the three things the mod adds that a player would notice.
+mush. So this draws the one picture every player already reads as "layers": the game's own layer
+selector from the HUD, a diamond for the top layer over a chevron per layer below it, stretched
+far past the three it has in vanilla. One chevron is lit, as the selector lights the layer being
+viewed, with the number readout the mod puts beside it.
 
-Same conventions as the other mods' previews: 640 square, drawn at 4x and downsampled because PIL
-antialiases nothing, Segoe UI from the Windows fonts folder with a fallback rather than a failure.
+The two sprites are read out of the game's resources.assets at run time rather than committed,
+so the repo carries no game art. That needs UnityPy (pip install UnityPy) and the game install,
+found from SPZ2_PATH (which points at the Managed folder) or the default Steam path.
+
+Same conventions as the other mods' previews: 640 square, drawn at 4x and downsampled, Segoe UI
+from the Windows fonts folder with a fallback rather than a failure.
 """
 
 import os
@@ -23,27 +27,43 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SIZE = 640
 SS = 4
 
-SPACE_TOP = (10, 13, 24)
-SPACE_BOTTOM = (26, 36, 60)
-GRID = (96, 170, 235)
-SLAB = (40, 88, 140)
-AMBER = (255, 176, 64)
-AMBER_DARK = (196, 116, 30)
+SPACE_TOP = (12, 16, 30)
+SPACE_BOTTOM = (30, 40, 66)
 INK = (238, 244, 252)
 MUTED = (150, 168, 196)
-
-# The game's own quadrant colours, for the shapes riding the lift.
-SHAPES = [(238, 51, 51), (66, 165, 245), (102, 187, 106), (232, 238, 246)]
+ACCENT = (255, 160, 40)      # the game's orange, as on its layer unlock icon
 
 BLACK_FONT = r"C:\Windows\Fonts\seguibl.ttf"   # Segoe UI Black
 SEMI_FONT = r"C:\Windows\Fonts\seguisb.ttf"    # Segoe UI Semibold
 
-FLOORS = 13            # 0..12: the default +10 on vanilla's three
-CENTRE_X = 0.50
-BOTTOM_Y = 0.635       # centre of the lowest slab
-TOP_Y = 0.165          # centre of the highest slab
-HALF_W = 0.24          # half the slab's width
-LIFT_X = 0.545         # where the lift pierces the stack
+LAYERS = 19              # chevrons below the diamond: 19 is the highest floor a platform can have
+SELECTED = 12            # which chevron is lit, counted from the bottom
+STACK_X = 0.36           # centre of the selector column
+STACK_TOP = 0.05
+STACK_BOTTOM = 0.74
+SPRITE_W = 0.30          # sprite width as a fraction of the image
+
+
+def game_data():
+    path = os.environ.get("SPZ2_PATH", "")
+    if path.lower().rstrip(r"\/").endswith("managed"):
+        path = os.path.dirname(path.rstrip(r"\/"))
+    if not path:
+        path = r"C:\Program Files (x86)\Steam\steamapps\common\shapez 2\shapez 2_Data"
+    return path
+
+
+def load_sprites(*names):
+    import UnityPy
+    env = UnityPy.load(os.path.join(game_data(), "resources.assets"))
+    found = {}
+    for obj in env.objects:
+        if obj.type.name == "Sprite" and obj.peek_name() in names:
+            found[obj.peek_name()] = obj.read().image.convert("RGBA")
+    missing = set(names) - set(found)
+    if missing:
+        raise SystemExit("sprites not found in resources.assets: %s" % ", ".join(sorted(missing)))
+    return found
 
 
 def font(path, size):
@@ -69,7 +89,25 @@ def lerp(a, b, t):
     return tuple(int(round(x + (y - x) * t)) for x, y in zip(a, b))
 
 
+def tinted(sprite, colour, alpha):
+    """The HUD sprites are white with a dark rim; multiplying keeps the rim and recolours the face."""
+    r, g, b, a = sprite.split()
+    out = Image.merge("RGBA", (
+        r.point(lambda v: v * colour[0] // 255),
+        g.point(lambda v: v * colour[1] // 255),
+        b.point(lambda v: v * colour[2] // 255),
+        a.point(lambda v: v * alpha // 255),
+    ))
+    return out
+
+
+def scaled(sprite, width):
+    height = round(sprite.height * width / sprite.width)
+    return sprite.resize((width, height), Image.LANCZOS)
+
+
 def main():
+    sprites = load_sprites("TopLayer", "SubLayer")
     n = SIZE * SS
     image = Image.new("RGBA", (n, n))
     draw = ImageDraw.Draw(image, "RGBA")
@@ -77,81 +115,52 @@ def main():
     for y in range(n):
         draw.line([(0, y), (n, y)], fill=lerp(SPACE_TOP, SPACE_BOTTOM, y / n) + (255,))
 
-    cx = CENTRE_X * n
-    hw = HALF_W * n
-    hh = hw * 0.5      # isometric: a diamond twice as wide as it is tall
-    lift_x = LIFT_X * n
-    lift_half = 0.022 * n
-    step = (BOTTOM_Y - TOP_Y) * n / (FLOORS - 1)
+    width = int(SPRITE_W * n)
+    top = scaled(sprites["TopLayer"], width)
+    sub = scaled(sprites["SubLayer"], width)
+    cx = STACK_X * n
 
-    def slab_y(floor):
-        return BOTTOM_Y * n - floor * step
+    # Slots from the top: the diamond, then the chevrons down to layer 0.
+    slots = LAYERS + 1
+    step = (STACK_BOTTOM - STACK_TOP) * n / (slots - 1)
+    lit_y = None
+    for slot in range(slots):
+        layer = LAYERS - slot          # the diamond is the top layer, LAYERS
+        y = STACK_TOP * n + slot * step
+        sprite = top if slot == 0 else sub
+        if layer == SELECTED:
+            colour, alpha = ACCENT, 255
+            lit_y = y
+        else:
+            # Fade towards the bottom, so the stack reads as rising rather than as a list.
+            colour, alpha = INK, int(255 * (0.35 + 0.65 * (layer / LAYERS)))
+        piece = tinted(sprite, colour, alpha)
+        image.alpha_composite(piece, (int(cx - piece.width / 2), int(y - piece.height / 2)))
 
-    label = font(SEMI_FONT, int(0.027 * n))
-
-    def diamond(floor):
-        y = slab_y(floor)
-        return [(cx, y - hh), (cx + hw, y), (cx, y + hh), (cx - hw, y)]
-
-    def fade(floor):
-        # Lower floors sit further into the dark, so the eye goes up the stack.
-        return 0.35 + 0.65 * (floor / (FLOORS - 1))
-
-    # Three passes. Fills first, faint, so they tint what lies behind without hiding it. Then the
-    # lift over the fills. Then every slab's edges over the lift, so each floor's outline crosses
-    # it and it reads as running *through* the floors rather than standing in front of them.
-    for floor in range(FLOORS):
-        alpha = 150 if floor == FLOORS - 1 else int(55 * fade(floor))
-        draw.polygon(diamond(floor), fill=SLAB + (alpha,))
-
-    top = slab_y(FLOORS - 1)
-    bottom = slab_y(0) + hh * 0.5
-    draw.rectangle([lift_x - lift_half, top, lift_x + lift_half, bottom], fill=AMBER_DARK + (255,))
-    draw.rectangle([lift_x - lift_half * 0.4, top, lift_x + lift_half * 0.4, bottom], fill=AMBER + (255,))
-
-    for i, floor in enumerate(range(1, FLOORS - 1, 2)):
-        y = slab_y(floor) - step * 0.5
-        r = lift_half * 0.95
-        draw.rounded_rectangle([lift_x - r, y - r, lift_x + r, y + r], radius=r * 0.35,
-                               fill=SHAPES[i % len(SHAPES)] + (255,))
-
-    for floor in range(FLOORS):
-        d = diamond(floor)
-        y = slab_y(floor)
-        f = fade(floor)
-        top_floor = floor == FLOORS - 1
-
-        # A few grid lines across the top face, as the game's floor planes have. Only the top
-        # floor's are visible; on the rest they would just be noise.
-        if top_floor:
-            for k in (1, 2, 3):
-                t = k / 4
-                draw.line([lerp(d[0], d[3], t), lerp(d[1], d[2], t)], fill=GRID + (90,), width=max(1, int(0.0014 * n)))
-                draw.line([lerp(d[0], d[1], t), lerp(d[3], d[2], t)], fill=GRID + (90,), width=max(1, int(0.0014 * n)))
-
-        edge = AMBER if top_floor else GRID
-        width = int(0.0045 * n) if top_floor else int(0.0026 * n)
-        draw.line(d + [d[0]], fill=edge + (int(255 * f),), width=width, joint="curve")
-
-        text = "%02d" % floor
-        tw = draw.textlength(text, font=label)
-        draw.text((cx - hw - tw - 0.02 * n, y - 0.018 * n), text, font=label,
-                  fill=(AMBER if top_floor else INK) + (int(255 * f),))
+    # The readout the mod shows beside the selector instead of a tower of handles.
+    big = font(BLACK_FONT, int(0.20 * n))
+    small = font(SEMI_FONT, int(0.065 * n))
+    number = "%d" % SELECTED
+    nx = cx + width * 0.62
+    bbox = draw.textbbox((0, 0), number, font=big)
+    draw.text((nx, lit_y - (bbox[1] + bbox[3]) / 2), number, font=big, fill=ACCENT + (255,))
+    nw = draw.textlength(number, font=big)
+    draw.text((nx + nw + 0.02 * n, lit_y - 0.005 * n), "/ %d" % LAYERS, font=small, fill=MUTED + (255,))
 
     out = image.convert("RGB").resize((SIZE, SIZE), Image.LANCZOS)
     draw = ImageDraw.Draw(out)
 
     title = font(BLACK_FONT, 46)
-    sub = font(SEMI_FONT, 24)
+    sub_face = font(SEMI_FONT, 24)
 
     text = "EXTRA BUILD LAYERS"
     tracking = 3
-    width = tracked_width(draw, text, title, tracking)
-    tracked(draw, ((SIZE - width) / 2, SIZE * 0.80), text, title, INK, tracking)
+    w = tracked_width(draw, text, title, tracking)
+    tracked(draw, ((SIZE - w) / 2, SIZE * 0.80), text, title, INK, tracking)
 
     text = "taller platforms, a taller sky"
-    width = draw.textlength(text, font=sub)
-    draw.text(((SIZE - width) / 2, SIZE * 0.905), text, font=sub, fill=MUTED)
+    w = draw.textlength(text, font=sub_face)
+    draw.text(((SIZE - w) / 2, SIZE * 0.905), text, font=sub_face, fill=MUTED)
 
     path = os.path.join(HERE, "preview.png")
     out.save(path)

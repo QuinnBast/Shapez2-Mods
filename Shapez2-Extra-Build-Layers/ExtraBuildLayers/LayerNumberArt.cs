@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using ILogger = Core.Logging.ILogger;
@@ -22,7 +24,8 @@ namespace QuinnBast.Shapez2.ExtraBuildLayers;
 /// one - hardware clamps the array index - which is exactly "every layer above 2 says 2".</item>
 /// </list>
 ///
-/// So the fix is more texture: a longer array, and one floor texture per floor. They are made
+/// So the fix is more texture: one floor texture per floor, and for the grid one slice redrawn to
+/// whichever layer is on screen (see <see cref="PrepareGridIndicator"/>). They are made
 /// here from the vanilla ones rather than authored, because the art is simple enough to measure:
 /// dumped, every one of these is **red-only** (G and B are zero everywhere, alpha opaque) - a mask
 /// the shader tints - with digits in a thin rounded face. Each new image is the vanilla one with
@@ -341,13 +344,46 @@ internal static class LayerNumberArt
 
     private static Texture2DArray GridArray;
     private static Texture2DArray GridOriginal;
+    private static GridBackdrop GridDigitBackdrop;
+
+    /// <summary>The number the clamp slot currently shows; <see cref="GridBlank"/> while one is being drawn.</summary>
+    private static int GridShowing = -1;
+
+    private const int GridBlank = -2;
+
+    /// <summary>The layer the player is looking at, which a finished background draw checks before showing itself.</summary>
+    private static int GridWanted = -1;
 
     /// <summary>
-    /// Makes the grid's layer-indicator array at least <paramref name="slices"/> long and points
-    /// every loaded material that used the vanilla one at it. Existing slices are copied
-    /// unchanged; new ones get their number painted over slice 0's backdrop.
+    /// Finished and in-flight slices by layer, each a full mip chain ready to upload. Touched only
+    /// on the main thread: the draws run on the pool, but their results land here through
+    /// <see cref="MainThread"/>.
     /// </summary>
-    public static void ExtendGridIndicator(VisualThemeBaseResources theme, int slices, ILogger logger)
+    private static readonly Dictionary<int, Task<byte[][]>> GridJobs = new Dictionary<int, Task<byte[][]>>();
+
+    /// <summary>Jobs further than this from the viewed layer are dropped; about 1.4 MB each.</summary>
+    private const int GridKeepWithin = 4;
+
+    private static byte[][] GridBlankMips;
+    private static TaskScheduler MainThread;
+
+    /// <summary>
+    /// Replaces the grid's layer-indicator array with a same-sized copy whose **last slice is
+    /// rewritten to the layer being viewed**, and points every loaded material at it.
+    ///
+    /// One slice per layer is not needed, because the grid is only ever drawn for one layer:
+    /// <c>HUDIslandGridVisualization.Draw</c> forces every chunk it draws to
+    /// <c>Viewport.IslandLayer</c>, and <c>IslandsPreviewDrawer</c> draws at that layer too. And
+    /// the array index past the end is clamped by the GPU, which used to be the bug - every layer
+    /// above 2 read slice 2 - and is now the mechanism: every layer at or above the last slice
+    /// reads it, so it only has to say the right number for whichever one is on screen.
+    /// <see cref="ShowGridLayer"/> keeps it saying that.
+    ///
+    /// This replaced one generated slice per layer, at 1024² R8 with mips - about 1.4 MB each -
+    /// which made the layer count a memory cost. Now it costs nothing per layer: three slices
+    /// whatever the count, and one slice redrawn per layer change, off the main thread (see <see cref="ShowGridLayer"/>).
+    /// </summary>
+    public static void PrepareGridIndicator(VisualThemeBaseResources theme, ILogger logger)
     {
         Texture2DArray original = GridOriginal ?? FindGridIndicator(theme);
         if (original == null)
@@ -358,22 +394,20 @@ internal static class LayerNumberArt
 
         GridOriginal = original;
 
-        if (GridArray != null && GridArray.depth >= slices)
+        if (GridArray != null)
         {
+            // Made in an earlier session. The theme's materials are shared assets and keep it, but
+            // anything loaded since may still hold the vanilla array.
             Retarget(original, GridArray);
-            return;
-        }
-
-        if (original.depth >= slices)
-        {
             return;
         }
 
         int width = original.width;
         int height = original.height;
-        byte[][] images = new byte[slices][];
+        int depth = original.depth;
+        byte[][] images = new byte[depth][];
 
-        for (int i = 0; i < original.depth; i++)
+        for (int i = 0; i < depth; i++)
         {
             images[i] = ReadSlice(original, i, width, height);
         }
@@ -382,21 +416,13 @@ internal static class LayerNumberArt
         if (backdrop == null)
         {
             logger.Error?.Log("Extra Build Layers: could not find the digit in the grid indicator; space layers above " +
-                              (original.depth - 1) + " keep showing " + (original.depth - 1) + ".");
+                              (depth - 1) + " keep showing " + (depth - 1) + ".");
             return;
         }
 
         logger.Info?.Log("Extra Build Layers: grid digit measured - " + backdrop);
 
-        for (int i = 0; i < slices; i++)
-        {
-            if (images[i] == null)
-            {
-                images[i] = backdrop.Render(i.ToString(), width, height);
-            }
-        }
-
-        Texture2DArray extended = new Texture2DArray(width, height, slices, TextureFormat.R8, mipChain: true, linear: true)
+        Texture2DArray live = new Texture2DArray(width, height, depth, TextureFormat.R8, mipChain: true, linear: true)
         {
             name = Prefix + original.name,
             wrapMode = original.wrapMode,
@@ -405,23 +431,168 @@ internal static class LayerNumberArt
             mipMapBias = original.mipMapBias,
         };
 
-        for (int i = 0; i < slices; i++)
+        for (int i = 0; i < depth; i++)
         {
-            extended.SetPixelData(FlipRows(images[i], width, height), 0, i);
+            live.SetPixelData(FlipRows(images[i], width, height), 0, i);
         }
 
-        extended.Apply(updateMipmaps: true, makeNoLongerReadable: true);
+        // Kept readable: the top slice is rewritten on every layer change, and SetPixelData needs
+        // the CPU copy. Three slices of R8 is a few megabytes.
+        live.Apply(updateMipmaps: true, makeNoLongerReadable: false);
 
-        if (GridArray != null)
-        {
-            UnityEngine.Object.Destroy(GridArray);
-        }
+        GridArray = live;
+        GridDigitBackdrop = backdrop;
+        GridShowing = depth - 1;
+        GridJobs.Clear();
 
-        GridArray = extended;
-        int retargeted = Retarget(original, extended);
+        int mips = live.mipmapCount;
+        byte[][] topOriginal = MipChain(FlipRows(images[depth - 1], width, height), width, height, mips);
+        GridJobs[depth - 1] = Task.FromResult(topOriginal);
+        GridBlankMips = MipChain(FlipRows(backdrop.Render(string.Empty, width, height), width, height), width, height, mips);
+
+        // Unity installs a synchronization context on the main thread, and this runs there
+        // (inside GameMode.From). Without one, draws fall back to running inline.
+        MainThread = SynchronizationContext.Current != null ? TaskScheduler.FromCurrentSynchronizationContext() : null;
+
+        int retargeted = Retarget(original, live);
         logger.Info?.Log(
-            "Extra Build Layers: grid layer indicator " + original.depth + " -> " + slices + " slices, on " +
-            retargeted + " material(s).");
+            "Extra Build Layers: grid layer indicator now numbered on demand (" + depth + " slices, the last " +
+            "redrawn per layer), on " + retargeted + " material(s).");
+    }
+
+    /// <summary>
+    /// Makes the grid read <paramref name="layer"/>. Must run on the main thread.
+    ///
+    /// Drawing a number is not cheap - every pixel of each digit's box is measured against every
+    /// stroke of the glyph, then a mip chain is built - and doing it inline here was a visible
+    /// hitch on every layer change. So it runs on the thread pool, the result is uploaded on the
+    /// main thread when it lands, and the layers either side of the one on screen are drawn ahead,
+    /// so stepping one layer at a time finds its number already waiting. A jump to a layer not yet
+    /// drawn shows the backdrop with no number for the moment it takes.
+    /// </summary>
+    public static void ShowGridLayer(int layer)
+    {
+        if (GridArray == null || GridDigitBackdrop == null)
+        {
+            return;
+        }
+
+        int slot = GridArray.depth - 1;
+        int wanted = Math.Max(layer, slot);
+        GridWanted = wanted;
+
+        if (wanted != GridShowing)
+        {
+            Task<byte[][]> job = Job(wanted);
+            if (job.Status == TaskStatus.RanToCompletion)
+            {
+                Upload(wanted, job.Result);
+            }
+            else if (MainThread != null)
+            {
+                Upload(GridBlank, GridBlankMips);
+                job.ContinueWith(done =>
+                {
+                    if (done.Status == TaskStatus.RanToCompletion && GridWanted == wanted && GridArray != null)
+                    {
+                        Upload(wanted, done.Result);
+                    }
+                }, MainThread);
+            }
+        }
+
+        // Ahead of the player, and forget what is far behind.
+        int top = Math.Max(slot, BuildLayers.Current?.TopSpaceLevel ?? slot);
+        for (int near = wanted - 2; near <= wanted + 2; near++)
+        {
+            if (near >= slot && near <= top)
+            {
+                Job(near);
+            }
+        }
+
+        List<int> far = null;
+        foreach (KeyValuePair<int, Task<byte[][]>> entry in GridJobs)
+        {
+            if (entry.Key != slot && Math.Abs(entry.Key - wanted) > GridKeepWithin && entry.Value.IsCompleted)
+            {
+                (far ??= new List<int>()).Add(entry.Key);
+            }
+        }
+
+        if (far != null)
+        {
+            foreach (int key in far)
+            {
+                GridJobs.Remove(key);
+            }
+        }
+    }
+
+    private static Task<byte[][]> Job(int layer)
+    {
+        if (GridJobs.TryGetValue(layer, out Task<byte[][]> existing) && !existing.IsFaulted)
+        {
+            return existing;
+        }
+
+        GridBackdrop backdrop = GridDigitBackdrop;
+        int width = GridArray.width;
+        int height = GridArray.height;
+        int mips = GridArray.mipmapCount;
+        Func<byte[][]> draw = () =>
+            MipChain(FlipRows(backdrop.Render(layer.ToString(), width, height), width, height), width, height, mips);
+
+        Task<byte[][]> job = MainThread != null ? Task.Run(draw) : Task.FromResult(draw());
+        GridJobs[layer] = job;
+        return job;
+    }
+
+    private static void Upload(int showing, byte[][] mips)
+    {
+        int slot = GridArray.depth - 1;
+        for (int level = 0; level < mips.Length; level++)
+        {
+            GridArray.SetPixelData(mips[level], level, slot);
+        }
+
+        // Mips are already in the data; only the upload remains.
+        GridArray.Apply(updateMipmaps: false, makeNoLongerReadable: false);
+        GridShowing = showing;
+    }
+
+    /// <summary>
+    /// A box-filtered mip chain of <paramref name="levels"/> levels, sized as Unity sizes them
+    /// (each dimension halved, never below 1). Built here rather than by <c>Apply(true)</c>
+    /// because that runs on the main thread, for every slice of the array.
+    /// </summary>
+    private static byte[][] MipChain(byte[] level0, int width, int height, int levels)
+    {
+        byte[][] chain = new byte[levels][];
+        chain[0] = level0;
+        int w = width, h = height;
+        for (int level = 1; level < levels; level++)
+        {
+            int nw = Math.Max(1, w / 2), nh = Math.Max(1, h / 2);
+            byte[] src = chain[level - 1];
+            byte[] dst = new byte[nw * nh];
+            for (int y = 0; y < nh; y++)
+            {
+                int y0 = Math.Min(h - 1, y * 2), y1 = Math.Min(h - 1, y * 2 + 1);
+                for (int x = 0; x < nw; x++)
+                {
+                    int x0 = Math.Min(w - 1, x * 2), x1 = Math.Min(w - 1, x * 2 + 1);
+                    int sum = src[y0 * w + x0] + src[y0 * w + x1] + src[y1 * w + x0] + src[y1 * w + x1];
+                    dst[y * nw + x] = (byte)((sum + 2) / 4);
+                }
+            }
+
+            chain[level] = dst;
+            w = nw;
+            h = nh;
+        }
+
+        return chain;
     }
 
     private static Texture2DArray FindGridIndicator(VisualThemeBaseResources theme)

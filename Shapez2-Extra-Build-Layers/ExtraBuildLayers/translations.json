@@ -14,7 +14,22 @@
     "extra-build-layers.space-level.description-range": "Place platforms on <gl>further layers</gl> in space, up to level <to/>.",
     "extra-build-layers.space-level.grant-all": "All Space Levels",
     "extra-build-layers.space-level.mechanic.title": "Additional Space Level",
-    "extra-build-layers.space-level.mechanic.description": "Raises the <gl>platform layer</gl> limit in space."
+    "extra-build-layers.space-level.mechanic.description": "Raises the <gl>platform layer</gl> limit in space.",
+    "extra-build-layers.lift-station.belt-entry.title": "Space Belt Lift Entry",
+    "extra-build-layers.lift-station.belt-entry.description": "The bottom of a tall <gl>space belt</gl> climb. Drag a space belt up or down several space levels and an entry and exit are placed for you.",
+    "extra-build-layers.lift-station.belt-exit.title": "Space Belt Lift Exit",
+    "extra-build-layers.lift-station.belt-exit.description": "The top of a tall <gl>space belt</gl> climb. Drag a space belt up or down several space levels and an entry and exit are placed for you.",
+    "extra-build-layers.lift-station.pipe-entry.title": "Space Pipe Lift Entry",
+    "extra-build-layers.lift-station.pipe-entry.description": "The bottom of a tall <gl>space pipe</gl> climb. Drag a space pipe up or down several space levels and an entry and exit are placed for you.",
+    "extra-build-layers.lift-station.pipe-exit.title": "Space Pipe Lift Exit",
+    "extra-build-layers.lift-station.pipe-exit.description": "The top of a tall <gl>space pipe</gl> climb. Drag a space pipe up or down several space levels and an entry and exit are placed for you.",
+    "extra-build-layers.lift-station.jump-to-exit": "View Exit",
+    "extra-build-layers.lift-station.jump-to-entry": "View Entry",
+    "extra-build-layers.view-selection.title": "View",
+    "extra-build-layers.view-selection.description": "Move the camera to the selection, on its layer.",
+    "keybindings.extra-build-layers": "Extra Build Layers",
+    "keybinding.extra-build-layers.view-selection": "View selection",
+    "keybinding.extra-build-layers.view-selection.description": "Moves the camera to the selected platform or building, on its layer."
   },
   "ja-JP": {
     "research.category.ExtraBuildLayers": "建築レイヤー",

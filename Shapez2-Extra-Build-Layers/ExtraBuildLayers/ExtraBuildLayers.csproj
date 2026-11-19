@@ -1,5 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+    <!-- Toolbar placement for the lift stations; compiled in as source, see the props file. -->
+    <Import Project="..\..\Shapez2-Toolbar-Kit\ToolbarKit.props"/>
+
     <PropertyGroup>
         <TargetFramework>netstandard2.1</TargetFramework>
         <Nullable>disable</Nullable>
@@ -77,6 +80,18 @@
             <HintPath>$(SPZ2_PATH)\Game.Core.dll</HintPath>
             <Private>False</Private>
         </Reference>
+        <Reference Include="Game.Core.Map">
+            <HintPath>$(SPZ2_PATH)\Game.Core.Map.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="Game.Core.Map.Layout">
+            <HintPath>$(SPZ2_PATH)\Game.Core.Map.Layout.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="Game.Core.Map.Layout.Model">
+            <HintPath>$(SPZ2_PATH)\Game.Core.Map.Layout.Model.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
         <Reference Include="Game.Core.Modding">
             <HintPath>$(SPZ2_PATH)\Game.Core.Modding.dll</HintPath>
             <Private>False</Private>
@@ -138,6 +153,10 @@
             <Private>False</Private>
         </Reference>
         <!-- Image, LayoutElement and RectTransform, for the layer strip rescale -->
+        <Reference Include="UnityEngine.TextRenderingModule">
+            <HintPath>$(SPZ2_PATH)\UnityEngine.TextRenderingModule.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
         <Reference Include="UnityEngine.UI">
             <HintPath>$(SPZ2_PATH)\UnityEngine.UI.dll</HintPath>
             <Private>False</Private>
@@ -208,6 +227,10 @@
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
         <None Update="translations.json">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <!-- The lift station toolbar icon is loaded from disk at runtime by FileTextureLoader. -->
+        <None Update="Resources\**\*">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
         <!-- Copied as .example so a rebuild never overwrites a config the player edited. -->

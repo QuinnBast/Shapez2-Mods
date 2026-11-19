@@ -56,6 +56,73 @@ internal static class TallBlueprints
         VisualThemeBaseResources theme,
         ILogger logger)
     {
+        IBuildingDrawData stacked = StackMeshes(id, existing, single, span, connectors, meshCache, theme, logger);
+
+        // Outside the mesh work, so a lift whose meshes could not be stacked can still be clicked.
+        int direction = connectors.TileBounds.Min.z < 0 ? -1 : 1;
+        return WithTallColliders(stacked, span, direction);
+    }
+
+    /// <summary>
+    /// Stretches the stock lift's collision boxes over the whole shaft.
+    ///
+    /// Clicking a building is <c>ScreenUtils.TryFindBuildingAtCursor</c>: it walks the tiles under
+    /// the cursor, finds the building occupying one, and then accepts it only if the cursor ray
+    /// hits one of <c>IBuildingDrawData.Colliders</c>. A tall lift occupies every tile of its
+    /// shaft, so the first step finds it on any floor - but the boxes were copied from the
+    /// two-layer lift, so the second step only succeeds on its bottom two floors.
+    ///
+    /// Each box grows by the extra height in the lift's direction - up for an up lift, down for a
+    /// down one, whose shaft runs below its input - one local unit per layer. Every box is grown,
+    /// not only the topmost: a box that becomes taller than it needs to be costs nothing but a
+    /// slightly more generous click target.
+    /// </summary>
+    private static IBuildingDrawData WithTallColliders(IBuildingDrawData drawData, int span, int direction)
+    {
+        int extra = span - 2;
+        if (extra <= 0 || drawData.Colliders is not { Length: > 0 } colliders)
+        {
+            return drawData;
+        }
+
+        CollisionBox[] tall = new CollisionBox[colliders.Length];
+        for (int i = 0; i < colliders.Length; i++)
+        {
+            CollisionBox box = colliders[i];
+            LocalVector centre = new LocalVector(
+                box.Center_L.x, box.Center_L.y, box.Center_L.z + direction * extra / 2f);
+            LocalDimension size = new LocalDimension(
+                box.Dimensions_L.x, box.Dimensions_L.y, box.Dimensions_L.z + extra);
+
+            // Not mirrored again: Center_L is already the mirrored centre for a mirrored variant.
+            tall[i] = new CollisionBox(centre, size);
+        }
+
+        // Rebuilt, not mutated, and nothing disposed - the same rule as for the stacked meshes.
+        return new BuildingDrawData(
+            drawData.RenderVoidBelow,
+            drawData.MainMeshPerLayer,
+            drawData.IsolatedBlueprintMesh,
+            drawData.CombinedBlueprintMesh,
+            drawData.PreviewMesh,
+            drawData.GlassMesh,
+            tall,
+            drawData.CustomDrawData,
+            drawData.HasCustomOverviewMesh,
+            drawData.CustomOverviewMesh,
+            drawData.SimulationRendererDrawsMainMesh);
+    }
+
+    private static IBuildingDrawData StackMeshes(
+        BuildingDefinitionId id,
+        IBuildingDrawData existing,
+        ILODMesh single,
+        int span,
+        IBuildingConnectorData connectors,
+        IMeshCache meshCache,
+        VisualThemeBaseResources theme,
+        ILogger logger)
+    {
         ILODMesh body = existing.MainMeshPerLayer is { Length: > 0 } ? existing.MainMeshPerLayer[0] : null;
         if (body == null || existing.IsolatedBlueprintMesh == null || meshCache == null ||
             TallShaft.ExtraBodies(span) == 0 && !TallShaft.NeedsCap(span))

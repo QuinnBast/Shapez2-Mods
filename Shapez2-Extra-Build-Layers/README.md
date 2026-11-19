@@ -4,12 +4,16 @@ More floors inside every platform, and a much taller stack of platforms in space
 
 | | Default | |
 |---|---|---|
-| **Machine levels** | +10 | building layers inside every platform |
-| **Space levels** | +10 | platform layers above the current top one |
+| **Machine levels** | +17 | building layers inside every platform — floors 0-19, all there is room for |
+| **Space levels** | +20 | platform layers above the current top one |
 
-Both are configurable. Space levels have no known engine ceiling — 30, 40, 50 are the point of
-the mod. Machine levels are hard-capped at 19 total, and only the bottom three can carry a port
-to another platform; see [The one thing to know about tall platforms](#the-one-thing-to-know-about-tall-platforms).
+Both are configurable. Machine levels are hard-capped at floor 19 — a 20th floor would be the
+ground floor of the space layer above, because the game encodes both in one coordinate — and only
+the bottom three can carry a port to another platform; see
+[The one thing to know about tall platforms](#the-one-thing-to-know-about-tall-platforms).
+Space levels are capped at layer 999 (`BuildLayers.MaxSpaceLevel`) — a safety margin rather than
+an engine limit: layer numbers are drawn for up to three digits.
+Asking for more, from the config or from another mod, is clamped and logged, never fatal.
 
 What a player gets on top of the raw layers:
 
@@ -67,7 +71,7 @@ Three policies ship:
 
 | Policy | |
 |---|---|
-| `ShopUnlockPolicy` | Buy them, `LayersPerEntry` at a time. Chained and escalating. The default. |
+| `ShopUnlockPolicy` | Buy them, `LayersPerEntry` at a time (100 by default). Chained and escalating. The default. |
 | `GrantedUnlockPolicy` | All of them, no purchase, no research. For sandbox modes and testing. |
 | `NoUnlockPolicy` | Layers exist, nothing unlocks them. For driving the progression yourself. |
 
@@ -147,13 +151,14 @@ Copy `config.example.json` to `config.json` beside the assembly:
 
 | Key | Default | |
 |---|---|---|
-| `ExtraMachineLevels` | `10` | Building layers inside a platform (clamped to 19 total) |
-| `ExtraSpaceLevels` | `10` | Platform layers in space |
+| `ExtraMachineLevels` | `17` | Building layers inside a platform (clamped so the top floor is at most 19) |
+| `ExtraSpaceLevels` | `20` | Platform layers in space (clamped so the top layer is at most 999) |
 | `UnlockPolicy` | `"Shop"` | `Shop`, `Granted` or `None` |
-| `LayersPerShopEntry` | `5` | `1` gives one chained entry per layer |
-| `MachineLevelBaseCost` | `2500` | Research points — rendered ×100, so this is "250k" |
+| `LayersPerShopEntry` | `100` | Layers per purchase; `1` gives one chained entry per layer |
+| `MachineLevelBaseCost` | `2500` | Research points for the first entry — rendered ×100, so this is "250k" |
 | `SpaceLevelBaseCost` | `4000` | |
 | `CostGrowthFactor` | `1.6` | Per shop entry |
+| `LayerKeyRepeatDelay` | `1.0` | Seconds a layer key is held before it repeats, speeding up the longer it is held; `0` turns it off |
 | `ShopCategory` | `"ExtraBuildLayers"` | A custom name needs its own translation key |
 | `CompactLayerStrip` | `true` | Rescale the HUD layer strip to fit |
 | `LayerStripMaxHeight` | `420` | Pixels |
@@ -193,11 +198,11 @@ textures and shader globals to `dump/`) and `extrabuildlayers.dump-lifts` (lift 
 
 ## Status
 
-Played at the defaults (+10 / +10): layers unlock from the shop, tall belt
-lifts carry and animate items the full height, space belt and pipe lifts reach the top, floors and
+Played at the earlier defaults (+10 / +10): layers unlock from the shop, tall belt
+lifts carry and animate items the full height in both directions, space belt and pipe lifts reach the top, floors and
 space layers are numbered, previews stay lit on floors 10-12, and the HUD shows the layer number.
 
-Not yet exercised in game: items through a tall **down** lift, tall in-platform **pipes** end to
+Not yet exercised in game: the current defaults (+17 / +20), tall in-platform **pipes** end to
 end, a save/reload with items mid-lift, adding the mod to a save that never had it (the
 `SavegameAdoption` path), counts far from the defaults, and a second mod using the API.
 

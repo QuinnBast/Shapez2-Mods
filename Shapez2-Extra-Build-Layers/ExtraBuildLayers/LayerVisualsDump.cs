@@ -50,11 +50,39 @@ internal sealed class LayerVisualsDump : IConsoleRewirer
                 context.Output?.Invoke(report);
                 Logger.Info?.Log(report);
             });
+
+            // For the "only visible from straight above at high layers" report: the camera and
+            // what the last frame's culling kept on the viewed layer. Run it at layer 0 and at a
+            // high layer with the same camera angle, and compare.
+            console.Register("extrabuildlayers.dump-view", context =>
+            {
+                string report = DumpView();
+                context.Output?.Invoke(report);
+                Logger.Info?.Log(report);
+            });
         }
         catch (Exception exception)
         {
             Logger.Exception?.LogException(exception);
         }
+    }
+
+    private static string DumpView()
+    {
+#pragma warning disable CS0618 // A console command has nothing to inject.
+        Viewport viewport = StaticGameCoreAccessor.HasInstance() ? StaticGameCoreAccessor.G.Viewport : null;
+#pragma warning restore CS0618
+        if (viewport == null)
+        {
+            return "Extra Build Layers: no session.";
+        }
+
+        Camera camera = viewport.MainCamera;
+        return "Extra Build Layers view: island layer " + viewport.IslandLayer + ", building layer " +
+               viewport.BuildingLayer + ", zoom " + viewport.Zoom + ", height " + viewport.Height +
+               ", camera at " + (camera != null ? camera.transform.position + " pitch " + camera.transform.eulerAngles.x +
+                                                  " near " + camera.nearClipPlane + " far " + camera.farClipPlane : "none") +
+               "\n  last cull: " + LiftShaftRenderer.LastCullSummary;
     }
 
     private string Dump()

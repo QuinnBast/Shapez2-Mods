@@ -185,6 +185,16 @@ Verified to follow `MaxBuildingLayer` rather than a constant:
 
 ## What scales with space levels, and what does not
 
+Space levels are clamped so the top one is at most `BuildLayers.MaxSpaceLevel` (999), in
+`LayerRegistrar.AddSpaceLevels`, logged as an error and never thrown, the same way machine levels
+are clamped to 19. Unlike 19 it is not a coordinate limit: a tile's `z` is a `short` holding
+`layer * 20 + floor`, so the real ceiling is layer 1637. 999 is where the layer numbers run out of
+room - they are drawn for up to three digits. The other thing that grows is the tall space lifts,
+one set per span up to the top layer.
+
+It was 99 while the grid numbers cost a 1.4 MB texture slice per layer. They no longer cost
+anything per layer - see "Space grid numbers are drawn for the layer on screen" below.
+
 Everything below is driven by the mode and grows on its own:
 
 | Consumer | Source |
@@ -549,6 +559,28 @@ The floor's "01"/"02" and the space grid's "0"/"1"/"2" are not text and not a un
   four `IslandGridHelperMaterial*`. Three slices; a GPU clamps an array index, so every layer
   past 2 shows slice 2. That is the whole "2 forever" bug.
 
+### Space grid numbers are drawn for the layer on screen
+
+The first fix generated one slice per layer, which made the layer count a memory cost (1024² R8
+with mips is about 1.4 MB a slice). It does not need to: the grid is only ever drawn for **one**
+layer. `HUDIslandGridVisualization.Draw` sets every chunk it draws to `Viewport.IslandLayer`, and
+`IslandsPreviewDrawer` draws at that layer too. So the array stays three slices, and the clamp
+that caused the bug becomes the mechanism - every layer from 2 up reads the last slice, so
+`LiveGridNumber` redraws that one slice whenever the viewed layer changes (postfix on
+`HUDLayersView.UpdateLayersState`, which `HUDIslandLayersView` registers on
+`OnIslandLayerChanged` and `OnNewViewportLoaded`).
+
+Drawing a number inline was a visible hitch on every layer change: the stroke font measures every
+pixel of each digit's box against every segment of the glyph, and `Apply(updateMipmaps: true)`
+rebuilt mips for all three slices on the main thread. So the draw and its mip chain run on the
+thread pool, the upload comes back through the main thread's `SynchronizationContext`, the layers
+two either side of the one on screen are drawn ahead, and a jump to an undrawn layer shows the
+backdrop with no number until it lands.
+
+Floors cannot do the same. `IslandPlayingFieldLayersDrawer.Draw` draws **every** floor plane from
+1 up to the current one, at once, each with its own material, so each floor does need its own
+texture. That is bounded by the 19-floor cap: 17 at 2048² R8 with mips, about 95 MB.
+
 `LayerNumberArt` makes the missing ones at load from the vanilla art: read back through a blit
 into a linear RenderTexture (they are not CPU-readable), the digits rubbed out, new ones stroked
 in by a ten-glyph centre-line font sized from the measured vanilla glyph, uploaded as R8.
@@ -617,3 +649,61 @@ walks the Lift2 group's `Definitions`, which include the tall lifts since they w
 variants of it, so vanilla registered a system for each, ahead of ours. `ExtraLiftSystems` now
 removes every system specialised on a tall lift id before adding its own. A lift saved under the
 old claimant loads empty (`PolymorphicSerializer` skips a mismatched state blob) and works.
+
+## Tall lifts must carry tall colliders
+
+Selecting a building is `ScreenUtils.TryFindBuildingAtCursor`: it walks the tiles under the cursor,
+finds the building occupying one, and accepts it only if the ray hits one of
+`IBuildingDrawData.Colliders`. A stretched lift occupies its whole shaft, so the first step finds it
+on every floor, but colliders copied from the two-layer lift made the second step fail above floor
+1 - a tall lift could only be clicked on its bottom two floors. `TallBlueprints.WithTallColliders`
+grows every box by `span - 2` layers (one local unit each) in the lift's direction. Space lifts
+had the same copy (`IslandCollisionData`, checked by `TryFindIslandAtCursor`) and are grown by 20
+units per extra level in `ExtraSpaceLiftIslands.TallColliders`.
+
+## Stands are theme arrays indexed by height
+
+The supports under belts, pipes and wires are not in the building's mesh. `StaticBuildingMeshBuilder`
+adds one per connector from `VisualThemeBaseResources` arrays indexed by building layer (plus one
+over the void): `BeltCapStandsNormal`, `PipeStandsBetweenPipes`, `WireStandsBetweenWires`,
+`Pipe/WireStandsAndEndCap`, `Pipe/WireBuildingStandsAndEndCap`. They are authored for three
+layers, and `GetSafe` clamps, so above floor 2 every stand is the two-floor one hanging in the air.
+
+`TallStands` extends every `LODMeshAsset[]` on the theme whose entries reach steadily lower (a
+stand ladder - the step is measured from the last two, not assumed) to layer 19. Each new entry
+is the tallest authored one cloned through `Object.Instantiate`, with every vertex below the middle
+of its bottom layer moved down by the extra height: the column's faces stretch, the foot moves
+intact. The building shader colours from a UV0 palette lookup, so stretched faces keep their
+colour. **Untested in game**: the visual result, and whether the foot is shorter than half a layer
+(if not, the foot stretches too).
+
+## Plan: space lift stations instead of per-height space lift definitions (in progress)
+
+Generating a tall space lift definition for every height and variant (`ExtraSpaceLiftIslands`) is
+quadratic: at 999 levels it made ~32,000 definitions holding ~16M tiles, and loading, saving and
+placing all stalled. A definition's connectors, layout and simulation are fixed per definition and
+read by generic code that cannot be hooked, so one definition cannot have a per-instance height.
+
+What the drag tool actually does with a climb (`PathAnchorsAndFillingProcessor`): one matcher call
+per anchor pair - input at the bottom of the climb, output at the top - places the single island
+returned, and `FillBetweenAnchors` skips vertical stretches entirely. `MatchesRequirements` is a
+strict connector-position match.
+
+Replacement:
+
+1. **Two stations per path kind** (belt, pipe): a lift base and a lift top, fixed one-chunk islands,
+   registered like Crossover Platforms registers its crossings.
+2. **A placement processor** in the space belt and space pipe placers (inserted the way
+   `CrossoverPlacementRewirer` does, via `IPlatformIslandPlacementRewirers`), after anchors are
+   filled: for a climb no definition matched, add a base at the bottom and a top at the target
+   level to the placement, so preview and occupancy checks are live. Vanilla's one-level lift is
+   untouched.
+3. **Simulation by distance**: the shaft is one long lane between the stations, ideally connected
+   the way vanilla connects space belts between platforms, so belt speed upgrades and prediction
+   apply. Fallback if a non-adjacent connection is refused: a station simulation that hands items
+   from base to top after a delay.
+4. **Shaft rendering** between each pair from the stock lift art.
+5. **Remove** the generated tall space lifts, their colliders and layout work. In-platform tall
+   lifts (buildings, max 19 floors) stay.
+
+Saves holding generated tall space lifts lose them (unknown ids are dropped on load).

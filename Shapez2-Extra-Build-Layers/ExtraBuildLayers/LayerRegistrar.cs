@@ -158,6 +158,24 @@ internal static class LayerRegistrar
         }
 
         int highestOrder = HighestSpaceOrder(mechanics);
+
+        // A safety margin rather than a coordinate limit - see BuildLayers.MaxSpaceLevel for what
+        // grows per layer. Clamped and logged rather than thrown, so an over-eager request from
+        // another mod costs that mod some layers instead of costing the player their session.
+        int room = BuildLayers.MaxSpaceLevel - highestOrder;
+        if (extra > room)
+        {
+            logger.Error?.Log(
+                "Extra Build Layers: " + extra + " extra space levels requested but only " +
+                Math.Max(0, room) + " fit under the ceiling of " + BuildLayers.MaxSpaceLevel +
+                " (see BuildLayers.MaxSpaceLevel). Clamping.");
+            extra = Math.Max(0, room);
+            if (extra == 0)
+            {
+                return Array.Empty<AddedLayer>();
+            }
+        }
+
         string iconId = BorrowIconId(mechanics, unlocks, 0);
         List<AddedLayer> added = new List<AddedLayer>(extra);
 
