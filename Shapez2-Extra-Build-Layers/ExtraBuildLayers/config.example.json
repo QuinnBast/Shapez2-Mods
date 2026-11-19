@@ -1,0 +1,33 @@
+{
+  "_comment": "Rename to config.json to use. Every value below is the built-in default.",
+
+  "_machine_comment": "Extra building layers inside a platform. Hard-clamped so the top layer stays at or below 19 (a building layer is SafeMod(tile.z, 20)). Only layers 0-2 can carry a port to another platform - see DESIGN.md.",
+  "ExtraMachineLevels": 10,
+
+  "_space_comment": "Extra platform layers in space, added above the current topmost one. No known engine ceiling; 30-50 is the intended playground.",
+  "ExtraSpaceLevels": 10,
+
+  "_policy_comment": "How the player earns them. Shop = buy them, Granted = have them all from the first frame, None = they exist but nothing unlocks them (for another mod to drive).",
+  "UnlockPolicy": "Shop",
+
+  "_shop_comment": "Shop policy only. LayersPerShopEntry 1 gives one chained entry per layer; 5 keeps the research screen readable at 50 layers.",
+  "LayersPerShopEntry": 5,
+  "MachineLevelBaseCost": 2500,
+  "SpaceLevelBaseCost": 4000,
+  "CostGrowthFactor": 1.6,
+  "ShopCategory": "ExtraBuildLayers",
+
+  "_diagnostic_comment": "Both of these change something the building and blueprint shaders read per layer. Turn one off at a time to find which is responsible for a shading problem on high floors; a mod drawing with its own material is unaffected by either.",
+  "ExtendLayerRamps": true,
+  "RefreshLayerShaderParams": true,
+
+  "_hud_comment": "The game's layer strip grows nine pixels per layer and runs off screen around thirty. This rescales it to fit, and does nothing while it already fits.",
+  "CompactLayerStrip": true,
+  "LayerStripMaxHeight": 420.0,
+
+  "_hud_number_comment": "Above this many layers the strip shows the current layer's number instead of one handle per layer. 0 never switches.",
+  "LayerStripNumberAbove": 8,
+
+  "_saves_comment": "Lets a save made without this mod be opened with it. Removing the mod from a save that has used it is still refused by the game.",
+  "AllowAddingToExistingSaves": true
+}

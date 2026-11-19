@@ -1,0 +1,21 @@
+{
+  "Version": "0.1.0",
+  "Title": "Extra Build Layers",
+  "Description": "More machine levels inside every platform, and more platform levels in space",
+  "Author": "Quinn Bast",
+  "SavedModVersionCompabilityRangeWithSelf": "*-*",
+  "GameVersionSupportRange": "*-*",
+  "AffectsSaveGames": true,
+  "DisablesAchievements": false,
+  "Conflicts": [],
+  "Assemblies": [
+    "ExtraBuildLayers.dll"
+  ],
+  "Dependencies": [
+    {
+      "ModId": "steam:3542611357",
+      "ModTitle": "Shapez Shifter",
+      "Version": "*-*"
+    }
+  ]
+}
