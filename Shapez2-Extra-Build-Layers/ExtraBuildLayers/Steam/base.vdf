@@ -1,0 +1,45 @@
+"workshopitem"
+{
+    "appid" "2162800"
+    "publishedfileid" "0"
+    "contentfolder" "${CONTENT_PATH}"
+    "previewfile" "${PREVIEW_IMG}"
+    "visibility" "2"
+    "title" "Extra Build Layers"
+    "description" "[h1]Extra Build Layers[/h1]
+More floors inside every platform, and a much taller stack of platforms in space.
+
+Out of the box you get [b]10 more building floors[/b] inside every platform and [b]10 more space levels[/b] above your current top one, both bought in the research shop like any other upgrade. Both counts are configurable.
+
+[h2]What you get[/h2]
+[list]
+[*][b]More floors and more space levels[/b] - unlocked through new research shop entries, a few levels at a time.
+[*][b]Tall lifts and pipes[/b] - drag a belt or pipe up or down any number of floors and it places one lift for the whole climb, drawn full height, with shapes riding it all the way.
+[*][b]Tall space belt and space pipe lifts[/b] - reaching every space level.
+[*][b]Numbered floors[/b] - every new platform floor and space layer is labelled with its own number, in the game's own style.
+[*][b]A layer readout that scales[/b] - with many layers, the HUD shows the current layer's number instead of a stack of tiny handles.
+[*][b]Placement previews that stay lit[/b] on the high floors.
+[/list]
+
+[h2]The one thing to know[/h2]
+Only the [b]bottom three floors[/b] of a platform can carry ports to another platform. The game builds the transport between platforms for exactly three floors, and that cannot be changed from a mod. Everything inside a platform works on every floor - a tall factory just brings its output back down to export it.
+
+Platforms are capped at [b]19 floors[/b] in total: a 20th would collide with the space level above.
+
+[h2]Save games[/h2]
+[list]
+[*][b]Adding[/b] the mod to an existing save works - open it and the new layers appear in the shop.
+[*][b]Removing[/b] it from a save you have played with it is refused by the game, as it should be: tall lifts and anything above floor 2 would break.
+[*][b]Lowering[/b] a layer count on a save that already uses the higher layers is not safe. Raising one is fine.
+[/list]
+
+[h2]Configuration[/h2]
+Copy [b]config.example.json[/b] to [b]config.json[/b] in the mod's folder. You can set how many floors and space levels to add, how they are unlocked (bought in the shop, granted from the start, or left to another mod), their prices, and how the HUD layer strip behaves. Every option is explained in the example file.
+
+[h2]For mod authors[/h2]
+This mod is built to be extended. A static [b]BuildLayers[/b] class lets your mod require a number of extra floors or space levels, replace how they are unlocked with your own policy, and find out what a session actually got. Buildings added by your mod work on the new floors with no extra work.
+
+[h2]Compatibility[/h2]
+Requires [b]Shapez Shifter[/b]. Other mods' buildings work on the new floors automatically."
+    "changenote" "First release."
+}

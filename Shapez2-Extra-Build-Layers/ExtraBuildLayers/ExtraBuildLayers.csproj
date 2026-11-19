@@ -25,6 +25,36 @@
         <OutputPath>$(SPZ2_PERSISTENT)\mods-dev\ExtraBuildLayers\</OutputPath>
     </PropertyGroup>
 
+    <!--
+        dotnet build -t:SteamPublish   uploads the built mod folder to the workshop item
+        named in Steam/base.vdf. Build first: the target publishes whatever is already at
+        OutputPath, it does not build it. A first publish creates the item (publishedfileid
+        "0") and writes its id back into base.vdf - commit that change.
+
+        The publish script is bash. MSBuild runs Exec through cmd, which does not have
+        Git's bin folder on its PATH, so a bare `sh` fails with 9009 even when Git Bash is
+        installed. Find the shell ourselves; set ShellExe to override.
+
+        OutputPath may end in a directory separator, and a trailing backslash before a closing
+        quote escapes the quote - which would leave a stray quote inside the content path.
+    -->
+    <Target Name="SteamPublish">
+        <PropertyGroup>
+            <ShellExe Condition="'$(ShellExe)' == '' And Exists('$(ProgramFiles)\Git\bin\sh.exe')">$(ProgramFiles)\Git\bin\sh.exe</ShellExe>
+            <ShellExe Condition="'$(ShellExe)' == '' And Exists('$(ProgramFiles)\Git\usr\bin\sh.exe')">$(ProgramFiles)\Git\usr\bin\sh.exe</ShellExe>
+            <ShellExe Condition="'$(ShellExe)' == '' And Exists('$(LocalAppData)\Programs\Git\bin\sh.exe')">$(LocalAppData)\Programs\Git\bin\sh.exe</ShellExe>
+            <PublishContentPath>$(OutputPath.TrimEnd('\'))</PublishContentPath>
+        </PropertyGroup>
+
+        <Error Condition="'$(ShellExe)' == ''"
+               Text="Could not find sh.exe. Install Git for Windows, or publish by hand: bash Steam/SteamPublish.sh &quot;$(PublishContentPath)&quot;" />
+
+        <Message Importance="high" Text="Publishing $(PublishContentPath) using $(ShellExe)" />
+
+        <Exec Command="&quot;$(ShellExe)&quot; ./Steam/SteamPublish.sh &quot;$(PublishContentPath)&quot;"
+              WorkingDirectory="$(MSBuildProjectDirectory)" />
+    </Target>
+
     <ItemGroup>
         <Reference Include="ShapezShifter">
             <HintPath>$(SPZ2_SHIFTER)</HintPath>
