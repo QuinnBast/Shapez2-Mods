@@ -402,3 +402,39 @@ through the interface, so a decorator drops in where the builder went.
 - For how the island is actually drawn — and why a space-path-like island needs an
   `IIslandPlatformDrawer` rather than mesh CustomData — see
   [Rendering](../rendering.md#how-an-island-gets-drawn).
+
+## Retiring an island id without breaking saves
+
+A missing island is not skipped on load. `IslandLayoutSerializer.DeserializeIslandBlob` skips one
+quietly only if `CatalogPair.GameCatalog.HasIsland` still knows the id; otherwise it throws
+"Island definition was not migrated correctly" and the whole map fails. Removing an island type a
+player has built therefore makes their save unopenable.
+
+The game's own way out is an id migrator returning `IslandDefinitionId.Invalid`: `Deserialize`
+checks for it straight after the migrators run and calls `SkipBlob`. Vanilla ships
+`IslandDefinitionDeletionMigrator` for one id. The serializer copies its migrators into a private
+list in its constructor, so a constructor postfix can append yours:
+
+```csharp
+self.IslandDefinitionIdMigrators.Add(new MyMigrator()); // CanMigrate: your old ids; Migrate: Invalid
+```
+
+## What a space path drag does with a climb
+
+`PathAnchorsAndFillingProcessor` turns the dragged segments into anchor pivots and places one
+island per consecutive pair, asking the matcher for a definition with its input at the first and
+its output at the second. `FillBetweenAnchors` deliberately places nothing along a vertical
+stretch. So a climb is exactly one matcher request, and `MatchingDefinitionFinder` is generic and
+matches connector positions exactly - a climb no definition fits leaves a gap.
+
+To change what a climb becomes, add your own `IPlacementProcessor` to the space belt and space pipe
+placers: an `IPlatformIslandPlacementRewirers` resolves `SpaceBeltPlacementInitiator` /
+`SpacePipePlacementInitiator` from the registry, and `ModularEntityPlacer.InsertProcessor` at
+`ProcessorIndex<IPathUpgradeProcessor>()` lands it straight after the anchors are filled. It can
+add islands to the placement itself, so they are previewed, checked against the map and committed
+with everything else. `ComputeAnchors` is private to a generic type; reproduce it with the public
+`DecomposeManhattanPath` and `IsStandardBasisScalar`.
+
+ShapezShifter's atomic chain always asks for a toolbar entry. An island meant only to be placed by
+such a processor can be given an `IToolbarEntryInsertLocation` whose `AddEntry` does nothing: the
+chain still completes and re-arms, there is just no entry.

@@ -258,3 +258,28 @@ it was when you locked it.
 `Viewport.CursorRay` is `MainCamera.ScreenPointToRay` of it. Note that `RaycastHelpers`
 does *not* use `CursorRay` for its own maths — it rebuilds the ray in `double` precision in
 `CustomScreenPointToRayDouble`, because at map scale a `float` ray is not accurate enough.
+
+## The overview parks the layer
+
+Zoomed out past `TargetZoom` 1500, `IslandLayerController` treats itself as overridden
+(`IsCurrentlyOverriden`: in the overview and not placing). Three things hang off that one check:
+
+- `UpdateTick` parks the view: it saves the layer in `QueuedCurrentLayer`, drops to
+  `MinUnlockedLayer`, and restores the saved one when the player zooms back in. Setting
+  `Viewport.IslandLayer` while parked is undone by that restore.
+- `IsActiveDuringState` returns false, so the layer keys do nothing in the overview.
+- `HUDIslandLayersView` asks that same `IsActiveDuringState` whether to show, so the layer
+  selector disappears.
+
+The camera hangs at most `CameraController.MaxZoom` (20000) above the viewed layer, and a space
+layer is 20 units, so parked on layer 0 nothing above layer ~999 can be seen from above. Answering
+"not overridden" from a hook on `IsCurrentlyOverriden` keeps the overview on the current layer and
+brings the keys and the selector back with it.
+
+## `Viewport.Position` is in Unity's axes
+
+`CameraController` places the camera at `(Viewport.Position.x, height, Viewport.Position.y)` -
+Unity's x and z. Unity's z is the game's -y, so assigning a game coordinate's x and y directly puts
+the camera at its mirror image across the x axis. Convert with the `(Vector3)` cast first. To glide
+rather than jump, set `CameraController.TargetPosition` (the controller is not exposed; capture it
+from a hook on its `OnGameUpdate`).

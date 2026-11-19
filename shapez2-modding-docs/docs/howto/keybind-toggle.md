@@ -137,3 +137,11 @@ you are using the same entry point the keyboard uses.
   edge.
 - Do not poll input from a draw hook. Draw hooks can run more than once per frame in
   some configurations; a tick fires once.
+
+## A plain key also fires with Control held
+
+A binding on a plain key - Z, say - is activated by Ctrl+Z as well, which is undo. An action added
+as a `PlacementKeybindingHintData` listens with `ConsumeWasActivated`, so it fires on undo too, and
+consuming can take the shared key away from the other binding. Set `DoNotListenForKeybinding` on
+the action (the button still shows the key) and read the key yourself with the non-consuming
+`IsActivated`, skipping it while Control or Command is held or a text field has focus.

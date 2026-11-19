@@ -498,3 +498,83 @@ neighbours.
 - Dispose every `TemporaryMeshReference` — `TemporaryMeshReference.WarnAboutNonDisposedInstances()`
   exists because leaking them is a known trap.
 - Respect `options.FrameBudget` if you generate meshes lazily.
+
+## Reading a shader the decompiler cannot show
+
+Shader code is not in `decompiled/` - the assemblies hold none. It is in `resources.assets` as
+compiled DXBC, and Windows ships the disassembler (`d3dcompiler_47.dll`, `D3DDisassemble`).
+UnityPy reads the `Shader` object but its exporter fails on this game's format; decompress
+`compressedBlob` per segment yourself (LZ4, `offsets` / `compressedLengths` /
+`decompressedLengths`), find each program by its `DXBC` magic (size at offset 24) and
+disassemble it. Unity strips the reflection names, so properties are `cb`/`t` slots, but
+literals survive - which is usually what you are looking for.
+
+That is how this was found: **`UXBuildingBlueprintShader` switches a preview's glow off between
+heights 10 and 19 of every island layer.** Every compiled variant computes
+`t = saturate(((worldY - 10) mod 20) - 9)` and multiplies emission and part of alpha by it - the
+gap vanilla leaves above its three building layers. A mod that adds building layers gets black
+placement previews from floor 10 up, while the same building placed renders fine (the uber
+building shader has no band). No material property reaches a literal; draw such previews with a
+different material - `UXIslandBlueprintMaterial` has no band and takes the same allowability
+colour block. See Extra Build Layers' `HighFloorBlueprints`.
+
+## High space layers vanish unless you look straight down
+
+Culling starts with super chunks (`MapCuller.CullSuperChunksAndIslands`): each super chunk's box
+is tested against the camera, and every island in one that fails is dropped without being looked
+at. The box comes from `SpaceThemeBoundsProvider.GetSuperChunkBounds`, which spans the provider's
+island layer range - and the provider is built with a hardcoded one:
+
+```csharp
+// GameSessionOrchestrator
+Theme = new SpaceTheme(GraphicsSettings, -1, 1, ThemeResourceLifetime);
+```
+
+So every box ends around space layer 2. Vanilla never has anything higher. A mod that adds space
+layers sees islands up there disappear as soon as the camera tilts: looking straight down, the
+frustum reaches far enough below to catch the boxes; tilted forward it swings off them, and the
+cull keeps nothing. Measured at layer 999: 745 islands kept looking down, 0 at a 63 degree pitch.
+
+Postfix `GetSuperChunkBounds` and raise `max.y` to the top of the highest layer. The boxes are
+computed once per super chunk and cached (`MapCuller.GetRegisterSuperChunk`), so the hook costs
+nothing per frame.
+
+## Island renderers only draw while the island's own chunk is on screen
+
+`StatelessIslandSimulationRenderer`, which vanilla's island renderers derive from, registers each
+entity under its island's position and draws it only when that chunk is in the frame's
+`MapCullResult.Chunks`. Its `RegisterSimulation` is sealed. That is right for anything that fits
+in its own chunk and wrong for anything that does not: a lift shaft drawn from its foot station
+vanishes the moment the foot is off screen, however much of the shaft is in view. And
+`IslandSimulationRenderer.ShouldDraw` returns `!InOverviewMode`, so nothing it draws appears in the
+overview.
+
+Derive from `IslandSimulationRenderer<TSimulation>` instead and implement `Draw`,
+`RegisterSimulation` and `UnregisterSimulation` yourself: keep a list, and test each piece against
+`options.CameraPlanes` with your own bounds. A renderer is still discovered by type, so nothing
+registers it. In the overview, islands are drawn from coarse meshes - attach an
+`IslandOverviewDrawer.Data` built from LOD 5, as `CommonIslandDefinitionFactory.AttachOverviewMeshes`
+does, or the island is absent there.
+
+## The hover glow has the preview shader's band too
+
+`UXBuildingHoverShader`, which `HUDBuildingMassSelection.Draw_HoverState` draws the hover with,
+contains the same `saturate(((worldY - 10) mod 20) - 9)` as `UXBuildingBlueprintShader`
+(disassembled: `add v.y, -10`, a mod 20, `add_sat ..., -9`). A building reaching floor 10 or higher
+loses its hover glow above floor 9. Draw the hover for those with `UXIslandBlueprintMaterial`,
+which has no band.
+
+## Stands are theme arrays, and the art is not evenly spaced
+
+The supports under belts, pipes and wires are not part of the building mesh.
+`StaticBuildingMeshBuilder` adds one per connector from `VisualThemeBaseResources` arrays indexed
+by height - `BeltCapStandsNormal[standIndex - 1]`, `PipeStandsBetweenPipes[standIndex]`,
+`PipeStandsAndEndCap[layer]` and their wire twins - where `standIndex` is the building layer plus
+one over the void. They are authored for three layers and read through a clamping `GetSafe`, so
+above floor 2 every stand is the two-floor one hanging in the air.
+
+They can be extended by stretching the tallest authored stand: clone it, move every vertex below
+the middle of its bottom layer down by the extra height. The building shader colours by a UV0
+palette lookup, so stretched faces keep their colour. Measure the step as the **average** drop
+across the array, not the last two entries: the belt stands bottom out at 1.007, 2.250 and 3.007,
+and continuing from the last two leaves each new floor a quarter floor short.

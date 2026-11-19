@@ -81,6 +81,27 @@ validate_vdf() {
   return 0
 }
 
+# Rebuild base.vdf's description from description.bbcode first, every time. steamcmd reads the
+# copy inside base.vdf, and nothing else updates it - Extra Build Layers' first publish went out
+# with a weeks-old description while the edited, translated one sat in description.bbcode, and
+# --check passed because it validated the stale copy. Syncing here makes the file people edit the
+# one that ships, and makes --check validate what will actually be sent.
+#
+# The first interpreter that actually runs: on Windows `python3` can be the Microsoft Store
+# placeholder, which exists on PATH and fails when called.
+PYTHON=""
+for candidate in python python3 py; do
+  if command -v "$candidate" >/dev/null 2>&1 && "$candidate" -c "" >/dev/null 2>&1; then
+    PYTHON="$candidate"
+    break
+  fi
+done
+if [ -n "$PYTHON" ]; then
+  "$PYTHON" "$(dirname "$0")/build-vdf.py" || exit 1
+else
+  echo "warning: no python found, so base.vdf was not rebuilt from description.bbcode." >&2
+fi
+
 # Checks the vdf and stops, so the thing that broke the last publish can be caught without
 # uploading anything.
 if [ "${1:-}" = "--check" ]; then

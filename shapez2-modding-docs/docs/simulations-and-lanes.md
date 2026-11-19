@@ -419,3 +419,29 @@ Two things make that practical:
 
 Cache the per-lane wrapper. `ItemLaneBundle.NextBundle`'s setter calls `GetReceiver` once for each
 of the twelve lanes, and the receiver is then held for the life of the connection.
+
+## Joining two islands that are not neighbours
+
+The `SimulationGraph` puts connected simulations into clusters, pairing connectors whose
+`SimulationConnectorSocket`s match (`From(pivot)` against the other side's
+`From(pivot.CounterpartConnector())`). Paired connectors land in one cluster, which decides both
+that items are handed across (`ItemOutputChunkConnector.TryConnect` sets the provider bundle's
+`NextBundle`) and that the two update in a safe order on one thread. Clusters update in parallel.
+
+So linking two islands' bundles by hand (`NextBundle = ...`) is a race: they stay in separate
+clusters. Join them through the graph instead. `ConnectableIslandSimulation` builds its connectors
+per instance, in its constructor, from the definition's connector data - into a list that stays
+mutable. A constructor postfix can add one more: an `ItemOutputChunkConnector<ShapeItem>` on one
+island whose pivot's counterpart is an `ItemInputChunkConnector<ShapeItem>` added to the other.
+The pivots are just coordinates; they need not be on either island. The graph then treats the pair
+as neighbours. Do the same on `ConnectableIslandPredictionSimulation` with the prediction
+connectors, or everything downstream reads as empty.
+
+The per-instance data the connector needs (how far away the partner is) can live in the island's
+`IIslandConfiguration`: it is saved with the island (`island.Configuration.Sync` as a blob) and is
+on `IslandInstance.Configuration` before the simulation is built. Give the definition an
+`IFactory<IIslandConfiguration>` producing your type, or a save cannot read it back.
+
+A state whose size depends on that configuration must be **read in place**: the game can build the
+simulation before reading the save into its state, and the simulation's lanes hold the state's
+objects. Replacing them on read loads the items into objects nothing reads.
