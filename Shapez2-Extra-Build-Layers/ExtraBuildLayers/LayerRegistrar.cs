@@ -97,8 +97,8 @@ internal static class LayerRegistrar
             // saying once so "my belt port on floor 5 does nothing" is not a mystery.
             logger.Info?.Log(
                 "Extra Build Layers: note that only building layers 0-" +
-                (BuildLayers.PortConnectedMachineLevels - 1) + " can carry ports to another " +
-                "platform. SpacePathPortSystem builds sender and receiver simulations over a " +
+                (BuildLayers.PortConnectedMachineLevels - 1) + " can carry ports onto space belts " +
+                "and space pipes. SpacePathPortSystem builds sender and receiver simulations over a " +
                 "hardcoded 3 layers and is a generic type, so this cannot be raised. Lifts and " +
                 "everything inside a platform reach every floor.");
         }

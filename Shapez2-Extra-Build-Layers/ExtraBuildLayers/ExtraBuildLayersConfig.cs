@@ -32,8 +32,9 @@ public class ExtraBuildLayersConfig
     /// <see cref="BuildLayers.MaxMachineLevel"/>, past which a building's layer would alias onto
     /// the next island layer's ground floor.
     ///
-    /// Only layers 0-2 can carry a port to another platform
-    /// (<see cref="BuildLayers.PortConnectedMachineLevels"/>). Everything else - machines,
+    /// Only layers 0-2 can carry a port onto a space belt or space pipe
+    /// (<see cref="BuildLayers.PortConnectedMachineLevels"/>); belts between platforms that
+    /// touch work on every floor. Everything else - machines,
     /// belts, lifts, the hub's own input slots - reaches every floor.
     ///
     /// The default is the whole room there is: vanilla's top layer is 2, so 17 more reaches 19.

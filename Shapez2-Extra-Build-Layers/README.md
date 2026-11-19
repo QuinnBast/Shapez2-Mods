@@ -9,7 +9,7 @@ More floors inside every platform, and a much taller stack of platforms in space
 
 Both are configurable. Machine levels are hard-capped at floor 19 — a 20th floor would be the
 ground floor of the space layer above, because the game encodes both in one coordinate — and only
-the bottom three can carry a port to another platform; see
+the bottom three can carry a port onto a space belt or space pipe; see
 [The one thing to know about tall platforms](#the-one-thing-to-know-about-tall-platforms).
 Space levels are capped at layer 999 (`BuildLayers.MaxSpaceLevel`) — a safety margin rather than
 an engine limit: layer numbers are drawn for up to three digits.
@@ -133,18 +133,19 @@ Both are written up in [DESIGN.md](DESIGN.md).
 
 ## The one thing to know about tall platforms
 
-**Only building layers 0, 1 and 2 can carry a port to another platform.** Build as high as you
-like; to get anything *off* the platform, bring it back down to the bottom three floors.
+**Only building layers 0, 1 and 2 can carry a port onto a space belt or space pipe.** Build as
+high as you like; to put anything onto a space belt or pipe, bring it back down to the bottom three
+floors. Belts between two platforms that touch are not affected - they transfer on every floor.
 
-`SpacePathPortSystem.CreateAllSenderSimulations` and its receiver twin are what actually move
-items between platforms, and they iterate building layers over a hardcoded `num2 < 3`. A belt or
-fluid port above layer 2 gets no simulation at all. The class is
+`SpacePathPortSystem.CreateAllSenderSimulations` and its receiver twin are what hand items between
+a platform and the space path at its edge, and they iterate building layers over a hardcoded
+`num2 < 3`. A belt or fluid port onto a space path above layer 2 gets no simulation at all. The class is
 `SpacePathPortSystem<TInput, TOutput>` — a generic type, whose methods MonoMod cannot hook — and
 the placement-side scan in `NotchConnectorsExtender` is a generic method, equally out of reach.
 There is no version of this mod that lifts it.
 
 In practice it reads as a constraint rather than a bug: a vertical factory has to route its
-output back down to export it. Everything else reaches every floor — machines, belts, in-platform
+output back down to ship it out by space belt. Everything else reaches every floor — machines, belts, in-platform
 lifts (`LayerLiftPlacementTracker` follows `MaxBuildingLayer`), the platform floor art, and even
 the hub's own input slots.
 

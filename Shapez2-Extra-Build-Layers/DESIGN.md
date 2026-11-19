@@ -133,7 +133,11 @@ because `CoordinateConstants.TilesPerIslandLayer` is 20 and `ScreenUtils` stamps
 building there would alias onto another platform's ground floor. `BuildLayers.MaxMachineLevel`
 is 19 and the registrar clamps to it.
 
-### The real ceiling on usefulness: ports stop at 3
+### Space path ports stop at 3
+
+This limits ports onto **space belts and space pipes** only. Belts between two platforms that touch
+transfer on every floor - seen in play on floor 19 - so a tall factory can still pass items
+sideways to a neighbouring platform at any height.
 
 ```csharp
 // Game.Content/Game.Core.Map.Transport/SpacePathPortSystem.cs — CreateAllSenderSimulations

@@ -29,8 +29,8 @@ namespace QuinnBast.Shapez2.ExtraBuildLayers;
 /// every building's per-layer mesh array to three and a building above that takes its chunk's
 /// mesh down; this mod widens every definition, including ones another mod registers after it
 /// (a second pass runs once all buildings rewirers have). Floors above
-/// <see cref="PortConnectedMachineLevels"/> cannot carry ports to other platforms, whatever the
-/// building.</para>
+/// <see cref="PortConnectedMachineLevels"/> cannot carry a port onto a space belt or space pipe,
+/// whatever the building.</para>
 /// </summary>
 public static class BuildLayers
 {
@@ -112,19 +112,23 @@ public static class BuildLayers
     public const int MaxSpaceLevel = 999;
 
     /// <summary>
-    /// How many building layers can carry a **port to another platform**. Three - layers 0, 1
-    /// and 2 - and this cannot be raised from a mod.
+    /// How many building layers can carry a port onto a **space belt or space pipe**. Three -
+    /// layers 0, 1 and 2 - and this cannot be raised from a mod.
     ///
     /// <c>SpacePathPortSystem.CreateAllSenderSimulations</c> and its receiver twin build the
-    /// simulations that actually move items between platforms, over a hardcoded
-    /// <c>for (short num2 = 0; num2 &lt; 3; num2++)</c> of building layers. A belt or fluid port
-    /// above layer 2 gets no simulation, so nothing crosses there. The class is
+    /// simulations that hand items between a platform and the space path at its edge, over a
+    /// hardcoded <c>for (short num2 = 0; num2 &lt; 3; num2++)</c> of building layers. A belt or
+    /// fluid port onto a space path above layer 2 gets no simulation, so nothing crosses there.
+    ///
+    /// It is **not** a limit on moving items between platforms in general: belts between two
+    /// platforms that touch transfer on every floor - seen in play on floor 19. The class is
     /// <c>SpacePathPortSystem&lt;TInput, TOutput&gt;</c> - a **generic type**, whose methods
     /// MonoMod cannot hook - and <c>NotchConnectorsExtender.AddConnectors&lt;TMapLayout&gt;</c>
     /// has the matching placement-side bound in a generic *method*, equally unhookable.
     ///
     /// This is not a defect in the mod, and it reads as a design constraint in play: a tall
-    /// factory has to bring its output back down to the bottom three floors to export it. In-
+    /// factory has to bring its output back down to the bottom three floors to put it on a
+    /// space belt or pipe. In-
     /// platform vertical movement is unaffected, and <c>LayerLiftPlacementTracker</c> already
     /// follows <c>MaxBuildingLayer</c>, so lifts reach every floor.
     /// </summary>

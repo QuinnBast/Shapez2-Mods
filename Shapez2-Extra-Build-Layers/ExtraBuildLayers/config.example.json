@@ -1,7 +1,7 @@
 {
   "_comment": "Rename to config.json to use. Every value below is the built-in default.",
 
-  "_machine_comment": "Extra building layers inside a platform. Hard-clamped so the top layer stays at or below 19 (a building layer is SafeMod(tile.z, 20)); the default 17 is all of that room. Only layers 0-2 can carry a port to another platform - see DESIGN.md.",
+  "_machine_comment": "Extra building layers inside a platform. Hard-clamped so the top layer stays at or below 19 (a building layer is SafeMod(tile.z, 20)); the default 17 is all of that room. Only layers 0-2 can carry a port onto a space belt or space pipe; belts between platforms that touch work on every floor.",
   "ExtraMachineLevels": 17,
 
   "_space_comment": "Extra platform layers in space, added above the current topmost one. Hard-clamped so the top layer stays at or below 999; anything asked for past that is logged and dropped.",
