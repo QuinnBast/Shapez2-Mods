@@ -1,39 +1,91 @@
 [h1]Extra Build Layers[/h1]
-More floors inside every platform, and a much taller stack of platforms in space.
+Was three layers too constricting?
+Do you want more vertical reach to build jumbo-mega platforms at your heart's desire?
 
-Out of the box you get [b]17 more building floors[/b] inside every platform - 20 in all, as many as fit - and [b]20 more space levels[/b] above your current top one, both bought in the research shop like any other upgrade. Both counts are configurable.
+You've come to the right place!
 
-[h2]What you get[/h2]
+Extra Build Layers adds 6 new research unlocks to allow you to build up to 20 machine layers, and 1000 space layers!
+
+For fellow mod developers, you can import and extend this mod to both give these layers out for free, and configure the number of layers that are available to your players.
+
+[h2]Players get:[/h2]
 [list]
-[*][b]More floors and more space levels[/b] - unlocked through new research shop entries, many levels per purchase.
-[*][b]Tall lifts and pipes[/b] - drag a belt or pipe up or down any number of floors and it places one lift for the whole climb, drawn full height, with shapes riding it all the way.
-[*][b]Lift stations for space[/b] - drag a space belt or pipe up or down any number of space levels and an entry and exit station are placed for you, joined by a shaft. Shapes take time to climb, at full belt speed. Click the shaft to select the lift, delete either end to remove both, and jump between the ends from the side panel.
-[*][b]Getting around[/b] - hold the layer keys to keep moving, faster the longer you hold. Zoomed all the way out you stay on your layer and each press moves a big step. A [b]View[/b] button (key Z) beside Copy, Cut and Delete takes you straight to whatever you have selected.
-[*][b]High layers stay visible[/b] - the game hides everything above its own top layer unless you look straight down. Not any more.
-[*][b]Stands reach the floor[/b] - supports under belts, pipes and wires go all the way down, however high up they are.
-[*][b]Numbered floors[/b] - every new platform floor and space layer is labelled with its own number, in the game's own style.
-[*][b]A layer readout that scales[/b] - with many layers, the HUD shows the current layer's number instead of a stack of tiny handles.
-[*][b]Placement previews and hover highlights that stay lit[/b] on the high floors.
+[*][b]Up to 20 Machine Layers![/b]
+[*][b]Up to 1000 Space Layers![/b]
+[*][b]Tall lifts and pipes![/b] - The base game's space elevators are a nightmare. This mod provides an extensible version of space elevators that work to lift shapes and fluids to any height!
+[*][b]Zoom to Platform Tools[/b] - Press 'Z' to zoom to a selected platform's layer
+[*][b]More navigation tools[/b] - 1000 layers is a lot. Move between layers faster in the map overview. Or press and hold Q/E to go through layers automatically.
+[*][b]Camera Improvements[/b] - the game culls and makes platforms disappear at high layer heights. Not any more!
+[*][b]Numbered floors[/b] - View the number of the layer you are looking at!
+[*][b]Placement previews[/b] for elevators up to high floors.
 [/list]
 
-[h2]The one thing to know[/h2]
-Only the [b]bottom three floors[/b] of a platform can carry ports to another platform. The game builds the transport between platforms for exactly three floors, and that cannot be changed from a mod. Everything inside a platform works on every floor - a tall factory just brings its output back down to export it.
+[h2]Game Limitations[/h2]
+Only the [b]bottom three floors[/b] of a platform can carry ports to another platform.
+The game only builds the transport connectors between platforms for exactly three floors, and that cannot be changed from a mod.
 
-Platforms are capped at [b]20 floors[/b] (0 to 19): the game stores a floor and its space level in one number, so a 21st floor would be the ground floor of the space level above. Space levels go up to [b]999[/b].
+Additionally, Platforms are capped at [b]20 floors[/b] (0 to 19). The game stores a floor and its space level in a single variable, so a 21st floor actually represents the ground floor of the space level above, so platforms cannot go above layer 20.
 
 [h2]Save games[/h2]
 [list]
 [*][b]Adding[/b] the mod to an existing save works - open it and the new layers appear in the shop.
-[*][b]Removing[/b] it from a save you have played with it is refused by the game, as it should be: lifts and anything above floor 2 would break.
-[*]Saves from earlier test versions with tall space lifts load with those lifts removed. Drag the climb again to place lift stations.
-[*][b]Lowering[/b] a layer count on a save that already uses the higher layers is not safe. Raising one is fine.
+[*][b]Removing[/b] it from a save you have played with it is refused by the game, as lifts and anything above floor 2 would break.
 [/list]
 
 [h2]Configuration[/h2]
-Copy [b]config.example.json[/b] to [b]config.json[/b] in the mod's folder. You can set how many floors and space levels to add, how they are unlocked (bought in the shop, granted from the start, or left to another mod), their prices, and how the HUD layer strip behaves. Every option is explained in the example file.
+If you want to configure this mod to use different settings, copy [b]config.example.json[/b] to [b]config.json[/b] in the mod's folder.
+You can set how many floors and space levels to add, how they are unlocked (bought in the shop, granted from the start, or left to another mod), their prices, and how the HUD behaves.
+Every option is explained in the example file.
 
 [h2]For mod authors[/h2]
-This mod is built to be extended. A static [b]BuildLayers[/b] class lets your mod require a number of extra floors or space levels, replace how they are unlocked with your own policy, and find out what a session actually got. Buildings added by your mod work on the new floors with no extra work.
+This mod is built to be extended. A static [b]BuildLayers[/b] class lets your mod require a number of extra floors or space levels, replace how they are unlocked with your own policy, and find out how many layers a user has available.
+Buildings added by your mod work on the new floors with no extra work.
 
 [h2]Compatibility[/h2]
 Requires [b]Shapez Shifter[/b]. Other mods' buildings work on the new floors automatically.
+
+[hr][/hr]
+[h1]日本語[/h1]
+3レイヤーでは狭すぎましたか? Extra Build Layers は研究ショップに6つの解放を追加し、プラットフォーム内の機械レイヤーを最大20、宇宙レイヤーを最大1000まで広げます。
+[list]
+[*][b]最大20の機械レイヤーと最大1000の宇宙レイヤー[/b]
+[*][b]どんな高さにも届くリフト[/b] - スペースベルトやスペースパイプを何層でも上下にドラッグすると、入口と出口のステーションがシャフトでつながって配置されます。図形も流体も運べます
+[*][b]Zキー[/b]で選択したプラットフォームのレイヤーへ移動
+[*][b]素早い移動[/b] - 俯瞰マップで大きく移動、Q/Eの長押しで連続移動
+[*][b]高いレイヤーでも消えないプラットフォーム[/b]と[b]番号付きのレイヤー[/b]
+[/list]
+[b]注意:[/b] 他のプラットフォームと接続できるポートは下の3フロアのみです(ゲームの仕様)。プラットフォームは最大20フロア(0から19)です。既存のセーブに追加できますが、使用したセーブから外すことはできません。Shapez Shifter が必要です。
+
+[hr][/hr]
+[h1]简体中文[/h1]
+三层不够用?Extra Build Layers 在研究商店加入6个解锁,让平台内的机器层最多达到20层,星际层最多达到1000层。
+[list]
+[*][b]最多20个机器层和1000个星际层[/b]
+[*][b]任意高度的升降机[/b] - 将星际传送带或星际管道向上或向下拖动任意层数,会自动放置由竖井连接的入口和出口站,可运输图形和流体
+[*][b]按Z键[/b]跳转到所选平台所在的层
+[*][b]快速移动[/b] - 在总览地图中大步切换,长按Q/E连续切换层
+[*][b]高层平台不再消失[/b],并且[b]每层都有编号[/b]
+[/list]
+[b]注意:[/b] 只有平台最下面三层可以设置连接其他平台的端口(游戏限制)。平台最多20层(0到19)。可以加入现有存档,但使用过后不能再从存档中移除。需要 Shapez Shifter。
+
+[hr][/hr]
+[h1]Français[/h1]
+Trois couches, c'est trop peu ? Extra Build Layers ajoute 6 déblocages à la boutique de recherche : jusqu'à 20 couches de machines dans chaque plateforme et jusqu'à 1000 couches spatiales.
+[list]
+[*][b]Jusqu'à 20 couches de machines et 1000 couches spatiales[/b]
+[*][b]Ascenseurs de toute hauteur[/b] - faites glisser un convoyeur ou un tuyau spatial vers le haut ou le bas sur autant de couches que vous voulez : une entrée et une sortie reliées par un puits sont placées pour vous, pour les formes comme pour les fluides
+[*][b]Touche Z[/b] pour aller à la couche de la plateforme sélectionnée
+[*][b]Navigation rapide[/b] - grands pas dans la vue d'ensemble, maintenez Q/E pour défiler
+[*][b]Les plateformes hautes ne disparaissent plus[/b], et [b]chaque couche est numérotée[/b]
+[/list]
+[b]À savoir :[/b] seuls les trois étages inférieurs d'une plateforme peuvent porter des ports vers une autre plateforme (limite du jeu). Une plateforme compte au plus 20 étages (0 à 19). Le mod s'ajoute à une sauvegarde existante, mais ne peut plus en être retiré une fois utilisé. Nécessite Shapez Shifter.
+
+[hr][/hr]
+[h1]Русский[/h1]
+Трёх слоёв мало? Extra Build Layers добавляет 6 улучшений в магазин исследований: до 20 слоёв машин на платформе и до 1000 космических слоёв.
+[list]
+[*][b]Подъёмники любой высоты[/b] - протяните космическую ленту или трубу вверх или вниз на сколько угодно слоёв, и вход и выход, соединённые шахтой, разместятся сами
+[*][b]Клавиша Z[/b] - перейти к слою выбранной платформы; удерживайте Q/E для быстрой смены слоёв
+[*][b]Высокие платформы больше не исчезают[/b], [b]каждый слой пронумерован[/b]
+[/list]
+[b]Важно:[/b] порты к другим платформам работают только на трёх нижних этажах (ограничение игры). Не больше 20 этажей (0-19). Мод можно добавить в существующее сохранение, но не удалить после использования. Нужен Shapez Shifter.

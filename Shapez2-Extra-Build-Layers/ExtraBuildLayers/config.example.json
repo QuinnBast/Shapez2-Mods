@@ -5,12 +5,14 @@
   "ExtraMachineLevels": 17,
 
   "_space_comment": "Extra platform layers in space, added above the current topmost one. Hard-clamped so the top layer stays at or below 999; anything asked for past that is logged and dropped.",
-  "ExtraSpaceLevels": 20,
+  "ExtraSpaceLevels": 997,
 
   "_policy_comment": "How the player earns them. Shop = buy them, Granted = have them all from the first frame, None = they exist but nothing unlocks them (for another mod to drive).",
   "UnlockPolicy": "Shop",
 
-  "_shop_comment": "Shop policy only. How many layers one purchase grants; 1 gives one chained entry per layer. Costs are per entry: the first costs the base, each later one CostGrowthFactor times the one before.",
+  "_shop_comment": "Shop policy only. Each tier list is the level each purchase ends at: [3, 10, 19] sells level 3, then 4-10, then 11-19; levels past the last end are one more purchase. An empty list [] sells LayersPerShopEntry layers per purchase instead. Costs are per purchase: the first costs the base, each later one CostGrowthFactor times the one before.",
+  "MachineLevelTiers": [3, 10, 19],
+  "SpaceLevelTiers": [25, 250, 999],
   "LayersPerShopEntry": 100,
   "MachineLevelBaseCost": 2500,
   "SpaceLevelBaseCost": 4000,

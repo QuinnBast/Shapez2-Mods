@@ -5,7 +5,7 @@ More floors inside every platform, and a much taller stack of platforms in space
 | | Default | |
 |---|---|---|
 | **Machine levels** | +17 | building layers inside every platform — floors 0-19, all there is room for |
-| **Space levels** | +20 | platform layers above the current top one |
+| **Space levels** | +997 | platform layers above the current top one - up to level 999 |
 
 Both are configurable. Machine levels are hard-capped at floor 19 — a 20th floor would be the
 ground floor of the space layer above, because the game encodes both in one coordinate — and only
@@ -82,7 +82,7 @@ Three policies ship:
 
 | Policy | |
 |---|---|
-| `ShopUnlockPolicy` | Buy them, `LayersPerEntry` at a time (100 by default). Chained and escalating. The default. |
+| `ShopUnlockPolicy` | Buy them in tiers (`MachineTiers`, `SpaceTiers`), or `LayersPerEntry` at a time. Chained and escalating. The default. |
 | `GrantedUnlockPolicy` | All of them, no purchase, no research. For sandbox modes and testing. |
 | `NoUnlockPolicy` | Layers exist, nothing unlocks them. For driving the progression yourself. |
 
@@ -163,9 +163,11 @@ Copy `config.example.json` to `config.json` beside the assembly:
 | Key | Default | |
 |---|---|---|
 | `ExtraMachineLevels` | `17` | Building layers inside a platform (clamped so the top floor is at most 19) |
-| `ExtraSpaceLevels` | `20` | Platform layers in space (clamped so the top layer is at most 999) |
+| `ExtraSpaceLevels` | `997` | Platform layers in space (clamped so the top layer is at most 999) |
 | `UnlockPolicy` | `"Shop"` | `Shop`, `Granted` or `None` |
-| `LayersPerShopEntry` | `100` | Layers per purchase; `1` gives one chained entry per layer |
+| `MachineLevelTiers` | `[3, 10, 19]` | The level each machine-level purchase ends at: level 3, then 4-10, then 11-19 |
+| `SpaceLevelTiers` | `[25, 250, 999]` | The same for space levels: 3-25, then 26-250, then 251-999 |
+| `LayersPerShopEntry` | `100` | Layers per purchase when a tier list is empty; `1` gives one entry per layer |
 | `MachineLevelBaseCost` | `2500` | Research points for the first entry — rendered ×100, so this is "250k" |
 | `SpaceLevelBaseCost` | `4000` | |
 | `CostGrowthFactor` | `1.6` | Per shop entry |

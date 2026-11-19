@@ -23,6 +23,16 @@ public sealed class ShopUnlockPolicy : ILayerUnlockPolicy
     /// How many layers one purchase grants. Clamped to at least 1.
     public int LayersPerEntry = 100;
 
+    /// <summary>
+    /// The level each machine-level purchase ends at, in order - so {3, 10, 19} sells level 3,
+    /// then 4-10, then 11-19. Levels past the last end go in one final purchase. Empty falls back
+    /// to <see cref="LayersPerEntry"/>.
+    /// </summary>
+    public int[] MachineTiers = { 3, 10, 19 };
+
+    /// <summary>The same for space levels: {25, 250, 999} sells 3-25, 26-250, then 251-999.</summary>
+    public int[] SpaceTiers = { 25, 250, 999 };
+
     /// Raw points for the first entry. The shop renders this times 100.
     public int MachineBaseCost = 2500;
 
@@ -63,14 +73,13 @@ public sealed class ShopUnlockPolicy : ILayerUnlockPolicy
         string rangeDescriptionKey = machine ? "extra-build-layers.machine-level.description-range" : "extra-build-layers.space-level.description-range";
         int baseCost = machine ? MachineBaseCost : SpaceBaseCost;
 
-        int perEntry = Math.Max(1, LayersPerEntry);
+        List<(int Start, int End)> entries = Group(context.Layers, machine ? MachineTiers : SpaceTiers, Math.Max(1, LayersPerEntry));
         ResearchMechanicId? gateMechanic = context.CeilingGate;
         ResearchUpgradeId? gateUpgrade = null;
         int entryIndex = 0;
 
-        for (int start = 0; start < context.Layers.Count; start += perEntry)
+        foreach ((int start, int end) in entries)
         {
-            int end = Math.Min(start + perEntry, context.Layers.Count);
             int count = end - start;
 
             ResearchMechanicId[] mechanics = new ResearchMechanicId[count];
@@ -120,6 +129,49 @@ public sealed class ShopUnlockPolicy : ILayerUnlockPolicy
         context.Logger.Info?.Log(
             "Extra Build Layers: " + entryIndex + " shop entrie(s) for " + context.Layers.Count +
             " " + context.Kind + " level(s), up to level " + context.Layers[context.Layers.Count - 1].Level + ".");
+    }
+
+    /// <summary>
+    /// Index ranges (end exclusive) into <paramref name="layers"/>, one per purchase: cut at each
+    /// tier's end level, with whatever lies past the last end as one more. With no tiers, fixed
+    /// runs of <paramref name="perEntry"/>. A tier that would hold no layers - the counts were
+    /// lowered, or a scenario already ships some of those levels - is simply skipped.
+    /// </summary>
+    private static List<(int Start, int End)> Group(IReadOnlyList<AddedLayer> layers, int[] tiers, int perEntry)
+    {
+        List<(int Start, int End)> entries = new List<(int Start, int End)>();
+        int start = 0;
+        if (tiers != null && tiers.Length > 0)
+        {
+            foreach (int tierEnd in tiers)
+            {
+                int end = start;
+                while (end < layers.Count && layers[end].Level <= tierEnd)
+                {
+                    end++;
+                }
+
+                if (end > start)
+                {
+                    entries.Add((start, end));
+                    start = end;
+                }
+            }
+
+            if (start < layers.Count)
+            {
+                entries.Add((start, layers.Count));
+            }
+
+            return entries;
+        }
+
+        for (; start < layers.Count; start += perEntry)
+        {
+            entries.Add((start, Math.Min(start + perEntry, layers.Count)));
+        }
+
+        return entries;
     }
 
     private static int ScaledCost(int baseCost, float growth, int step)

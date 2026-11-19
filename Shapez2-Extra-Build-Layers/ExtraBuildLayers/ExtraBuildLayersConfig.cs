@@ -43,10 +43,10 @@ public class ExtraBuildLayersConfig
 
     /// <summary>
     /// Extra platform layers in space, clamped so the top one stays at or below
-    /// <see cref="BuildLayers.MaxSpaceLevel"/>. 20 is a default that changes how the game plays
-    /// without being a research grind on its own.
+    /// <see cref="BuildLayers.MaxSpaceLevel"/>. The default, 997, reaches that ceiling from
+    /// vanilla's top level of 2; the shop sells them in three tiers (SpaceLevelTiers).
     /// </summary>
-    public int ExtraSpaceLevels = 20;
+    public int ExtraSpaceLevels = 997;
 
     /// <summary>
     /// Which built-in <see cref="ILayerUnlockPolicy"/> to use: <c>Shop</c>, <c>Granted</c> or
@@ -58,8 +58,18 @@ public class ExtraBuildLayersConfig
     /// </summary>
     public string UnlockPolicy = "Shop";
 
-    /// How many layers one shop purchase grants. 1 gives the one-entry-per-layer chain.
+    /// How many layers one shop purchase grants, when no tiers are set. 1 gives the
+    /// one-entry-per-layer chain.
     public int LayersPerShopEntry = 100;
+
+    /// <summary>
+    /// The machine level each shop purchase ends at: [3, 10, 19] sells level 3, then 4-10, then
+    /// 11-19. Levels past the last end go in one final purchase. Empty uses LayersPerShopEntry.
+    /// </summary>
+    public int[] MachineLevelTiers = { 3, 10, 19 };
+
+    /// <summary>The same for space levels: [25, 250, 999] sells 3-25, 26-250, then 251-999.</summary>
+    public int[] SpaceLevelTiers = { 25, 250, 999 };
 
     /// Raw points for the first shop entry of each kind. The shop renders these times 100.
     public int MachineLevelBaseCost = 2500;
@@ -167,6 +177,8 @@ public class ExtraBuildLayersConfig
         return new ShopUnlockPolicy
         {
             LayersPerEntry = LayersPerShopEntry,
+            MachineTiers = MachineLevelTiers,
+            SpaceTiers = SpaceLevelTiers,
             MachineBaseCost = MachineLevelBaseCost,
             SpaceBaseCost = SpaceLevelBaseCost,
             CostGrowthFactor = CostGrowthFactor,
