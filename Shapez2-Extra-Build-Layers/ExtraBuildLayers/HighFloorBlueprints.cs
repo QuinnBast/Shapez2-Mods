@@ -57,6 +57,17 @@ internal sealed class HighFloorBlueprints : IDisposable
 
     private delegate void HoverDrawHook(HoverDraw orig, HUDBuildingMassSelection self, FrameDrawOptions options, BuildingModel building, float alpha);
 
+    /// <summary>
+    /// A soft grey, for the hover - the blueprint material adds this as light, so a value that looks
+    /// mid-grey on paper already reads as a pale sheen and 0.8 was glaring white. The game's own blueprint colours - will be placed, warning,
+    /// impossible - are the bright blue, yellow and red a selection or a placement shows; a hover
+    /// is meant to be a light sheen over the model, so it gets its own. Made on first use, on the
+    /// main thread (a MaterialPropertyBlock cannot be built off it).
+    /// </summary>
+    private static readonly Color HoverTint = new Color(0.32f, 0.33f, 0.35f, 1f);
+
+    private static IShaderColorProvider HoverColour;
+
     private readonly Hook Hook;
     private readonly Hook HoverHook;
     private readonly ILogger Logger;
@@ -133,9 +144,8 @@ internal sealed class HighFloorBlueprints : IDisposable
 
     /// <summary>
     /// The hover glow, for a building reaching the band, drawn with the island blueprint material
-    /// instead of <c>UXBuildingHoverIndicatorMaterial</c> - otherwise exactly vanilla's
-    /// <c>HUDBuildingMassSelection.Draw_HoverState</c>. It reads as the selection highlight rather
-    /// than the softer hover glow, which beats a glow that stops partway up the building.
+    /// instead of <c>UXBuildingHoverIndicatorMaterial</c>, the way a preview part is drawn, tinted a
+    /// soft white (<see cref="HoverTint"/>) so it reads as a hover rather than a selection.
     /// </summary>
     private void HoverDetour(HoverDraw orig, HUDBuildingMassSelection self, FrameDrawOptions options, BuildingModel building, float alpha)
     {
@@ -151,10 +161,17 @@ internal sealed class HighFloorBlueprints : IDisposable
                 if (material != null &&
                     building.Definition.CustomData.Get<IBuildingDrawData>().CombinedBlueprintMesh.TryGet(options.LOD.BuildingLOD, out IMeshReference handle))
                 {
+                    // Drawn exactly as SmartBuildingBlueprintRenderer.DrawBlueprintPart draws a
+                    // preview part with this material - the buildings renderer, with the
+                    // colour block a preview part gets - here a white one. The first version drew it through the hover's
+                    // own call (non-instanced, AnalogUI, an alpha block only): the material then had
+                    // no colours set, never showed from outside, and filled the screen yellow when
+                    // the camera zoomed into the mesh.
                     WorldCoordinate translation = building.Transform.Position.ToCenter_W();
-                    options.Renderers.RegularNonInstanced.DrawMesh(
+                    IShaderColorProvider colours = HoverColour ??= new FixedShaderColorProvider(HoverTint);
+                    options.Renderers.Buildings.AddWithProperties(
                         handle, material, FastMatrix.TranslateRotate(in translation, building.Rotation_G),
-                        RenderCategory.AnalogUI, MaterialPropertyHelpers.CreateAlphaBlock(alpha));
+                        colours.PropertyBlock, colours.PropertyBlockKey, options.LOD.Shadows, options.LOD.Shadows);
                     return;
                 }
             }
