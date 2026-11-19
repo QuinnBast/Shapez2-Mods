@@ -102,6 +102,18 @@ validate_vdf() {
   return 0
 }
 
+# Rebuild base.vdf's description from description.bbcode first, every time. steamcmd reads the
+# copy inside base.vdf, and nothing else updates it: the first publish of this mod went out with
+# a weeks-old description while the rewritten, translated one sat in description.bbcode - and
+# --check passed, because it validated the stale copy. Syncing here makes the file people edit
+# the one that ships, and makes --check validate what will actually be sent.
+PYTHON=$(command -v python3 || command -v python || true)
+if [ -n "$PYTHON" ]; then
+  "$PYTHON" "$(dirname "$0")/build-vdf.py" || exit 1
+else
+  echo "warning: no python found, so base.vdf was not rebuilt from description.bbcode." >&2
+fi
+
 # Checks the vdf and stops, so the thing that broke the last publish can be caught without
 # uploading anything.
 if [ "${1:-}" = "--check" ]; then
