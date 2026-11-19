@@ -53,7 +53,12 @@ internal sealed class HighFloorBlueprints : IDisposable
         DrawPart orig, FrameDrawOptions options, IMeshReference mesh, MaterialReference materialOverride, Matrix4x4 trs,
         in SmartBuildingBlueprintRenderer.DrawData entry, float cameraDistSq);
 
+    private delegate void HoverDraw(HUDBuildingMassSelection self, FrameDrawOptions options, BuildingModel building, float alpha);
+
+    private delegate void HoverDrawHook(HoverDraw orig, HUDBuildingMassSelection self, FrameDrawOptions options, BuildingModel building, float alpha);
+
     private readonly Hook Hook;
+    private readonly Hook HoverHook;
     private readonly ILogger Logger;
     private bool Failed;
 
@@ -83,6 +88,16 @@ internal sealed class HighFloorBlueprints : IDisposable
         try
         {
             Hook = new Hook(target, new DrawPartHook(Detour));
+
+            // The hover glow has the same problem: UXBuildingHoverShader carries the identical
+            // band (disassembled: add v.y, -10; mod 20; add_sat -9), so a tall lift's hover stops
+            // at floor 9. Declared on the concrete class, which is not generic.
+            MethodInfo hover = typeof(HUDBuildingMassSelection).GetMethod(
+                "Draw_HoverState", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.DeclaredOnly);
+            if (hover != null)
+            {
+                HoverHook = new Hook(hover, new HoverDrawHook(HoverDetour));
+            }
         }
         catch (Exception exception)
         {
@@ -117,6 +132,43 @@ internal sealed class HighFloorBlueprints : IDisposable
     }
 
     /// <summary>
+    /// The hover glow, for a building reaching the band, drawn with the island blueprint material
+    /// instead of <c>UXBuildingHoverIndicatorMaterial</c> - otherwise exactly vanilla's
+    /// <c>HUDBuildingMassSelection.Draw_HoverState</c>. It reads as the selection highlight rather
+    /// than the softer hover glow, which beats a glow that stops partway up the building.
+    /// </summary>
+    private void HoverDetour(HoverDraw orig, HUDBuildingMassSelection self, FrameDrawOptions options, BuildingModel building, float alpha)
+    {
+        if (!Failed)
+        {
+            try
+            {
+                int layer = building.Tile_G.BuildingLayer();
+                int top = building.Definition.CustomData.TryGet(out IBuildingConnectorData connectors)
+                    ? layer + connectors.TileBounds.Max.z
+                    : layer;
+                MaterialReference material = top >= FirstBandedLayer ? IslandBlueprintMaterial(options) : null;
+                if (material != null &&
+                    building.Definition.CustomData.Get<IBuildingDrawData>().CombinedBlueprintMesh.TryGet(options.LOD.BuildingLOD, out IMeshReference handle))
+                {
+                    WorldCoordinate translation = building.Transform.Position.ToCenter_W();
+                    options.Renderers.RegularNonInstanced.DrawMesh(
+                        handle, material, FastMatrix.TranslateRotate(in translation, building.Rotation_G),
+                        RenderCategory.AnalogUI, MaterialPropertyHelpers.CreateAlphaBlock(alpha));
+                    return;
+                }
+            }
+            catch (Exception exception)
+            {
+                Failed = true;
+                Logger.Exception?.LogException(exception);
+            }
+        }
+
+        orig(self, options, building, alpha);
+    }
+
+    /// <summary>
     /// Whether any floor the building occupies is in the band. Decided per building rather than
     /// per part, so a tall lift from floor 2 to 12 is one material top to bottom instead of
     /// changing look partway up.
@@ -144,5 +196,6 @@ internal sealed class HighFloorBlueprints : IDisposable
     public void Dispose()
     {
         Hook?.Dispose();
+        HoverHook?.Dispose();
     }
 }

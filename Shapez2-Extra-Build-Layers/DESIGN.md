@@ -189,8 +189,8 @@ Space levels are clamped so the top one is at most `BuildLayers.MaxSpaceLevel` (
 `LayerRegistrar.AddSpaceLevels`, logged as an error and never thrown, the same way machine levels
 are clamped to 19. Unlike 19 it is not a coordinate limit: a tile's `z` is a `short` holding
 `layer * 20 + floor`, so the real ceiling is layer 1637. 999 is where the layer numbers run out of
-room - they are drawn for up to three digits. The other thing that grows is the tall space lifts,
-one set per span up to the top layer.
+room - they are drawn for up to three digits. Space lifts no longer grow with it: a climb of any
+height is two fixed stations (see "Lift stations"), so startup cost does not depend on the count.
 
 It was 99 while the grid numbers cost a 1.4 MB texture slice per layer. They no longer cost
 anything per layer - see "Space grid numbers are drawn for the layer on screen" below.
@@ -264,7 +264,19 @@ Researched but deliberately **not implemented here**. Recording it so it is not 
 | Widen meshes of later mods' buildings | `ISimulationSystemsRewirer` — after every buildings rewirer |
 | Tall lifts and pipes, their meshes and previews | `IBuildingsRewirer` (`ExtraLiftBuildings`, `TallBlueprints`) |
 | Tall lift simulations, minus vanilla's claim | `ISimulationSystemsRewirer` (`ExtraLiftSystems`) |
-| Tall space belt/pipe lifts | Shifter atomic islands (`ExtraSpaceLiftIslands`) |
+| Lift stations (space lifts of any height) | Shifter atomic islands (`LiftStationIslands`), art from an `IIslandsRewirer` (`LiftStationArt`) |
+| Stations from a dragged climb | `IPlacementProcessor` inserted through `IPlatformIslandPlacementRewirers` (`LiftStationPathProcessor`) |
+| Entry joined to exit in the simulation | Constructor postfixes on `ConnectableIslandSimulation` / `ConnectableIslandPredictionSimulation` (`LiftStationConnectors`) |
+| Shaft art and items, clicking the shaft | `IslandSimulationRenderer<LiftEntrySimulation>` (`LiftShaftRenderer`); postfix on `ScreenUtils.TryFindIslandAtCursor` (`LiftShaftPicking`) |
+| Deleting a station deletes its partner | Constructor postfix on `ActionModifyIsland` (`LiftStationPairedDeletion`) |
+| Old per-height lifts dropped from saves | Constructor postfix on `IslandLayoutSerializer` adding an id migrator (`LegacyTallLiftRemoval`) |
+| High layers not culled at shallow angles | MonoMod postfix on `SpaceThemeBoundsProvider.GetSuperChunkBounds` (`SpaceCullingBounds`) |
+| Overview stays on the player's layer | MonoMod hook on `IslandLayerController.IsCurrentlyOverriden` (`OverviewLayerParking`) |
+| Held layer keys repeat; overview steps | MonoMod postfix on `InputDownstreamContext.Update` (`LayerKeyRepeat`) |
+| View action and Z key | Postfixes on `HUDIsland/BuildingSelectionDetails.GetActions` and `InputDownstreamContext.Update` (`ViewSelectionAction`) |
+| Action buttons on two rows | Postfix on `HUDSidePanelModuleActionButtons.InitFromData` (`ActionButtonRows`) |
+| Hover glow on floor 9+ | Hook on `HUDBuildingMassSelection.Draw_HoverState` (`HighFloorBlueprints`) |
+| Stands reaching the floor | Theme arrays extended in `LayerVisualResourcesExtender` (`TallStands`) |
 | Layer colours, floor materials, numbered textures | `IBuildingsRewirer` (`LayerVisualResourcesExtender`, `LayerNumberArt`) |
 | Lit previews on floor 9+ | MonoMod hook on `SmartBuildingBlueprintRenderer.DrawBlueprintPart` |
 | Layer strip rescale / number readout | MonoMod postfix on `HUDLayersView.UpdateLayersState` |
@@ -306,15 +318,16 @@ Its layer code should be removed once this mod ships.
 
 ## What the first runs settled, and what is still open
 
-Settled at the defaults: repeated meshes draw on high floors; the floor art stacks to the top;
-in-platform lifts reach the top floor and animate items all the way; space belt and pipe lifts
-reach the top space level; floors and space layers show their own numbers; previews stay lit.
+Settled in play: repeated meshes draw on high floors; the floor art stacks to the top; in-platform
+lifts reach the top floor, up and down, and animate items all the way; floors and space layers show
+their own numbers; previews stay lit. At 999 space levels: startup is quick; lift stations for
+belts and pipes, up and down, carry items with travel time and survive save/reload; shafts draw
+and can be clicked; the overview, View action and layer keys get around.
 
-Still open: items through a tall **Down** lift; tall in-platform **pipes** end to end; a
-save/reload with items mid-lift; the `SavegameAdoption` path on a save that never had the mod;
-counts far from the defaults (30-50 space levels - the strip, "show all island layers", memory at
-~5 MB per numbered floor); a port sender above floor 2 (expected: never moves anything, no
-exception); and a second mod driving `BuildLayers`.
+Still open: tall in-platform **pipes** end to end; the `SavegameAdoption` path on a save that never
+had the mod; a port sender above floor 2 (expected: never moves anything, no exception); a second
+mod driving `BuildLayers`; and the fixes made after the last play session - stands reaching the
+floor (averaged step), the hover glow on tall buildings, and Z no longer firing on Ctrl+Z.
 
 ## N-layer lifts
 
@@ -515,7 +528,9 @@ construct would silently drop whatever a future one adds.
 
 ## Space belts are not the same problem
 
-Built in `ExtraSpaceLiftIslands` and working to the top space level. A space belt lift is an **island**, and an island
+History: the first space lifts were stretched copies of vanilla's, one definition per height and
+variant (`ExtraSpaceLiftIslands`, removed). They are replaced by lift stations - see below. What
+follows is why islands needed a different route from buildings at all. A space belt lift is an **island**, and an island
 cannot be cloned-and-appended the way a building can, because of one gate:
 
 ```csharp
@@ -657,9 +672,9 @@ finds the building occupying one, and accepts it only if the ray hits one of
 `IBuildingDrawData.Colliders`. A stretched lift occupies its whole shaft, so the first step finds it
 on every floor, but colliders copied from the two-layer lift made the second step fail above floor
 1 - a tall lift could only be clicked on its bottom two floors. `TallBlueprints.WithTallColliders`
-grows every box by `span - 2` layers (one local unit each) in the lift's direction. Space lifts
-had the same copy (`IslandCollisionData`, checked by `TryFindIslandAtCursor`) and are grown by 20
-units per extra level in `ExtraSpaceLiftIslands.TallColliders`.
+grows every box by `span - 2` layers (one local unit each) in the lift's direction. Lift station
+shafts are not islands at all, so clicking them is a fallback in `TryFindIslandAtCursor`
+(`LiftShaftPicking`).
 
 ## Stands are theme arrays indexed by height
 
@@ -670,40 +685,60 @@ over the void): `BeltCapStandsNormal`, `PipeStandsBetweenPipes`, `WireStandsBetw
 layers, and `GetSafe` clamps, so above floor 2 every stand is the two-floor one hanging in the air.
 
 `TallStands` extends every `LODMeshAsset[]` on the theme whose entries reach steadily lower (a
-stand ladder - the step is measured from the last two, not assumed) to layer 19. Each new entry
+stand ladder) to layer 19. The step is the **average** drop over the ladder, rounded to a quarter
+floor: the authored belt stands bottom out at 1.007, 2.250 and 3.007, so measuring from the last two
+gave 0.757 and left new stands about two floors short by floor 10. Each new entry
 is the tallest authored one cloned through `Object.Instantiate`, with every vertex below the middle
 of its bottom layer moved down by the extra height: the column's faces stretch, the foot moves
 intact. The building shader colours from a UV0 palette lookup, so stretched faces keep their
-colour. **Untested in game**: the visual result, and whether the foot is shorter than half a layer
-(if not, the foot stretches too).
+colour. The averaged step is untested in game.
 
-## Plan: space lift stations instead of per-height space lift definitions (in progress)
+## Lift stations
 
-Generating a tall space lift definition for every height and variant (`ExtraSpaceLiftIslands`) is
-quadratic: at 999 levels it made ~32,000 definitions holding ~16M tiles, and loading, saving and
-placing all stalled. A definition's connectors, layout and simulation are fixed per definition and
-read by generic code that cannot be hooked, so one definition cannot have a per-instance height.
+Generating a tall space lift definition for every height and variant was quadratic: at 999 levels
+it made ~32,000 definitions holding ~16M tiles, and loading, saving and placing all stalled. A
+definition's connectors, layout and simulation are fixed and read by generic code that cannot be
+hooked, so one definition cannot have a per-instance height.
 
-What the drag tool actually does with a climb (`PathAnchorsAndFillingProcessor`): one matcher call
-per anchor pair - input at the bottom of the climb, output at the top - places the single island
-returned, and `FillBetweenAnchors` skips vertical stretches entirely. `MatchesRequirements` is a
-strict connector-position match.
+A climb is instead an **entry** and an **exit** station - four fixed one-chunk definitions in all,
+belt and pipe - with the height in each placed station's `LiftStationConfiguration` (saved with the
+island).
 
-Replacement:
+- **Placing.** A space path drag asks the matcher for one island per climb
+  (`PathAnchorsAndFillingProcessor`) and leaves a gap where nothing fits. `LiftStationPathProcessor`
+  runs straight after, recomputes the same anchors, and for an empty climb adds an entry at the foot
+  and an exit at the top. They are previewed, checked against the map (the shaft's levels too) and
+  committed like any island. Vanilla's one-level lift is untouched.
+- **Simulating.** The entry holds one vanilla 16-slot belt segment per level climbed, chained, so an
+  item takes as long to climb a level as to cross a chunk and the climb carries full belt
+  throughput. `LiftStationConnectors` adds a virtual output to the entry and a virtual input to the
+  exit, at pivots that are each other's counterpart; the simulation graph pairs them like adjacent
+  belts, in one cluster. Prediction is joined the same way.
+- **Saving.** The state is read in place - resized, never rebuilt - because the game can build the
+  simulation before reading the save into its state, and replacing the segments put items in transit
+  into objects nothing read.
+- **Drawing.** `LiftShaftRenderer` draws the shaft art per level and the items by their position in
+  the segments, culling each level itself (a vanilla island renderer only draws while the island's
+  own chunk is on screen), and in the overview at LOD 5. The stations get overview meshes too.
+- **Interacting.** Clicking a shaft selects the entry (`LiftShaftPicking`); deleting either station
+  deletes both (`LiftStationPairedDeletion`); a station's panel has View Entry / View Exit. The
+  stations have no toolbar entry - Shifter's chain is handed a location that inserts nothing.
+- **Old saves.** Saves holding the old per-height lifts load with them dropped:
+  `LegacyTallLiftRemoval` maps their ids to `Invalid`, which makes `IslandLayoutSerializer` skip them
+  instead of failing the map.
 
-1. **Two stations per path kind** (belt, pipe): a lift base and a lift top, fixed one-chunk islands,
-   registered like Crossover Platforms registers its crossings.
-2. **A placement processor** in the space belt and space pipe placers (inserted the way
-   `CrossoverPlacementRewirer` does, via `IPlatformIslandPlacementRewirers`), after anchors are
-   filled: for a climb no definition matched, add a base at the bottom and a top at the target
-   level to the placement, so preview and occupancy checks are live. Vanilla's one-level lift is
-   untouched.
-3. **Simulation by distance**: the shaft is one long lane between the stations, ideally connected
-   the way vanilla connects space belts between platforms, so belt speed upgrades and prediction
-   apply. Fallback if a non-adjacent connection is refused: a station simulation that hands items
-   from base to top after a delay.
-4. **Shaft rendering** between each pair from the stock lift art.
-5. **Remove** the generated tall space lifts, their colliders and layout work. In-platform tall
-   lifts (buildings, max 19 floors) stay.
+## Getting around hundreds of layers
 
-Saves holding generated tall space lifts lose them (unknown ids are dropped on load).
+- **Held layer keys repeat** (`LayerKeyRepeat`): the key is made to look freshly pressed on each
+  tick, so whoever owns it handles an ordinary press - which is what lets a path drag follow. After
+  three seconds space layers also step by up to ten a frame. In the overview a press moves a tenth
+  of the unlocked range.
+- **The overview stays on the player's layer** (`OverviewLayerParking`): vanilla parks it on the
+  lowest and, through the same check, disables the layer keys and hides the layer selector there.
+- **View** (`ViewSelectionAction`, key Z): a selection action that moves to the selection's layer and
+  glides the camera over it. `Viewport.Position` is Unity's x and z, so the target goes through the
+  `(Vector3)` cast. The key is read without consuming it and ignored with Ctrl held - Ctrl+Z is undo.
+- **Culling** (`SpaceCullingBounds`): vanilla's super chunk boxes span a hardcoded -1..1 layers, so
+  above layer ~2 everything was culled whenever the camera tilted. The boxes now reach the top layer.
+- **Hover glow**: `UXBuildingHoverShader` has the preview shader's floor 10-19 band, so the hover on
+  a building reaching floor 9 is drawn with the island blueprint material instead.

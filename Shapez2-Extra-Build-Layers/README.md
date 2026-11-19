@@ -18,14 +18,25 @@ Asking for more, from the config or from another mod, is clamped and logged, nev
 What a player gets on top of the raw layers:
 
 - **Tall lifts and pipes.** Drag a belt or pipe up or down any number of floors and it places one
-  lift for the whole climb, drawn full height, with items animated all the way. Space belt and
-  space pipe lifts reach every space level too.
+  lift for the whole climb, drawn full height, with items animated all the way. Stands under belts,
+  pipes and wires reach the floor from any height.
+- **Lift stations for space.** Drag a space belt or space pipe up or down any number of space levels
+  and it places an entry station at the bottom and an exit at the top, joined by a shaft. Items
+  take time to climb in proportion to the height, at full belt throughput. Click anywhere on the
+  shaft to select the lift; deleting either station removes both; a station's panel has
+  **View Entry** / **View Exit**.
+- **Getting around.** Hold the layer keys to keep moving (it speeds up the longer you hold). Zoomed
+  all the way out, the overview stays on your layer and each press moves a tenth of the unlocked
+  range. A **View** action (magnifying glass, key **Z**) beside Copy/Cut/Delete takes you to the
+  selected platform or building.
+- **High layers stay visible.** The game culls everything above space layer 2 unless you look
+  straight down; the mod fixes that.
 - **Numbered floors.** Every new platform floor and space layer is labelled with its own number,
   drawn at load in the game's own style - not "01, 02, 01, 02".
 - **A layer readout that scales.** Above 8 layers the HUD strip becomes the current layer's number
   instead of a stack of handles.
-- **Previews that stay lit.** The game's placement preview shader goes dark from floor 10 up; the
-  mod swaps in one that does not.
+- **Previews and hovers that stay lit.** The game's placement preview and hover shaders go dark
+  from floor 10 up; the mod swaps in one that does not.
 - **Works on an existing save** - see [Save games](#save-games).
 
 ## It is a substrate, not a campaign
@@ -159,6 +170,8 @@ Copy `config.example.json` to `config.json` beside the assembly:
 | `SpaceLevelBaseCost` | `4000` | |
 | `CostGrowthFactor` | `1.6` | Per shop entry |
 | `LayerKeyRepeatDelay` | `1.0` | Seconds a layer key is held before it repeats, speeding up the longer it is held; `0` turns it off |
+| `OverviewLayerStep` | `0` | Space layers per key press in the overview; `0` is a tenth of the unlocked range |
+| `JumpToSelectedLayer` | `true` | Selecting a single platform on another layer (zoomed in) moves the view to its layer |
 | `ShopCategory` | `"ExtraBuildLayers"` | A custom name needs its own translation key |
 | `CompactLayerStrip` | `true` | Rescale the HUD layer strip to fit |
 | `LayerStripMaxHeight` | `420` | Pixels |
@@ -198,13 +211,17 @@ textures and shader globals to `dump/`) and `extrabuildlayers.dump-lifts` (lift 
 
 ## Status
 
-Played at the earlier defaults (+10 / +10): layers unlock from the shop, tall belt
-lifts carry and animate items the full height in both directions, space belt and pipe lifts reach the top, floors and
-space layers are numbered, previews stay lit on floors 10-12, and the HUD shows the layer number.
+Played at 999 space levels: layers unlock from the shop; tall in-platform lifts carry and animate
+items the full height in both directions; lift stations for belts and pipes, up and down, carry
+items with travel time and keep them through a save and reload; shafts draw and can be clicked;
+startup is quick; floors and space layers are numbered; previews stay lit; the overview, View and
+the layer keys get around.
 
-Not yet exercised in game: the current defaults (+17 / +20), tall in-platform **pipes** end to
-end, a save/reload with items mid-lift, adding the mod to a save that never had it (the
-`SavegameAdoption` path), counts far from the defaults, and a second mod using the API.
+Fixed since the last play session and not yet seen in game: stands reaching the floor, the hover
+glow on tall buildings, and Z no longer firing on Ctrl+Z.
+
+Not yet exercised: tall in-platform **pipes** end to end, adding the mod to a save that never had it
+(the `SavegameAdoption` path), and a second mod using the API.
 
 ## Licence
 

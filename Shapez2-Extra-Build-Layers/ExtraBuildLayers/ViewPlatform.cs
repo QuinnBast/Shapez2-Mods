@@ -115,6 +115,15 @@ internal sealed class ViewSelectionAction : IDisposable
     private Sprite Icon;
     private readonly Hook Islands;
     private readonly Hook Buildings;
+    private readonly Hook Input;
+
+    private delegate void UpdateMethod(
+        InputDownstreamContext self, IEnumerable<(Keybinding, KeySet)> last, IEnumerable<(Keybinding, KeySet)> active,
+        float2 position, float2 delta, float wheel, GameObject hover);
+
+    private delegate void UpdateHook(
+        UpdateMethod orig, InputDownstreamContext self, IEnumerable<(Keybinding, KeySet)> last,
+        IEnumerable<(Keybinding, KeySet)> active, float2 position, float2 delta, float wheel, GameObject hover);
     private KeybindingsLayer Registered;
 
     public ViewSelectionAction(ILogger logger, ModFolderLocator resources)
@@ -154,6 +163,12 @@ internal sealed class ViewSelectionAction : IDisposable
             {
                 logger.Warning?.Log("Extra Build Layers: a selection action list was not found; the View action may be missing.");
             }
+
+            MethodInfo update = typeof(InputDownstreamContext).GetMethod(nameof(InputDownstreamContext.Update), BindingFlags.Instance | BindingFlags.Public);
+            if (update != null)
+            {
+                Input = new Hook(update, new UpdateHook(AfterInput));
+            }
         }
         catch (Exception exception)
         {
@@ -184,7 +199,66 @@ internal sealed class ViewSelectionAction : IDisposable
             KeybindingId = KeyId,
             Handler = handler,
             ActiveIf = active,
+
+            // The button still shows the key; the key itself is read by AfterInput. The button's
+            // own listener uses ConsumeWasActivated, and a plain-Z binding is pressed by Ctrl+Z
+            // too - so undo also jumped the camera, and consuming the shared key could starve undo.
+            DoNotListenForKeybinding = true,
         };
+    }
+
+    /// <summary>
+    /// The View key, read without consuming it (<c>IsActivated</c>, so undo and anything else on
+    /// the same key still get it), and ignored with Control or Command held - Ctrl+Z is undo - or
+    /// while a text field has focus, where Z is just a letter.
+    /// </summary>
+    private void AfterInput(
+        UpdateMethod orig, InputDownstreamContext context, IEnumerable<(Keybinding, KeySet)> last,
+        IEnumerable<(Keybinding, KeySet)> active, float2 position, float2 delta, float wheel, GameObject hover)
+    {
+        orig(context, last, active, position, delta, wheel, hover);
+
+        try
+        {
+            if (Registered == null || !context.AllBindings.ContainsKey(KeyId) || !context.IsActivated(KeyId) ||
+                UnityEngine.Input.GetKey(KeyCode.LeftControl) || UnityEngine.Input.GetKey(KeyCode.RightControl) ||
+                UnityEngine.Input.GetKey(KeyCode.LeftCommand) || UnityEngine.Input.GetKey(KeyCode.RightCommand) ||
+                TypingInTextField())
+            {
+                return;
+            }
+
+#pragma warning disable CS0618 // Input has nothing to inject into.
+            Player player = StaticGameCoreAccessor.HasInstance() ? StaticGameCoreAccessor.G.LocalPlayer : null;
+#pragma warning restore CS0618
+            if (player == null)
+            {
+                return;
+            }
+
+            if (player.InteractionState.BaseState == PlayerInteractionBaseState.Buildings)
+            {
+                if (player.InteractionState.BuildingSelection.Count > 0)
+                {
+                    ViewPlatform.Go(player.InteractionState.BuildingSelection.First());
+                }
+            }
+            else if (player.InteractionState.IslandSelection.Count > 0)
+            {
+                ViewPlatform.Go(player.InteractionState.IslandSelection.First());
+            }
+        }
+        catch (Exception exception)
+        {
+            Logger.Exception?.LogException(exception);
+        }
+    }
+
+    private static bool TypingInTextField()
+    {
+        GameObject focused = UnityEngine.EventSystems.EventSystem.current?.currentSelectedGameObject;
+        return focused != null &&
+               (focused.GetComponent<TMPro.TMP_InputField>() != null || focused.GetComponent<UnityEngine.UI.InputField>() != null);
     }
 
     /// <summary>
@@ -264,6 +338,7 @@ internal sealed class ViewSelectionAction : IDisposable
     {
         Islands?.Dispose();
         Buildings?.Dispose();
+        Input?.Dispose();
 
         // Taken back out so a disabled mod leaves no dead row in the settings screen.
         KeybindingsLayer layer = Registered;

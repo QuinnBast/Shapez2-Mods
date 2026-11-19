@@ -88,14 +88,20 @@ internal static class TallStands
     }
 
     /// <summary>
-    /// True when the entries reach lower and lower and the last two are a clear step apart - the
-    /// signature of a stand ladder. The step is taken from the last two only, because entry 0 of
-    /// an end-cap ladder can be a cap with no column at all, a shorter drop than the rest. Caps and
-    /// connectors of fixed height fail this and are left alone.
+    /// True when the entries reach lower and lower - the signature of a stand ladder - with the
+    /// step per entry in <paramref name="step"/>. Caps and connectors of fixed height fail this and
+    /// are left alone.
+    ///
+    /// The step is the average over the whole ladder, rounded to a quarter floor - not the drop
+    /// between the last two. The authored art is not evenly spaced: the belt stands bottom out at
+    /// 1.007, 2.250 and 3.007, so the last two are 0.757 apart and a ladder continued from that
+    /// fell a quarter floor short per floor, leaving stands about two floors short of the ground by
+    /// floor 10. Averaged and rounded, every stand ladder the game ships comes out at exactly 1.
     /// </summary>
     private static bool TryMeasureStep(LODMeshAsset[] authored, out float step)
     {
         step = 0f;
+        float first = 0f;
         float previous = float.MaxValue;
         for (int i = 0; i < authored.Length; i++)
         {
@@ -111,14 +117,16 @@ internal static class TallStands
                 return false;
             }
 
-            if (i == authored.Length - 1)
+            if (i == 0)
             {
-                step = previous - bottom;
+                first = bottom;
             }
 
             previous = bottom;
         }
 
+        float average = (first - previous) / (authored.Length - 1);
+        step = Mathf.Round(average * 4f) / 4f;
         return step >= 0.25f;
     }
 
